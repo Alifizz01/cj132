@@ -1,0 +1,284 @@
+<section class="partopener"><div class="pn">Appendix A</div><h2>Worked Numerical Walkthroughs</h2><div class="blurb">Every key result computed by hand, A to Z, no shortcuts.</div></section>
+
+<section class="sec">
+<h3><span class="sec-num">A.0</span>How to read this appendix</h3>
+<p class="slow">This appendix exists for one reason: to prove that nothing the solver prints is magic. Every temperature, every survival verdict, every Monte-Carlo run count that appears elsewhere in this handbook can be reproduced with a pencil, a calculator, and patience. We do exactly that here. Each section takes one result, states the equation it comes from, substitutes the verified constants for the <span class="num">msro_case2</span> substrate, and grinds through the arithmetic one line at a time. At the end of each derivation we compare our by-hand answer against the number the two-node code actually prints, so you can see precisely how much accuracy the hand-simplification costs.</p>
+
+<p class="slow">A word on the modelling choice that runs through everything. A real solar-array cell has two faces — a front face that sees the Sun and a rear face that radiates to deep space — and the two faces are at slightly different temperatures because heat has to conduct through the substrate to get from one to the other. The full code therefore solves a <em>two-node</em> problem: one temperature for the front, one for the rear, coupled by conduction. But for hand work that is awkward, so most of our walkthroughs use a <em>lumped</em> single-temperature approximation in which we pretend the whole cell sits at one temperature and radiates from both faces at once. The lumped answer is always a little hotter on the front and a little cooler on the rear than the true two-node split, and the gap is typically a fraction of a degree. Seeing that gap shrink is half the point.</p>
+
+<div class="recap"><span class="lbl">Constants used throughout</span> Substrate <span class="num">msro_case2</span>: front absorptivity α<sub>front</sub>=<span class="num">0.97</span>, rear absorptivity α<sub>rear</sub>=<span class="num">0.93</span>, front emissivity ε<sub>front</sub>=<span class="num">0.90</span>, rear emissivity ε<sub>rear</sub>=<span class="num">0.89</span>, conductivity k<sub>c</sub>=<span class="num">10 W/mK</span>, thickness t=<span class="num">0.01 m</span>. Cell area A=<span class="num">0.003 m²</span>. Stefan–Boltzmann σ=<span class="num">5.670367e-8 W/m²K⁴</span>. Deep-space temperature T<sub>space</sub>=<span class="num">2.7 K</span>. Solar constant at 1 AU P<sub>sun</sub>=<span class="num">1367 W/m²</span>. Kelvin = °C + <span class="num">273.15</span>.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.1</span>The master equation and computing the radiation constant k</h3>
+
+<p class="slow">Everything starts from an energy balance. In steady state, whatever heat goes into the cell must come back out, otherwise the temperature would keep changing. Heat comes in from the absorbed sunlight and possibly from electrical dissipation; heat leaves only by thermal radiation, because in orbit there is no air to carry it away by convection and the only conductive path (the mounting) we fold into the substrate model. So the balance, lumped to a single temperature T, reads:</p>
+
+<div class="formula">Q<sub>in</sub> = k · (T⁴ − T<sub>space</sub>⁴)<div class="where">Q<sub>in</sub> = net heat into the cell (W); k = lumped radiation constant (W/K⁴); T = cell temperature (K); T<sub>space</sub> = 2.7 K deep-space sink</div></div>
+
+<p class="slow">Because T<sub>space</sub> = 2.7 K, the term T<sub>space</sub>⁴ = 2.7⁴ ≈ 53.1 K⁴ is utterly negligible next to a cell at hundreds of kelvin (whose T⁴ is in the billions), so for hand work we drop it and write the simpler form that we will solve over and over:</p>
+
+<div class="formula">T = ( Q<sub>in</sub> / k )<sup>1/4</sup><div class="where">the lumped-by-hand temperature; solve for T once Q<sub>in</sub> and k are known</div></div>
+
+<p class="slow">Now we need k. Radiation leaves from both faces, each with its own emissivity, over the same cell area A, scaled by σ. So the lumped radiation constant is the sum of the two faces' emissivities times A times σ:</p>
+
+<div class="formula">k<sub>lump</sub> = (ε<sub>front</sub> + ε<sub>rear</sub>) · A · σ<div class="where">ε<sub>front</sub>=0.90, ε<sub>rear</sub>=0.89, A=0.003 m², σ=5.670367e-8 W/m²K⁴</div></div>
+
+<div class="worked"><span class="lbl">Worked — the radiation constant k_lump</span>
+<div class="step">Step 1 — add the emissivities: ε<sub>front</sub> + ε<sub>rear</sub> = 0.90 + 0.89 = <span class="num">1.79</span>.</div>
+<div class="step">Step 2 — multiply by area: 1.79 × 0.003 = <span class="num">0.00537</span> m².</div>
+<div class="step">Step 3 — multiply by σ: 0.00537 × 5.670367e-8. First 5.37e-3 × 5.670367e-8 = (5.37 × 5.670367) × 10<sup>-11</sup> = 30.450 × 10<sup>-11</sup> = <span class="num">3.0450e-10</span> W/K⁴.</div>
+<div class="check">Check: k<sub>lump</sub> = <span class="num">3.0450e-10 W/K⁴</span>. This single number sets the entire temperature scale for the cell — every lumped temperature in this appendix is (Q/3.0450e-10)<sup>1/4</sup>.</div>
+</div>
+
+<p class="slow">We also need the conductive coupling between the two faces, for the two-node work later. Conductance per unit area is conductivity divided by thickness, then times area:</p>
+
+<div class="formula">c<sub>cond</sub> = k<sub>c</sub> / t&nbsp;&nbsp;&nbsp;CA = c<sub>cond</sub> · A<div class="where">k<sub>c</sub>=10 W/mK, t=0.01 m, A=0.003 m²</div></div>
+
+<div class="worked"><span class="lbl">Worked — conduction coupling CA</span>
+<div class="step">Step 1 — per-area conductance: c<sub>cond</sub> = 10 / 0.01 = <span class="num">1000 W/m²K</span>.</div>
+<div class="step">Step 2 — multiply by area: CA = 1000 × 0.003 = <span class="num">3.0 W/K</span>.</div>
+<div class="check">Check: CA = <span class="num">3.0 W/K</span>. So every 1 K of front-to-rear temperature difference drives 3.0 W of conducted heat between the faces. We will see this exact 3.0 sitting on the off-diagonal of the two-node Jacobian in A.6.</div>
+</div>
+
+<p class="slow">Finally, the absorbed sunlight. The front face absorbs a fraction α<sub>front</sub> of the incident solar flux over the cell area:</p>
+
+<div class="formula">q<sub>front</sub> = α<sub>front</sub> · A · P<sub>sun</sub><div class="where">α<sub>front</sub>=0.97, A=0.003 m², P<sub>sun</sub>=1367 W/m²</div></div>
+
+<div class="worked"><span class="lbl">Worked — absorbed solar power</span>
+<div class="step">Step 1 — flux on the cell: A · P<sub>sun</sub> = 0.003 × 1367 = <span class="num">4.101 W</span>.</div>
+<div class="step">Step 2 — absorbed fraction: 0.97 × 4.101 = <span class="num">3.978 W</span> (0.97 × 4.101 = 4.101 − 0.03×4.101 = 4.101 − 0.12303 = 3.97797 ≈ 3.978).</div>
+<div class="check">Check: q<sub>front</sub> = <span class="num">3.978 W</span>. This is the heat input for an idle cell — the engine that drives the whole thermal problem.</div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.2</span>The idle cell — no electrical load</h3>
+
+<p class="slow">The simplest case. The cell sits in sunlight doing no electrical work, so all the absorbed sunlight must be radiated away. The net heat input is just the absorbed solar power computed in A.1, Q<sub>in</sub> = q<sub>front</sub> = 3.978 W, with no electrical term. We solve the master equation for T.</p>
+
+<div class="worked"><span class="lbl">Worked — idle cell temperature</span>
+<div class="step">Step 1 — heat input: Q<sub>in</sub> = 3.978 W (nothing extracted, nothing dissipated).</div>
+<div class="step">Step 2 — divide by k: T⁴ = Q<sub>in</sub> / k<sub>lump</sub> = 3.978 / 3.0450e-10. Compute 3.978 / 3.0450 = 1.3064, so T⁴ = <span class="num">1.3064e10</span> K⁴ (≈ 1.306e10).</div>
+<div class="step">Step 3 — fourth root. Take the square root twice. √(1.306e10) = √1.306 × √1e10 = 1.1428 × 1e5 = 1.1428e5. Then √(1.1428e5) = √1.1428 × √1e5 = 1.0690 × 316.23 = <span class="num">338.1</span>. So T = 338.1 K.</div>
+<div class="step">Step 4 — to Celsius: 338.1 − 273.15 = <span class="num">64.9 °C</span>.</div>
+<div class="check">Check vs code: the two-node solver prints <span class="num">65.26 °C front</span> / <span class="num">64.60 °C rear</span>. Our lumped 64.9 °C lands neatly between the two faces, as expected — the lump is an average of front and rear. Agreement is within about a third of a degree on either side. The lumped model is excellent for the idle case.</div>
+</div>
+
+<p class="slow">Why does the lump sit between the two faces? Because conduction is very strong here (CA = 3.0 W/K) compared with the tiny radiative imbalance, so the front and rear stay within about 0.66 K of each other. When the two faces are nearly equal, their average is a faithful single-temperature stand-in. Cases where the faces split further apart — like the reverse-biased hot-spot — are where the lump starts to drift, and we will watch for that.</p>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.3</span>The working cell — extracting electrical power (efficiency ≈ 28%)</h3>
+
+<p class="slow">When the cell actually does its job and feeds current into the bus, it converts some of the absorbed sunlight into electrical energy that leaves as wires-out rather than as heat. That extracted power is subtracted from the heat budget, so the cell runs cooler than idle. For this substrate the array extracts about <span class="num">1.1 W</span> at its operating point. Note the efficiency implied: 1.1 W extracted from 3.978 W absorbed is 1.1 / 3.978 = 0.2765, i.e. roughly <span class="num">28%</span> — a believable triple-junction cell number, which is a good sanity check that the +1.1 W figure is physically reasonable.</p>
+
+<div class="formula">Q<sub>in</sub> = q<sub>front</sub> − P<sub>elec</sub><div class="where">P<sub>elec</sub> = +1.1 W extracted (heat leaving as electricity)</div></div>
+
+<div class="worked"><span class="lbl">Worked — working cell temperature</span>
+<div class="step">Step 1 — heat input: Q<sub>in</sub> = 3.978 − 1.1 = <span class="num">2.878 W</span>.</div>
+<div class="step">Step 2 — divide by k: T⁴ = 2.878 / 3.0450e-10. Compute 2.878 / 3.0450 = 0.94517, so T⁴ = <span class="num">9.4517e9</span> K⁴.</div>
+<div class="step">Step 3 — fourth root. √(9.4517e9) = √9.4517 × √1e9 = 3.0744 × 31623 = 9.7213e4. Then √(9.7213e4) = √9.7213 × √1e4 = 3.1179 × 100 = <span class="num">311.8</span> K.</div>
+<div class="step">Step 4 — to Celsius: 311.8 − 273.15 = <span class="num">38.7 °C</span>.</div>
+<div class="check">Check vs code: the two-node solver prints <span class="num">38.89 °C</span>. Our lumped 38.7 °C is within 0.2 °C. Extracting 1.1 W has dropped the cell from ≈65 °C (idle) to ≈39 °C — a 26 °C cooling — which makes intuitive sense: removing energy means less has to be radiated, and since radiated power scales as T⁴, even a modest cut in heat input pulls the temperature down noticeably.</div>
+</div>
+
+<p class="slow">For completeness, consider a more aggressive extraction of +2.0 W (a different operating point, e.g. nearer maximum power). Then Q<sub>in</sub> = 3.978 − 2.0 = 1.978 W, T⁴ = 1.978 / 3.0450e-10 = 6.496e9, and the fourth root gives 283.9 K = <span class="num">10.7 °C</span>. The code prints <span class="num">10.91 °C</span> for this case — again within about 0.2 °C. The pattern holds: the more electrical power you pull out, the colder the cell, and the lumped hand answer tracks the code faithfully whenever the two faces stay close together.</p>
+
+<table>
+<thead><tr><th>Operating point</th><th>P<sub>elec</sub> (W)</th><th>Q<sub>in</sub> (W)</th><th>Hand T (°C)</th><th>Code T (°C)</th></tr></thead>
+<tbody>
+<tr><td>Idle</td><td>0</td><td>3.978</td><td>64.9</td><td>65.26 / 64.60</td></tr>
+<tr><td>Working</td><td>+1.1</td><td>2.878</td><td>38.7</td><td>38.89</td></tr>
+<tr><td>Max-power</td><td>+2.0</td><td>1.978</td><td>10.7</td><td>10.91</td></tr>
+</tbody>
+</table>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.4</span>The reverse-biased hot-spot — when a cell becomes a heater</h3>
+
+<p class="slow">Now the dangerous case. If a cell in a series string is shaded or fails, the healthy cells around it force current backwards through it. Instead of generating power, the bad cell <em>dissipates</em> it — it becomes a resistor heater buried in the array. Here the electrical term is negative (P<sub>elec</sub> = −9.6 W), meaning electrical power is being dumped into the cell as heat. That heat <em>adds</em> to the absorbed sunlight, so the cell runs alarmingly hot.</p>
+
+<div class="worked"><span class="lbl">Worked — reverse-biased hot-spot temperature</span>
+<div class="step">Step 1 — heat input: Q<sub>in</sub> = q<sub>front</sub> − P<sub>elec</sub> = 3.978 − (−9.6) = 3.978 + 9.6 = <span class="num">13.578 W</span>.</div>
+<div class="step">Step 2 — divide by k: T⁴ = 13.578 / 3.0450e-10. Compute 13.578 / 3.0450 = 4.4592, so T⁴ = <span class="num">4.459e10</span> K⁴.</div>
+<div class="step">Step 3 — fourth root. √(4.459e10) = √4.459 × √1e10 = 2.1117 × 1e5 = 2.1117e5. Then √(2.1117e5) = √2.1117 × √1e5 = 1.4532 × 316.23 = <span class="num">459.5</span> K.</div>
+<div class="step">Step 4 — to Celsius: 459.5 − 273.15 = <span class="num">186.4 °C</span>.</div>
+<div class="check">Check vs code: the two-node solver prints <span class="num">187.48 °C</span>. Our lumped 186.4 °C is about 1.1 °C low — a slightly bigger gap than the idle/working cases. That is exactly the expected behaviour: with 13.578 W to shed, the front face has to run hotter than the rear to push the extra heat through the substrate, so the two faces split further apart and the single-lump average underestimates the hottest face. Even so, the hand answer is close enough to flag the obvious problem: <span class="num">186 °C is far above any safe operating limit</span>.</div>
+</div>
+
+<p class="slow">Where does the −9.6 V / −9.6 W come from physically? In a series string each healthy cell produces about 2.3 V. When roughly nine live cells are connected in series and forced to drive current backward through one failed cell, the failed cell sees their combined reverse voltage: about 9 × 2.3 V ≈ <span class="num">−20 V</span>. At the string current of about 0.48 A that is |−20 × 0.48| = 9.6 W of dissipation — which is precisely the +9.6 W of heat we added above. We will use that −20 V again in the breakdown check of A.9.</p>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.5</span>The full Newton trace — solving T⁴ by hand, step by step</h3>
+
+<p class="slow">In A.2–A.4 we took fourth roots directly because the lumped equation is simple enough. But the code does not take fourth roots; it uses <em>Newton's method</em>, iterating from a guess toward the root of a residual function. It is worth tracing one full Newton solve by hand, both to demystify what the solver does internally and to show how an iterative root-finder behaves when it starts from a cold guess. We solve the lumped reverse-biased case (Q<sub>in</sub> = 13.578 W, true answer 186.4 °C).</p>
+
+<p class="slow">Define the residual — how far the heat balance is from zero — and its derivative:</p>
+
+<div class="formula">f(T) = 13.578 − k · T⁴&nbsp;&nbsp;&nbsp;f′(T) = −4 · k · T³<div class="where">k = k<sub>lump</sub> = 3.0450e-10 W/K⁴; f = heat surplus (W); when f = 0 the cell is in balance</div></div>
+
+<p class="slow">Newton's update is T<sub>next</sub> = T − f(T)/f′(T). We start cold, at 28 °C = 301.15 K, and watch it work. The very first step illustrates a hazard: when the cell is cold, T³ is small, so f′ is nearly flat, so dividing by it produces a huge step that wildly overshoots.</p>
+
+<div class="worked"><span class="lbl">Worked — Newton step 0, from 28 °C (301.15 K)</span>
+<div class="step">Step 1 — T⁴ at 301.15 K: 301.15⁴. 301.15² = 90691, and 90691² = 8.225e9. So T⁴ = <span class="num">8.225e9</span> K⁴.</div>
+<div class="step">Step 2 — heat radiated out: k · T⁴ = 3.0450e-10 × 8.225e9 = <span class="num">2.505 W</span>.</div>
+<div class="step">Step 3 — residual: f = 13.578 − 2.505 = <span class="num">+11.07 W</span>. Positive means far too little is being radiated; the cell must heat up a lot.</div>
+<div class="step">Step 4 — derivative: f′ = −4 · k · T³. T³ = 301.15³ = 90691 × 301.15 = 2.732e7. So f′ = −4 × 3.0450e-10 × 2.732e7 = −4 × 8.32e-3 = <span class="num">−0.0333 W/K</span>. Very small slope — the cold cell barely changes its radiation per kelvin.</div>
+<div class="step">Step 5 — Newton step: ΔT = −f/f′ = −(+11.07)/(−0.0333) = <span class="num">+332.8 K</span>. A giant jump.</div>
+<div class="step">Step 6 — next guess: 301.15 + 332.8 = 634.0 K = <span class="num">360.9 °C</span>. Massive overshoot past the true 186 °C, because the flat cold slope fooled Newton into thinking it needed an enormous correction.</div>
+</div>
+
+<p class="slow">From there the iteration recovers and homes in fast. Once the cell is hot, T³ is large, the slope steepens, and each step roughly doubles the number of correct digits — the hallmark of Newton's quadratic convergence. Here is the whole trace:</p>
+
+<table>
+<thead><tr><th>Step</th><th>T (°C)</th><th>f(T) (W)</th><th>Comment</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>28</td><td>+11.07</td><td>cold start, slope flat → overshoot</td></tr>
+<tr><td>1</td><td>360.88</td><td>−35.63</td><td>overshot hot; now radiating far too much</td></tr>
+<tr><td>2</td><td>246.11</td><td>−8.56</td><td>falling back toward the root</td></tr>
+<tr><td>3</td><td>195.92</td><td>−1.16</td><td>close now</td></tr>
+<tr><td>4</td><td>186.67</td><td>−0.034</td><td>nearly there — two good digits</td></tr>
+<tr><td>5</td><td>186.38</td><td>≈ 0</td><td>converged to the lumped root</td></tr>
+</tbody>
+</table>
+
+<p class="slow">Read the f column: it goes +11.07 → −35.63 → −8.56 → −1.16 → −0.034 → ≈0. After the initial overshoot, the magnitude of the residual shrinks roughly geometrically and then super-geometrically near the end (1.16 → 0.034 is a factor of ~34, far more than the earlier factor-of-7 steps) — that accelerating collapse is the quadratic convergence. The final 186.38 °C matches our direct fourth-root result of 186.4 °C from A.4, confirming both methods solve the same equation. The lesson for the code: a cold start can overshoot violently, which is exactly why the coupled solver in A.7 uses damping.</p>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.6</span>The two-node 2×2 Newton step — solving front and rear together</h3>
+
+<p class="slow">The real model does not lump. It carries two unknowns, the front temperature T<sub>1</sub> and the rear temperature T<sub>2</sub>, governed by two coupled residual equations. Front: absorbed sun, minus front radiation, minus conduction to the rear. Rear: minus rear radiation, plus conduction received from the front. Solving two coupled nonlinear equations needs a 2×2 Newton step: we build a Jacobian matrix of partial derivatives, invert it, and apply the correction. Let us do exactly one such step for the idle cell, starting both nodes at 301.15 K.</p>
+
+<p class="slow">At the starting point the two residuals come out to f<sub>1</sub> = +2.719 W (front has surplus heat — it absorbed sun and has not warmed enough to shed it) and f<sub>2</sub> = −1.245 W (rear is slightly over-radiating relative to what it receives). The Jacobian entries are the partial derivatives of each residual with respect to each temperature: the diagonal terms combine radiative slope and conduction, the off-diagonal terms are pure conduction (the CA = 3.0 W/K we found in A.1).</p>
+
+<div class="formula">J = [ a&nbsp;&nbsp;b ; c&nbsp;&nbsp;d ]&nbsp;&nbsp;&nbsp;ΔT = −J⁻¹ · f<div class="where">a = ∂f<sub>1</sub>/∂T<sub>1</sub>, b = ∂f<sub>1</sub>/∂T<sub>2</sub>, c = ∂f<sub>2</sub>/∂T<sub>1</sub>, d = ∂f<sub>2</sub>/∂T<sub>2</sub>; off-diagonals b = c = +CA = +3.0</div></div>
+
+<div class="worked"><span class="lbl">Worked — one 2×2 Newton step, idle cell, start 301.15/301.15 K</span>
+<div class="step">Step 1 — assemble the Jacobian. a = d = −3.017 (each diagonal is minus the conduction coupling 3.0 minus the small radiative slope ≈0.017, giving −3.017). Off-diagonals b = c = +3.0 (the conduction term). So J = [ −3.017, 3.0 ; 3.0, −3.017 ].</div>
+<div class="step">Step 2 — determinant: det = a·d − b·c = (−3.017)(−3.017) − (3.0)(3.0) = 9.100 − 9.000 = <span class="num">0.100</span>. The determinant is small because the two diagonal terms nearly cancel the off-diagonals — strong conduction makes the system stiff, which is why a small det shows up.</div>
+<div class="step">Step 3 — solve for ΔT<sub>1</sub>. By Cramer/inverse, ΔT<sub>1</sub> = −(d·f<sub>1</sub> − b·f<sub>2</sub>)/det = −[(−3.017)(+2.719) − (3.0)(−1.245)] / 0.100 = −[ −8.203 + 3.735 ] / 0.100 = −(−4.468)/0.100 = +44.68 → <span class="num">+44.6 K</span>.</div>
+<div class="step">Step 4 — solve for ΔT<sub>2</sub>. ΔT<sub>2</sub> = −(−c·f<sub>1</sub> + a·f<sub>2</sub>)/det = −[ −(3.0)(+2.719) + (−3.017)(−1.245) ] / 0.100 = −[ −8.157 + 3.756 ] / 0.100 = −(−4.401)/0.100 = +44.01 → <span class="num">+44.0 K</span>.</div>
+<div class="step">Step 5 — apply the corrections. T<sub>1</sub> = 301.15 + 44.6 = 345.75 K = <span class="num">72.6 °C</span>; T<sub>2</sub> = 301.15 + 44.0 = 345.15 K = <span class="num">72.0 °C</span>.</div>
+<div class="check">Check: after this single step the front/rear sit at 72.6 / 72.0 °C — overshooting the true idle answer of 65.26 / 64.60 °C, just as the lumped Newton overshot in A.5 (a cold start over-corrects). A few more 2×2 steps settle it to <span class="num">65.26 / 64.60 °C</span>, matching A.2. Note that the front ends up 0.66 K above the rear in the converged answer (65.26 − 64.60) — that small split is the front-to-rear gradient driving conducted heat through the substrate, and it is exactly what the lump in A.2 averages over.</div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.7</span>The coupling bounce — iterating a dissipating cell to equilibrium</h3>
+
+<p class="slow">When a cell both dissipates electrical power and is thermally coupled to its neighbours, the simulator does not solve the whole array at once; it iterates round-robin, updating each cell's temperature, recomputing the dissipation that depends on temperature, and going again. This can <em>bounce</em>: a temperature jumps up, which changes the electrical operating point, which changes the heat, which moves the temperature again. To stop the bounce from oscillating or overshooting (recall the Newton overshoot of A.5), the solver applies a <em>damping factor</em> ω: instead of jumping the full distance to the freshly computed temperature, it moves only a fraction ω of the way. Here we trace a dissipating cell that finally settles at <span class="num">198.8 °C</span>, comparing under-relaxed damping (ω = 0.5, half-steps) against full jumps (ω = 1).</p>
+
+<div class="formula">T<sub>next</sub> = T<sub>now</sub> + ω · ( T<sub>solved</sub> − T<sub>now</sub> )<div class="where">ω = damping (relaxation) factor; T<sub>solved</sub> = the temperature the dissipation equation wants given the current state</div></div>
+
+<div class="worked"><span class="lbl">Worked — damped rounds, ω = 0.5, start 28 °C</span>
+<div class="step">Round 0 — at 28 °C the dissipation balance solves to roughly 168 °C. A damped half-step moves only halfway: 28 + 0.5·(168 − 28) = 28 + 0.5·140 = 28 + 70 = <span class="num">98.5 °C</span>.</div>
+<div class="step">Round 1 — now at 98.5 °C the balance solves to about 181 °C; half-step: 98.5 + 0.5·(181 − 98.5) ≈ 98.5 + 41.7 ≈ <span class="num">140.2 °C</span>.</div>
+<div class="step">Round 2 — the next half-step lands near <span class="num">164.7 °C</span>, and the rounds keep closing the remaining gap by half each time.</div>
+<div class="step">Continuing — 28 → 98.5 → 140.2 → 164.7 → … each round eats roughly half the distance left, asymptotically approaching the fixed point after about <span class="num">22 rounds</span>.</div>
+<div class="check">Check: the damped sequence settles at <span class="num">198.8 °C</span> with no overshoot — safe and monotonic, but slow (≈22 rounds).</div>
+</div>
+
+<div class="worked"><span class="lbl">Worked — full jump, ω = 1, start 28 °C</span>
+<div class="step">Round 0 — take the whole step: 28 → <span class="num">169 °C</span> (the full solved value from the cold start).</div>
+<div class="step">Round 1 — recompute and jump fully: 169 → <span class="num">194 °C</span>.</div>
+<div class="step">Round 2 onward — 194 → <span class="num">198.8 °C</span>, converged.</div>
+<div class="check">Check: the full-jump sequence 28 → 169 → 194 → 198.8 reaches the same <span class="num">198.8 °C</span> in only about <span class="num">5 rounds</span> — roughly four times faster than the damped version. The trade-off is the whole point of the damping factor: ω = 1 is fast but risks the violent overshoot we saw in A.5 if the problem is stiff; ω = 0.5 is slow but bullet-proof. Both converge to the same physical equilibrium because damping changes only the <em>path</em>, never the destination.</div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.8</span>The orbit fluxes — sunlight, albedo, and planetary infrared</h3>
+
+<p class="slow">Everything so far assumed Earth-orbit sunlight at 1 AU, P<sub>sun</sub> = 1367 W/m². But the same array might fly to Mars, or tilt away from the Sun, or catch reflected light and planetary heat. This section computes the environmental fluxes the simulator can apply. The headline rule for distance is the inverse-square law: flux falls as one over the distance squared.</p>
+
+<div class="formula">P(d) = P<sub>sun</sub> / d²<div class="where">d = distance from Sun in AU; P<sub>sun</sub> = 1367 W/m² at d = 1</div></div>
+
+<div class="worked"><span class="lbl">Worked — solar flux at different distances</span>
+<div class="step">At 1 AU (Earth): P = 1367 / 1² = <span class="num">1367 W/m²</span>.</div>
+<div class="step">At 1.52 AU (Mars): d² = 1.52² = 2.3104, so P = 1367 / 2.3104 = <span class="num">591.7 W/m²</span>. Mars gets well under half of Earth's sunlight.</div>
+<div class="step">At 2 AU: d² = 4, so P = 1367 / 4 = <span class="num">341.75 W/m²</span>. Exactly a quarter of the 1-AU value, as the inverse-square law demands when distance doubles.</div>
+<div class="check">Check: doubling distance (1 → 2 AU) quartered the flux (1367 → 341.75). Inverse-square confirmed.</div>
+</div>
+
+<p class="slow">Near a planet the array also catches two extra inputs. <em>Albedo</em> is sunlight reflected off the planet's surface — a fraction (here 0.25) of the local solar flux, further reduced by a geometric view factor (≈0.3). <em>Planetary infrared</em> is the heat the planet itself radiates as a warm body at about 255 K, again seen through the view factor.</p>
+
+<div class="worked"><span class="lbl">Worked — albedo flux near Mars</span>
+<div class="step">Albedo = 0.25 × (local solar flux 591) × (view factor 0.3) = 0.25 × 591 × 0.3. First 0.25 × 591 = 147.75; then × 0.3 = <span class="num">44.325 W/m²</span>.</div>
+<div class="check">Check: albedo ≈ <span class="num">44.3 W/m²</span> — a small but non-negligible bonus heat input on the planet-facing side.</div>
+</div>
+
+<div class="worked"><span class="lbl">Worked — planetary infrared at 255 K</span>
+<div class="step">Step 1 — blackbody flux: σ · 255⁴. 255² = 65025; 65025² = 4.228e9. So 255⁴ = 4.228e9 K⁴.</div>
+<div class="step">Step 2 — times σ: 5.670367e-8 × 4.228e9 = 5.670367 × 4.228 × 10¹ = 23.97 × 10 = 239.7 W/m² (the full blackbody emission of a 255 K surface).</div>
+<div class="step">Step 3 — apply view factor 0.3: 239.7 × 0.3 = <span class="num">71.93 W/m²</span>.</div>
+<div class="check">Check: planetary IR ≈ <span class="num">71.9 W/m²</span>, the largest of the secondary inputs. So a Mars-orbit cell sees ~591.7 direct sun + ~44.3 albedo + ~71.9 IR on its various faces — the simulator sums these onto the appropriate face before solving the same balance as A.1.</div>
+</div>
+
+<p class="slow">Finally, when the array is tilted off the Sun line, the absorbed solar flux scales by the cosine of the tilt angle, because only the component of the flux perpendicular to the panel is collected. The verified cosines are: cos 30° = <span class="num">0.866</span>, cos 45° = <span class="num">0.707</span>, cos 60° = <span class="num">0.5</span>. So a panel tilted 60° off-Sun collects only half its head-on sunlight; at 45° about 71%; at 30° about 87%. These multiply directly onto P<sub>sun</sub> before the absorptivity step of A.1.</p>
+
+<table>
+<thead><tr><th>Environment term</th><th>Value</th><th>How obtained</th></tr></thead>
+<tbody>
+<tr><td>Sun at 1 AU</td><td>1367 W/m²</td><td>reference solar constant</td></tr>
+<tr><td>Sun at 1.52 AU (Mars)</td><td>591.7 W/m²</td><td>1367 / 1.52²</td></tr>
+<tr><td>Sun at 2 AU</td><td>341.75 W/m²</td><td>1367 / 4</td></tr>
+<tr><td>Albedo (Mars-ish)</td><td>44.325 W/m²</td><td>0.25 × 591 × 0.3</td></tr>
+<tr><td>Planetary IR (255 K)</td><td>71.93 W/m²</td><td>σ × 255⁴ × 0.3</td></tr>
+<tr><td>Tilt 30° / 45° / 60°</td><td>×0.866 / ×0.707 / ×0.5</td><td>cosine of tilt angle</td></tr>
+</tbody>
+</table>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.9</span>The breakdown checks — survive or destroyed</h3>
+
+<p class="slow">Once the simulator has a converged temperature and electrical state for each cell, it applies two destruction criteria. The cell is <em>destroyed</em> if it gets too hot, or if it is forced to dissipate too much reverse power. The verified limits are a temperature limit t<sub>limit</sub> = <span class="num">150 °C</span> and a reverse-power limit p<sub>rev_limit</sub> = <span class="num">2 W</span>. A cell flagged as destroyed by either is removed from the array. Let us run both criteria against two cells from the earlier sections: the healthy idle cell and the reverse-biased hot-spot.</p>
+
+<div class="formula">destroyed = ( T ≥ t<sub>limit</sub> ) OR ( reverse_power ≥ p<sub>rev_limit</sub> )<div class="where">t<sub>limit</sub> = 150 °C; p<sub>rev_limit</sub> = 2 W; reverse_power = |V·I| only when V &lt; 0, else 0</div></div>
+
+<div class="worked"><span class="lbl">Worked — idle cell (65.26 °C, V = +2.3 V, I = 0.48 A)</span>
+<div class="step">Step 1 — temperature test: is 65.26 ≥ 150? <span class="num">No</span> (65 is far below 150). Temperature criterion not triggered.</div>
+<div class="step">Step 2 — reverse-power test: V = +2.3 V is positive, so the cell is generating, not dissipating. Reverse power is defined only for negative voltage, so reverse_power = <span class="num">0 W</span>. Is 0 ≥ 2? No.</div>
+<div class="step">Step 3 — combine: neither criterion fired.</div>
+<div class="check">Verdict: <span class="num">SURVIVES</span>. A normal working cell is comfortably inside both limits.</div>
+</div>
+
+<div class="worked"><span class="lbl">Worked — reverse-biased hot-spot (187.48 °C, V = −20 V, I = 0.48 A)</span>
+<div class="step">Step 1 — temperature test: is 187.48 ≥ 150? <span class="num">Yes</span> (187 exceeds 150 by 37 °C). Temperature criterion fired.</div>
+<div class="step">Step 2 — reverse-power test: V = −20 V is negative, so the cell dissipates. reverse_power = |V·I| = |(−20)(0.48)| = |−9.6| = <span class="num">9.6 W</span>. Is 9.6 ≥ 2? <span class="num">Yes</span> (nearly five times the limit). Reverse-power criterion fired too.</div>
+<div class="step">Step 3 — combine: both criteria fired.</div>
+<div class="check">Verdict: <span class="num">DESTROYED</span> — and by both criteria at once. This is the failure mode A.4 warned about: a reverse-biased cell both overheats past 150 °C and dissipates 9.6 W of reverse power, well past the 2 W limit. Note the 9.6 W here is the very same heat input we added in A.4 (Q<sub>in</sub> = 3.978 + 9.6), tying the thermal and electrical pictures together: the reverse voltage that cooks the cell is also the reverse power that the breakdown check rejects.</div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">A.10</span>The Monte-Carlo run count — how many trials to trust an answer</h3>
+
+<p class="slow">The failure-sweep runs many randomised trials and reports an average survival temperature (or failure fraction). Because each trial is random, the reported average has a statistical uncertainty — the <em>standard error</em> — that shrinks as you run more trials. The rule is that the standard error of a mean is the population standard deviation divided by the square root of the number of trials.</p>
+
+<div class="formula">SE = σ / √N<div class="where">SE = standard error of the mean; σ = standard deviation of one trial; N = number of trials</div></div>
+
+<div class="worked"><span class="lbl">Worked — standard error of a uniform [0, 2] sample</span>
+<div class="step">Step 1 — the mean of a uniform spread of values between 0 and 2 is the midpoint, <span class="num">1</span>.</div>
+<div class="step">Step 2 — the (sample) variance of this two-point spread is <span class="num">2</span>, so the standard deviation is σ = √2 ≈ 1.414.</div>
+<div class="step">Step 3 — with N = 2 samples, SE = σ/√N = √2 / √2 = <span class="num">1.0</span>.</div>
+<div class="check">Check: SE = <span class="num">1.0</span>. The mean is 1 ± 1 — i.e. with so few samples the uncertainty is as large as the answer itself. This is why Monte-Carlo needs many runs.</div>
+</div>
+
+<p class="slow">Now the practical question the sweep actually asks: I ran 100 trials and my standard error came out at about 8 °C, but I need it down to 2 °C — how many trials do I need? Because SE scales as 1/√N, halving the error needs four times the runs, and in general the run count scales as the square of the error-reduction ratio:</p>
+
+<div class="formula">N<sub>needed</sub> = ( SE<sub>now</sub> / SE<sub>target</sub> )² · N<sub>now</sub><div class="where">SE<sub>now</sub> = 8 °C at N<sub>now</sub> = 100 runs; SE<sub>target</sub> = 2 °C</div></div>
+
+<div class="worked"><span class="lbl">Worked — runs needed to reach 2 °C error</span>
+<div class="step">Step 1 — error-reduction ratio: SE<sub>now</sub>/SE<sub>target</sub> = 8/2 = <span class="num">4</span>.</div>
+<div class="step">Step 2 — square it: 4² = <span class="num">16</span> (because error falls as 1/√N, the runs must rise as the square).</div>
+<div class="step">Step 3 — scale the run count: N<sub>needed</sub> = 16 × 100 = <span class="num">1600 runs</span>.</div>
+<div class="check">Check: to cut the standard error from 8 °C to 2 °C — a factor of four — you need sixteen times the trials, so <span class="num">1600 runs</span> in total (1500 more than the 100 you already did). This square-law cost is the fundamental tax of Monte-Carlo: each extra digit of precision is dramatically more expensive than the last.</div>
+</div>
+
+<div class="recap"><span class="lbl">Appendix recap</span> Every printed result has now been reproduced by hand. The lumped one-line formula T = (Q<sub>in</sub>/k)<sup>1/4</sup> with k = 3.0450e-10 W/K⁴ reproduces the two-node code to within a fraction of a degree for the idle (64.9 vs 65.26/64.60), working (38.7 vs 38.89) and max-power (10.7 vs 10.91) cases, and to about 1 °C for the hot reverse-biased case (186.4 vs 187.48) where the front–rear split widens. Newton's method reaches the same roots iteratively but overshoots from a cold start, motivating the damping factor that tames the coupling bounce (both ω = 0.5 and ω = 1 settle at 198.8 °C). The orbit fluxes follow inverse-square and cosine scaling; the breakdown check destroys the reverse-biased cell on both temperature (187 ≥ 150) and reverse power (9.6 ≥ 2); and the Monte-Carlo square-law says 1600 runs are needed to tighten the error from 8 °C to 2 °C. Nothing is magic — it is all arithmetic on the constants in A.1.</div>
+</section>

@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Newton's Method — Interactive · PowerPy</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  :root{
+    --navy:#0b3d63; --navy2:#11507a; --amber:#b9851a; --amber2:#c9a227;
+    --brick:#9a3b3b; --teal:#2f8f6b; --ink:#1d2733; --muted:#5d6b79;
+    --rule:#d6dde4; --paper:#f7f4ec; --panel:#fffdf8;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:
+      linear-gradient(0deg, rgba(11,61,99,.04), rgba(11,61,99,.04)),
+      repeating-linear-gradient(0deg, transparent 0 23px, rgba(11,61,99,.05) 23px 24px),
+      repeating-linear-gradient(90deg, transparent 0 23px, rgba(11,61,99,.05) 23px 24px),
+      var(--paper);
+    color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Georgia,"Times New Roman",serif;
+  }
+  .wrap{ max-width:1060px; margin:0 auto; padding:26px 22px 60px; }
+  h1{ font-family:"Segoe UI","Helvetica Neue",sans-serif; color:var(--navy);
+      font-size:27px; letter-spacing:-.01em; margin:0 0 2px; }
+  .kicker{ font-family:"Segoe UI",sans-serif; font-size:11px; letter-spacing:.22em;
+      text-transform:uppercase; color:var(--amber); font-weight:700; }
+  .sub{ font-size:15px; color:#33485c; font-style:italic; margin:4px 0 18px; }
+  .mono{ font-family:"Cascadia Mono","Consolas",monospace; }
+  .grid{ display:grid; grid-template-columns:1.45fr .95fr; gap:18px; align-items:start; }
+  @media(max-width:880px){ .grid{ grid-template-columns:1fr; } }
+  .card{ background:var(--panel); border:1px solid var(--rule); border-radius:10px;
+      box-shadow:0 1px 0 #fff inset, 0 6px 18px rgba(11,61,99,.06); padding:14px 16px; }
+  .card h2{ font-family:"Segoe UI",sans-serif; font-size:12px; letter-spacing:.13em; text-transform:uppercase;
+      color:var(--navy2); margin:0 0 10px; border-bottom:1px solid var(--rule); padding-bottom:7px; }
+  svg{ display:block; width:100%; height:auto; touch-action:none; }
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:12px; }
+  button{ font-family:"Segoe UI",sans-serif; font-size:13px; font-weight:600; cursor:pointer;
+      border:1px solid var(--navy2); background:var(--navy); color:#fff; border-radius:7px; padding:8px 14px;
+      transition:filter .12s, transform .04s; }
+  button:hover{ filter:brightness(1.12); } button:active{ transform:translateY(1px); }
+  button.ghost{ background:#fff; color:var(--navy); }
+  button.amber{ background:var(--amber); border-color:var(--amber); }
+  button:disabled{ opacity:.4; cursor:not-allowed; }
+  .seg{ display:inline-flex; border:1px solid var(--navy2); border-radius:8px; overflow:hidden; }
+  .seg button{ border:0; border-radius:0; background:#fff; color:var(--navy); padding:8px 13px; }
+  .seg button.on{ background:var(--navy); color:#fff; }
+  .row{ display:flex; align-items:center; gap:10px; margin:10px 0; font-family:"Segoe UI",sans-serif; font-size:13px; }
+  .row label{ color:var(--muted); min-width:118px; }
+  input[type=range]{ flex:1; accent-color:var(--amber); }
+  .readout{ font-family:"Cascadia Mono",Consolas,monospace; font-size:13px; }
+  .readout .k{ color:var(--muted); }
+  .readout .big{ font-size:22px; color:var(--navy); font-weight:700; }
+  .stat{ display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px dotted var(--rule); }
+  table{ width:100%; border-collapse:collapse; font-family:"Cascadia Mono",Consolas,monospace; font-size:12px; margin-top:6px; }
+  th,td{ text-align:right; padding:4px 7px; border-bottom:1px solid var(--rule); }
+  th{ color:var(--muted); font-weight:700; font-family:"Segoe UI",sans-serif; font-size:10px;
+      letter-spacing:.08em; text-transform:uppercase; }
+  tr.live td{ background:#fbf2dd; }
+  tr.done td{ color:var(--teal); }
+  .callout{ background:#eef6f1; border-left:4px solid var(--teal); border-radius:7px; padding:10px 13px;
+      font-size:13.5px; margin-top:14px; }
+  .callout b{ color:var(--teal); }
+  .pill{ display:inline-block; font-family:"Segoe UI",sans-serif; font-size:11px; font-weight:700;
+      padding:2px 9px; border-radius:20px; margin-left:8px; vertical-align:middle; }
+  .pill.searching{ background:#fbe6cf; color:#8a6313; }
+  .pill.found{ background:#dff0e6; color:#1f6a4a; }
+  .preset{ font-size:12px; padding:6px 11px; }
+  .hint{ font-family:"Segoe UI",sans-serif; font-size:11.5px; color:var(--muted); margin-top:8px; }
+  .foot{ font-family:"Segoe UI",sans-serif; font-size:11px; color:var(--muted); margin-top:26px; text-align:center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState, useMemo, useRef, useEffect, useCallback} = React;
+
+// ---- model definitions -------------------------------------------------
+const SIG = 1e-9;          // effective emissivity·area·sigma (W/K^4) — tuned for friendly roots
+const K0  = 273.15;
+
+function makeModel(mode, N, Qin){
+  if(mode==="math"){
+    return {
+      f:(x)=> x*x - N,
+      fp:(x)=> 2*x,
+      xmin:0, xmax:Math.max(8, Math.sqrt(N)*1.7+2),
+      root: Math.sqrt(N),
+      xlabel:"guess  x", ylabel:"wrongness  f(x) = x² − N",
+      fmtX:(x)=> x.toFixed(4),
+      fmtF:(v)=> (v>=0?"+":"") + v.toFixed(4),
+      unitX:"", unitF:"",
+      title:`solve  x² = ${N}`,
+      sub:`the answer is √${N}`,
+    };
+  }
+  // thermal: f(T) = Qin − SIG·(T+273.15)^4  [watts], T in °C
+  const root = Math.pow(Qin/SIG, 0.25) - K0;
+  return {
+    f:(T)=> Qin - SIG*Math.pow(T+K0,4),
+    fp:(T)=> -4*SIG*Math.pow(T+K0,3),
+    xmin:-40, xmax:Math.max(240, root*1.5+40),
+    root,
+    xlabel:"guess temperature  T  (°C)", ylabel:"heat-in − heat-out  f(T)  (W)",
+    fmtX:(x)=> x.toFixed(2)+"°C",
+    fmtF:(v)=> (v>=0?"+":"") + v.toFixed(3)+" W",
+    unitX:"°C", unitF:"W",
+    title:`balance:  heat-in = heat-out`,
+    sub:`Q_in = ${Qin.toFixed(1)} W  →  find T where glow sheds it all`,
+  };
+}
+
+// ---- plot geometry -----------------------------------------------------
+const W=640,H=400,L=58,R=18,TP=18,BP=46;
+const PW=W-L-R, PH=H-TP-BP;
+
+function Plot({model, iters, live, anim}){
+  const samples = useMemo(()=>{
+    const pts=[]; const n=240;
+    for(let i=0;i<=n;i++){ const x=model.xmin+(model.xmax-model.xmin)*i/n; pts.push([x,model.f(x)]); }
+    return pts;
+  },[model]);
+
+  const {ymin,ymax} = useMemo(()=>{
+    let lo=Infinity,hi=-Infinity;
+    for(const [,y] of samples){ if(isFinite(y)){ lo=Math.min(lo,y); hi=Math.max(hi,y);} }
+    // ensure zero visible and the live point visible
+    lo=Math.min(lo,0); hi=Math.max(hi,0);
+    const pad=(hi-lo)*0.08||1; return {ymin:lo-pad, ymax:hi+pad};
+  },[samples]);
+
+  const sx = (x)=> L + (x-model.xmin)/(model.xmax-model.xmin)*PW;
+  const sy = (y)=> TP + (ymax-y)/(ymax-ymin)*PH;
+
+  const path = samples.map(([x,y],i)=> (i?"L":"M")+sx(x).toFixed(1)+" "+sy(Math.max(ymin,Math.min(ymax,y))).toFixed(1)).join(" ");
+
+  // grid
+  const vx=[], hy=[];
+  for(let i=0;i<=8;i++){ const x=model.xmin+(model.xmax-model.xmin)*i/8; vx.push(x); }
+  for(let i=0;i<=6;i++){ const y=ymin+(ymax-ymin)*i/6; hy.push(y); }
+
+  const cur = live; // {x, fx, fpx, x1}
+  const zeroY = sy(0);
+
+  // animated spark position (follows tangent from (x,fx) to (x1,0))
+  const sparkRef = useRef(null);
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} role="img">
+      <defs>
+        <marker id="arrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 Z" fill="#b9851a"/>
+        </marker>
+        <linearGradient id="curveG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#11507a"/><stop offset="1" stopColor="#0b3d63"/>
+        </linearGradient>
+      </defs>
+
+      {/* plot frame */}
+      <rect x={L} y={TP} width={PW} height={PH} fill="#fffdf8" stroke="#d6dde4"/>
+
+      {/* grid */}
+      {vx.map((x,i)=>(<line key={"v"+i} x1={sx(x)} y1={TP} x2={sx(x)} y2={TP+PH} stroke="#eef0ec"/>))}
+      {hy.map((y,i)=>(<line key={"h"+i} x1={L} y1={sy(y)} x2={L+PW} y2={sy(y)} stroke="#eef0ec"/>))}
+
+      {/* zero line */}
+      {zeroY>TP && zeroY<TP+PH &&
+        <g><line x1={L} y1={zeroY} x2={L+PW} y2={zeroY} stroke="#9a3b3b" strokeWidth="1.4" strokeDasharray="5 4"/>
+        <text x={L+4} y={zeroY-5} fontFamily="Segoe UI" fontSize="10" fill="#9a3b3b">f = 0  (the answer lives on this line)</text></g>}
+
+      {/* true root marker */}
+      {model.root>model.xmin && model.root<model.xmax &&
+        <g><line x1={sx(model.root)} y1={TP} x2={sx(model.root)} y2={TP+PH} stroke="#2f8f6b" strokeWidth="1" strokeDasharray="2 3" opacity="0.7"/>
+        <text x={sx(model.root)} y={TP+12} fontFamily="Segoe UI" fontSize="9.5" fill="#2f8f6b" textAnchor="middle">true root</text></g>}
+
+      {/* the curve */}
+      <path d={path} fill="none" stroke="url(#curveG)" strokeWidth="2.6"/>
+
+      {/* previous guesses on the axis */}
+      {iters.map((x,i)=>(
+        <g key={"it"+i} opacity={i===iters.length-1?1:0.5}>
+          <line x1={sx(x)} y1={zeroY} x2={sx(x)} y2={sy(model.f(x))} stroke="#9aa7b3" strokeDasharray="2 3"/>
+          <circle cx={sx(x)} cy={zeroY} r={3.5} fill="#5d6b79"/>
+          <text x={sx(x)} y={zeroY+15} fontFamily="Cascadia Mono, Consolas, monospace" fontSize="9" fill="#5d6b79" textAnchor="middle">x{i}</text>
+        </g>
+      ))}
+
+      {/* tangent line from current point down to its zero crossing = next guess */}
+      {cur &&
+        <g>
+          <line x1={sx(cur.x)} y1={sy(cur.fx)} x2={sx(cur.x1)} y2={zeroY}
+                stroke="#b9851a" strokeWidth="2" strokeDasharray="6 4" markerEnd="url(#arrow)"/>
+          {/* vertical drop from axis guess up to the curve */}
+          <line x1={sx(cur.x)} y1={zeroY} x2={sx(cur.x)} y2={sy(cur.fx)} stroke="#0b3d63" strokeWidth="1" strokeDasharray="2 3"/>
+          {/* current point on the curve */}
+          <circle cx={sx(cur.x)} cy={sy(cur.fx)} r={6} fill="#fff" stroke="#0b3d63" strokeWidth="2.4"/>
+          <circle cx={sx(cur.x)} cy={sy(cur.fx)} r={2.4} fill="#0b3d63">
+            <animate attributeName="r" values="2.4;4.5;2.4" dur="1.6s" repeatCount="indefinite"/>
+          </circle>
+          {/* next guess landing on the axis */}
+          <circle cx={sx(cur.x1)} cy={zeroY} r={4.5} fill="#b9851a"/>
+          <text x={sx(cur.x1)} y={zeroY+15} fontFamily="Cascadia Mono, Consolas, monospace" fontSize="9.5" fill="#8a6313" textAnchor="middle">next ▶</text>
+          <text x={(sx(cur.x)+sx(cur.x1))/2} y={(sy(cur.fx)+zeroY)/2 - 5} fontFamily="Segoe UI" fontSize="10" fill="#8a6313" fontStyle="italic">follow the slope ↓</text>
+        </g>}
+
+      {/* axis labels */}
+      {vx.map((x,i)=>(<text key={"vl"+i} x={sx(x)} y={TP+PH+16} fontFamily="Cascadia Mono, Consolas, monospace" fontSize="9.5" fill="#5d6b79" textAnchor="middle">{model.unitX==="°C"?x.toFixed(0):x.toFixed(1)}</text>))}
+      {hy.map((y,i)=>(<text key={"hl"+i} x={L-6} y={sy(y)+3} fontFamily="Cascadia Mono, Consolas, monospace" fontSize="9" fill="#5d6b79" textAnchor="end">{Math.abs(ymax-ymin)>40?y.toFixed(0):y.toFixed(1)}</text>))}
+      <text x={L+PW/2} y={H-6} fontFamily="Segoe UI" fontSize="11" fill="#1d2733" textAnchor="middle">{model.xlabel}</text>
+      <text x={14} y={TP+PH/2} fontFamily="Segoe UI" fontSize="11" fill="#1d2733" textAnchor="middle" transform={`rotate(-90 14 ${TP+PH/2})`}>{model.ylabel}</text>
+    </svg>
+  );
+}
+
+function App(){
+  const [mode,setMode]=useState("thermal");
+  const [N,setN]=useState(10);
+  const [Qin,setQin]=useState(13.1);
+  const [start,setStart]=useState(20);     // current start guess
+  const [iters,setIters]=useState([20]);   // sequence of guesses
+  const [dragging,setDragging]=useState(false);
+  const svgWrapRef=useRef(null);
+
+  const model = useMemo(()=>makeModel(mode,N,Qin),[mode,N,Qin]);
+  const tol = mode==="math"?1e-6:1e-4;
+
+  // when mode/params change, reset the run to a sensible start
+  useEffect(()=>{
+    const s = mode==="math"? 1.0 : 20;
+    setStart(s); setIters([s]);
+  },[mode]);
+
+  const cur = iters[iters.length-1];
+  const fx = model.f(cur), fpx = model.fp(cur);
+  const safeFp = Math.abs(fpx)<1e-12 ? (fpx<0?-1e-12:1e-12) : fpx;
+  const x1 = cur - fx/safeFp;
+  const converged = Math.abs(fx) < tol;
+
+  const live = {x:cur, fx, fpx:safeFp, x1};
+
+  const step = useCallback(()=>{
+    setIters(prev=>{
+      const c=prev[prev.length-1];
+      const f=model.f(c), fp=model.fp(c);
+      const sfp=Math.abs(fp)<1e-12?(fp<0?-1e-12:1e-12):fp;
+      if(Math.abs(f)<tol) return prev;
+      let nx=c-f/sfp;
+      nx=Math.max(model.xmin, Math.min(model.xmax, nx));
+      return [...prev, nx];
+    });
+  },[model,tol]);
+
+  const auto = useCallback(()=>{
+    setIters(prev=>{
+      let seq=[...prev];
+      for(let k=0;k<14;k++){
+        const c=seq[seq.length-1];
+        const f=model.f(c), fp=model.fp(c);
+        if(Math.abs(f)<tol) break;
+        const sfp=Math.abs(fp)<1e-12?(fp<0?-1e-12:1e-12):fp;
+        let nx=c-f/sfp; nx=Math.max(model.xmin,Math.min(model.xmax,nx));
+        seq.push(nx);
+        if(Math.abs(nx-c)<1e-9) break;
+      }
+      return seq;
+    });
+  },[model,tol]);
+
+  const reset = useCallback(()=>{ setIters([start]); },[start]);
+
+  // dragging the start guess on the plot
+  const pointerToX = useCallback((clientX)=>{
+    const svg = svgWrapRef.current.querySelector("svg");
+    const rect = svg.getBoundingClientRect();
+    const px = (clientX-rect.left)/rect.width*W;     // into viewBox coords
+    let x = model.xmin + (px-L)/PW*(model.xmax-model.xmin);
+    return Math.max(model.xmin, Math.min(model.xmax, x));
+  },[model]);
+
+  const onDown=(e)=>{ setDragging(true); const x=pointerToX(e.clientX); setStart(x); setIters([x]); };
+  useEffect(()=>{
+    if(!dragging) return;
+    const mv=(e)=>{ const cx=e.touches?e.touches[0].clientX:e.clientX; const x=pointerToX(cx); setStart(x); setIters([x]); };
+    const up=()=>setDragging(false);
+    window.addEventListener("pointermove",mv); window.addEventListener("pointerup",up);
+    return ()=>{ window.removeEventListener("pointermove",mv); window.removeEventListener("pointerup",up); };
+  },[dragging,pointerToX]);
+
+  return (
+    <div className="wrap">
+      <div className="kicker">PowerPy · interactive</div>
+      <h1>Newton's Method — clever guessing</h1>
+      <div className="sub">Drag the starting guess, then press <b>Step</b> and watch each guess slide down the
+      slope to where it crosses zero — the answer.</div>
+
+      <div className="grid">
+        <div>
+          <div className="card">
+            <h2>{model.title}
+              <span className={"pill "+(converged?"found":"searching")}>
+                {converged? "✓ converged" : "searching…"}</span>
+            </h2>
+            <div ref={svgWrapRef} onPointerDown={onDown} style={{cursor:dragging?"grabbing":"grab"}}>
+              <Plot model={model} iters={iters} live={live}/>
+            </div>
+            <div className="hint">↑ click or drag anywhere on the graph to move the <b>starting guess</b>. The amber
+            dashed line is the <b>tangent</b> (the local slope); where it hits the red zero-line is your next guess.</div>
+
+            <div className="controls">
+              <button onClick={step} disabled={converged}>▶ Step once</button>
+              <button className="amber" onClick={auto} disabled={converged}>⏩ Run to answer</button>
+              <button className="ghost" onClick={reset}>↺ Reset</button>
+            </div>
+          </div>
+
+          <div className="callout">
+            <b>The fog analogy.</b> You're on a hillside in fog, trying to reach the valley floor (where the
+            wrongness is zero). You can't see the bottom — but you can feel the <i>slope</i> under your feet.
+            Newton's trick: follow that straight slope to where it <i>would</i> hit the floor, and step there.
+            Feel the new slope, step again. The correct digits roughly <b>double</b> every step.
+          </div>
+        </div>
+
+        <div>
+          <div className="card">
+            <h2>What to explore</h2>
+            <div className="seg" role="tablist" style={{marginBottom:12}}>
+              <button className={mode==="thermal"?"on":""} onClick={()=>setMode("thermal")}>🌡 Thermal balance</button>
+              <button className={mode==="math"?"on":""} onClick={()=>setMode("math")}>√ Math (x²=N)</button>
+            </div>
+
+            {mode==="math" ? (
+              <div className="row"><label>N (find √N)</label>
+                <input type="range" min="2" max="50" step="1" value={N} onChange={e=>setN(+e.target.value)}/>
+                <span className="mono">{N}</span></div>
+            ) : (
+              <React.Fragment>
+                <div className="row"><label>Heat in, Q_in (W)</label>
+                  <input type="range" min="2" max="55" step="0.5" value={Qin} onChange={e=>setQin(+e.target.value)}/>
+                  <span className="mono">{Qin.toFixed(1)}</span></div>
+                <div className="controls" style={{marginTop:0}}>
+                  <button className="ghost preset" onClick={()=>setQin(13.1)}>sunlit cell ≈ 65°C</button>
+                  <button className="ghost preset" onClick={()=>setQin(44.8)}>reverse-bias hot-spot ≈ 187°C</button>
+                </div>
+              </React.Fragment>
+            )}
+            <div className="hint" style={{marginTop:10}}>{model.sub}</div>
+          </div>
+
+          <div className="card" style={{marginTop:16}}>
+            <h2>Live readout</h2>
+            <div className="readout">
+              <div className="stat"><span className="k">current guess</span><span className="big">{model.fmtX(cur)}</span></div>
+              <div className="stat"><span className="k">wrongness  f</span><span>{model.fmtF(fx)}</span></div>
+              <div className="stat"><span className="k">slope  f′</span><span>{safeFp.toFixed(mode==="math"?4:5)}</span></div>
+              <div className="stat"><span className="k">step  = −f/f′</span><span>{(x1-cur>=0?"+":"")+(x1-cur).toFixed(4)}</span></div>
+              <div className="stat"><span className="k">→ next guess</span><span style={{color:"#b9851a",fontWeight:700}}>{model.fmtX(x1)}</span></div>
+            </div>
+            <div className="hint">Step = wrongness ÷ slope. Steep slope → small step; shallow slope → big step.
+            That's why dividing by the slope sizes the leap automatically.</div>
+          </div>
+
+          <div className="card" style={{marginTop:16}}>
+            <h2>Guess sequence</h2>
+            <table>
+              <thead><tr><th>n</th><th>guess</th><th>wrongness f</th></tr></thead>
+              <tbody>
+                {iters.map((x,i)=>{
+                  const f=model.f(x); const done=Math.abs(f)<tol;
+                  const isLive=i===iters.length-1;
+                  return (<tr key={i} className={done?"done":(isLive?"live":"")}>
+                    <td>{i}</td><td>{model.fmtX(x)}</td><td>{done?"≈ 0 ✓":model.fmtF(f)}</td></tr>);
+                })}
+              </tbody>
+            </table>
+            <div className="hint">Watch the wrongness column collapse toward zero — usually 4–6 rows is all it takes.</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="callout" style={{marginTop:18}}>
+        <b>Why this is in PowerPy.</b> The thermal mode is the real job: a cell's temperature settles where
+        <i> heat-in − heat-out = 0</i>. But heat-out grows like T⁴, so T sits on both sides of the equation and
+        there's no one-line formula — you must <i>solve</i> it. Newton does it in a handful of steps. Try the
+        <b> reverse-bias hot-spot</b> preset: that's the failed cell being driven to ~187°C, the number the
+        whole hot-spot study is about. (Chapter 4 then lets that heat spread sideways to neighbours.)
+      </div>
+
+      <div className="foot">Single-file interactive · double-click to open · part of the PowerPy Solar-Array Engineer's Handbook</div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

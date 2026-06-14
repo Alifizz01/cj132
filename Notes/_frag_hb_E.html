@@ -1,0 +1,425 @@
+<section class="partopener"><div class="pn">Appendix E</div><h2>Physics Background</h2><div class="blurb">The underlying physics, taught from the ground up: heat transfer, the solar cell, reverse bias, and the orbit.</div></section>
+
+<section class="sec">
+<h3><span class="sec-num">E.1</span>Heat Transfer Modes in Space</h3>
+
+<p class="slow">Everything in this handbook ultimately comes back to a single question: <em>where does the heat go?</em> A solar array in orbit absorbs energy from the Sun every second it is illuminated. If that energy had nowhere to go, the array's temperature would rise without limit until it melted. It does not melt — usually — because it is constantly throwing energy back out into space. To understand the simulator, you must first understand the three ways heat can move from one place to another, and which of them are available to a spacecraft.</p>
+
+<p class="slow">Heat is simply energy in transit because of a temperature difference. Whenever two regions are at different temperatures, nature tries to even them out, and the flow of energy that does this is what we call <em>heat</em>. Physicists count exactly three mechanisms by which it travels: conduction, convection, and radiation. On Earth all three happen at once and we rarely separate them. In the vacuum of space, one of them simply switches off, and that single fact dominates the entire thermal design of a satellite.</p>
+
+<div class="term"><span class="lbl">Conduction</span>The transfer of heat through a material, or between two materials in direct contact, without the material itself moving. Energy is passed along from one jiggling atom to its neighbour, like a rumour spreading down a row of people who never leave their seats.</div>
+
+<div class="term"><span class="lbl">Convection</span>The transfer of heat by the bulk motion of a fluid — a liquid or a gas. Hot air rises, cool air sinks, and the moving fluid physically carries its thermal energy from one place to another. This is how a radiator warms a room and how the wind cools your skin.</div>
+
+<div class="term"><span class="lbl">Radiation</span>The transfer of heat by electromagnetic waves — chiefly infrared light. Every object above absolute zero glows, emitting energy as light that travels through empty space at the speed of light and needs no material medium at all. This is how the Sun's warmth reaches us across 150 million kilometres of nothing.</div>
+
+<div class="keyidea"><span class="lbl">The key fact</span>Convection needs a fluid. Space is a near-perfect vacuum — there is essentially no air, no gas, nothing to flow. So <strong>in space there is no convection</strong>. A spacecraft cannot be cooled by a breeze or a fan, because there is nothing for the fan to push. This is the single most counter-intuitive idea for a newcomer from terrestrial engineering, and it changes everything.</div>
+
+<p class="slow">On the ground, convection is our workhorse. A hot computer chip is cooled by a fan blowing air across a heatsink; a hot cup of coffee cools mostly because warm air rises off its surface and carries energy away. Remove the air and both of those mechanisms vanish. The chip and the coffee can now lose heat in only two ways: by conducting it into whatever they are touching, and by radiating it away as infrared light. For an isolated object touching nothing — like the outermost surface of a satellite facing deep space — conduction has nowhere to go either. That leaves <strong>radiation as the only escape route</strong>.</p>
+
+<div class="analogy"><span class="lbl">Analogy</span>Imagine three ways to empty a bathtub. Conduction is letting the water soak slowly into a sponge pressed against the side — it only works where things touch. Convection is scooping water out with a bucket and carrying it away — fast, but you need the bucket (the fluid) to carry it. Radiation is the water evaporating into the air all on its own — slow, but it happens even if nothing is touching the tub and there is no bucket. In space, someone has taken away your sponge and your bucket. Evaporation is all you have left.</div>
+
+<p class="slow">This is why the simulator treats radiation so carefully and why the Stefan–Boltzmann law (Section E.2) sits at the heart of the energy balance. Conduction still matters — it is how heat spreads <em>sideways</em> through the panel from a hot spot to cooler neighbours, and how it moves from a cell down into the substrate it is glued to. But the only way energy ultimately leaves the spacecraft is by being radiated into the cold dark.</p>
+
+<div class="deep"><span class="lbl">Going deeper</span>"Near-perfect vacuum" is not quite "perfect". In low Earth orbit there are still a few hundred thousand to a million gas molecules per cubic centimetre — but compare that with roughly 2.5×10¹⁹ molecules per cubic centimetre at sea level. The residual gas is so thin that the rate of convective heat transfer is smaller than radiation by many orders of magnitude, so we are completely justified in setting convection to exactly zero in the model. The same reasoning lets us ignore conduction <em>to the surroundings</em> — there is nothing out there to conduct into except the structure itself.</p></div>
+
+<p class="slow">There is an everyday version of this you have probably held in your hands: a vacuum flask (a "Thermos"). It keeps coffee hot for hours by exploiting precisely the physics above. Its double wall has the air pumped out of the gap, killing convection and conduction across that gap. The inner surface is silvered to be a poor radiator, killing most of the radiation too. A satellite is, in effect, a coffee inside a flask with the lid off — surrounded by vacuum, able to lose heat only by glowing.</p>
+
+<div class="pitfall"><span class="lbl">Common mistake</span>Newcomers often assume "space is cold, so things in space get cold quickly." Space has no temperature in the everyday sense — it is nearly empty, so it cannot cool you by contact or by a cold wind. A sunlit object in vacuum can in fact <em>overheat badly</em>, precisely because it has no convection to dump heat into and must rely on the comparatively slow process of radiation. Cold surroundings help (a cold sky is an excellent place to radiate <em>to</em>), but the rate is set by radiation physics, not by the chill of the void.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.2</span>Radiation and the Stefan–Boltzmann Law</h3>
+
+<p class="slow">Since radiation is the only way heat finally leaves a spacecraft, we need a precise law for how fast an object radiates. That law is the <em>Stefan–Boltzmann law</em>, and it is one of the most important equations in the whole simulator. Before we write it down, we need three ideas: the blackbody, emissivity, and absorptivity.</p>
+
+<div class="term"><span class="lbl">Blackbody</span>An idealised object that absorbs <strong>all</strong> radiation falling on it (reflecting nothing — hence "black") and, at any given temperature, emits the maximum possible amount of thermal radiation. It is the theoretical gold standard against which real surfaces are measured. No real surface is a perfect blackbody, but many come close in the infrared.</div>
+
+<div class="term"><span class="lbl">Emissivity (ε)</span>A number between 0 and 1 that says how good a real surface is at <em>emitting</em> radiation, compared with a perfect blackbody at the same temperature. ε = 1 is a perfect emitter (a blackbody); ε = 0.05 is a shiny, polished metal that barely glows. A typical spacecraft radiator paint has ε around 0.8–0.9.</div>
+
+<div class="term"><span class="lbl">Absorptivity (α)</span>A number between 0 and 1 that says how much of the radiation falling on a surface gets <em>absorbed</em> (rather than reflected). α = 1 absorbs everything (a blackbody); a white paint or a mirror has a low α for sunlight, which is why white things stay cooler in the Sun.</div>
+
+<div class="formula">P<sub>rad</sub> = ε · σ · A · T⁴
+<div class="where">P<sub>rad</sub> = power radiated away (watts, W) &nbsp;·&nbsp; ε = emissivity (0–1, no units) &nbsp;·&nbsp; σ = Stefan–Boltzmann constant = <span class="num">5.670367×10⁻⁸</span> W·m⁻²·K⁻⁴ &nbsp;·&nbsp; A = radiating area (m²) &nbsp;·&nbsp; T = absolute temperature (kelvin, K)</div></div>
+
+<p class="slow">Read this equation slowly, because every symbol earns its place. The power an object radiates grows with its emissivity ε (a better emitter glows more), with its area A (a bigger surface glows more), and — most dramatically — with the <strong>fourth power</strong> of its absolute temperature T. That fourth power is the single most important feature of thermal physics in space.</p>
+
+<div class="keyidea"><span class="lbl">Why T⁴ matters so much</span>Because the radiated power depends on T⁴, doubling the absolute temperature multiplies the radiated power by 2⁴ = 16. A surface that runs only a little hotter sheds dramatically more heat. This is why a hot spot is partly self-limiting (it radiates furiously) but also why temperatures climb steeply once the heat input rises — the balance point shifts as the fourth root of the power, so big changes in heat make only modest changes in temperature, and vice-versa.</div>
+
+<div class="term"><span class="lbl">Kelvin (K)</span>The absolute temperature scale. It starts at absolute zero — the coldest possible temperature, where atomic motion is minimal — and uses the same size of degree as Celsius. To convert: T(K) = T(°C) + 273.15. Water freezes at 273.15 K and boils at 373.15 K. The T in the Stefan–Boltzmann law <strong>must</strong> be in kelvin, because T⁴ only behaves correctly on an absolute scale that starts at true zero. Using Celsius would be a catastrophic error.</div>
+
+<div class="pitfall"><span class="lbl">Common mistake</span>Plugging Celsius into σT⁴. A cell at 39 °C is at 312.15 K. Using "39" instead of "312.15" understates the radiated power by a factor of (312.15/39)⁴ ≈ 4100. Always convert to kelvin first. In the code this is handled once, centrally, but when you check a result by hand, remember the +273.15.</div>
+
+<p class="slow">Now, where does the σT⁴ shape come from? It is not arbitrary. In the late 1800s, Josef Stefan found it experimentally and Ludwig Boltzmann derived it from thermodynamics; later, Max Planck explained it from the quantum nature of light. The deep reason is that a hot object emits light across a whole spectrum of wavelengths, and as it gets hotter two things happen at once: it emits at <em>every</em> wavelength more strongly, and the peak of its glow shifts toward shorter (bluer, more energetic) wavelengths. Adding up the energy across the entire spectrum, those two effects combine to give a total that scales as the fourth power of temperature. You do not need the full derivation to use the simulator, but it helps to know the T⁴ is a real, derived result and not a fudge factor.</p>
+
+<div class="formula">T(K) = T(°C) + 273.15
+<div class="where">The conversion you will use constantly. Examples used elsewhere in this handbook: idle cell 65 °C = 338.15 K; working cell 39 °C = 312.15 K; failed hot-spot cell 187 °C = 460.15 K.</div></div>
+
+<p class="slow">There is a beautiful and useful symmetry between emitting and absorbing, captured by Kirchhoff's law of thermal radiation.</p>
+
+<div class="keyidea"><span class="lbl">Kirchhoff's law</span>At a given wavelength and temperature, a surface's emissivity equals its absorptivity: <strong>a good emitter is a good absorber</strong>, and a good reflector is a poor emitter. The same surface property governs both directions of energy flow. Physically this must be true, otherwise you could build a surface that absorbs more than it emits and heats up forever next to a wall at the same temperature — violating the second law of thermodynamics.</div>
+
+<div class="analogy"><span class="lbl">Analogy</span>Think of a surface as a doorway for radiation. A wide-open doorway (ε near 1) lets energy stream <em>out</em> easily — but it equally lets energy stream <em>in</em> easily, so it is also a strong absorber (α near 1). A nearly closed door (a shiny mirror, ε near 0) blocks energy in both directions: it barely glows and barely absorbs. You cannot have a one-way door for heat radiation — Kirchhoff forbids it at any single wavelength.</div>
+
+<div class="deep"><span class="lbl">Going deeper — the spectral trick spacecraft engineers love</span>Kirchhoff's law holds <em>at each wavelength</em>, and the Sun's radiation arrives mostly as short-wavelength visible light while a room-temperature spacecraft emits mostly long-wavelength infrared. Because these two bands barely overlap, a clever surface can have a <em>low</em> α for sunlight (it reflects the incoming Sun) yet a <em>high</em> ε in the infrared (it readily dumps its own heat). White paints and optical solar reflectors do exactly this — they stay cool in sunlight. There is no contradiction with Kirchhoff because α and ε are equal only when compared at the same wavelength.</div>
+
+<p class="slow">An everyday example: stand in front of a bonfire on a cold night. The side of you facing the fire feels hot even though the air between you and the flames may be cold — that is radiation reaching you directly, needing no warm air to carry it. Now turn around: your back radiates its own heat into the cold night and feels chilly. You are simultaneously absorbing (front) and emitting (back), both governed by the σT⁴ law and Kirchhoff's symmetry, exactly as a satellite surface does.</p>
+
+<svg viewBox="0 0 460 200" width="100%" style="max-width:460px;display:block;margin:14px auto;font-family:sans-serif">
+<defs><radialGradient id="hotbody" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ffd27f"/><stop offset="100%" stop-color="#e8852a"/></radialGradient></defs>
+<rect x="0" y="0" width="460" height="200" fill="#0b1020"/>
+<circle cx="120" cy="100" r="46" fill="url(#hotbody)"/>
+<text x="120" y="105" text-anchor="middle" font-size="13" fill="#1a1a1a">hot body</text>
+<text x="120" y="160" text-anchor="middle" font-size="12" fill="#cfd8ff">T (kelvin)</text>
+<g stroke="#ffb347" stroke-width="2" fill="none">
+<path d="M170 70 q22 -8 44 0"/><path d="M214 70 q22 8 44 0"/>
+<path d="M178 100 q22 -8 44 0"/><path d="M222 100 q22 8 44 0"/>
+<path d="M170 130 q22 -8 44 0"/><path d="M214 130 q22 8 44 0"/>
+</g>
+<polygon points="300,66 312,70 300,74" fill="#ffb347"/>
+<polygon points="308,96 320,100 308,104" fill="#ffb347"/>
+<polygon points="300,126 312,130 300,134" fill="#ffb347"/>
+<text x="370" y="96" text-anchor="middle" font-size="13" fill="#fff">radiated</text>
+<text x="370" y="114" text-anchor="middle" font-size="13" fill="#fff">power</text>
+<text x="370" y="140" text-anchor="middle" font-size="12" fill="#8fe3c0">ε σ A T⁴</text>
+<text x="230" y="190" text-anchor="middle" font-size="11" fill="#7a85b5">infrared light streaming into cold space — no medium needed</text>
+</svg>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.3</span>Conduction and Fourier's Law</h3>
+
+<p class="slow">Radiation moves heat out of the spacecraft. Conduction moves heat <em>around inside</em> it — from a cell into the panel it is glued to, and sideways across the panel from a hot region to its cooler neighbours. Getting this right is what stops a single failed cell from being treated as if it were thermally alone in the universe; its heat actually leaks into the surrounding structure, and the model must account for that.</p>
+
+<p class="slow">The governing rule is <em>Fourier's law of heat conduction</em>. In its simplest, most useful form for our purposes it says: the rate of heat flow through a path is proportional to the temperature difference across that path. Push harder on the temperature difference and more heat flows, exactly like pushing harder on a voltage drives more current.</p>
+
+<div class="formula">Q = C · ΔT
+<div class="where">Q = heat-flow rate (W) &nbsp;·&nbsp; C = thermal conductance of the path (W/K) &nbsp;·&nbsp; ΔT = temperature difference across the path (K, or equivalently °C since it is a difference)</div></div>
+
+<div class="term"><span class="lbl">Thermal conductance (C)</span>How easily heat flows along a given path, measured in watts per kelvin (W/K). A high conductance means even a small temperature difference moves a lot of heat. It is the thermal twin of electrical conductance (the reciprocal of resistance).</div>
+
+<p class="slow">Conductance is not a fundamental material property — it depends on the material <em>and</em> the geometry of the path. For heat flowing straight through a slab of material, the conductance is built from three ingredients:</p>
+
+<div class="formula">C = k · A / L
+<div class="where">k = thermal conductivity of the material (W·m⁻¹·K⁻¹), an intrinsic property — high for metals, low for plastics &nbsp;·&nbsp; A = cross-sectional area the heat flows through (m²) &nbsp;·&nbsp; L = length of the path, i.e. the thickness the heat must cross (m)</div></div>
+
+<div class="term"><span class="lbl">Thermal conductivity (k)</span>An intrinsic property of a material: how readily it carries heat per unit area per unit thickness. Copper is about 400, aluminium about 200, glass about 1, and a foam insulator about 0.03 (all in W·m⁻¹·K⁻¹). Big k means a great conductor of heat.</div>
+
+<p class="slow">Let us make this concrete with the worked number used in the simulator. Suppose heat must cross from a cell down through a thin bonding layer into the substrate. Take an effective conductivity-times-area term of 10 (in consistent units) and a path thickness of 0.01 m (one centimetre). Then:</p>
+
+<div class="formula">c<sub>cond</sub> = 10 / 0.01 = <span class="num">1000</span> W/K
+<div class="where">The vertical (through-thickness) conductance from a cell into the substrate beneath it. A large value: it means cell and substrate are tightly coupled thermally — a small temperature difference moves a lot of heat between them, so they tend to track each other closely.</div></div>
+
+<div class="keyidea"><span class="lbl">Thin is conductive, thick is insulating</span>Conductance C = k·A/L is <em>inversely</em> proportional to thickness L. A thin layer (small L) has a large conductance — heat crosses it easily. A thick layer has a small conductance — it insulates. This is why c_cond comes out so large (1000 W/K): the bonding path is very thin, so it offers almost no resistance to vertical heat flow.</div>
+
+<p class="slow">The second place conduction appears is <em>lateral</em> spreading — heat flowing sideways through the thin metal facesheet of the panel, from a hot cell to its neighbours. This is what lets a hot spot "bleed" energy into the surrounding cells instead of building up locally. The lateral conductance between adjacent cells is built the same way, from conductivity, the facesheet thickness, the shared edge length, and the spacing (pitch) between cell centres:</p>
+
+<div class="formula">g<sub>lat</sub> = k · t · (edge) / (pitch)
+<div class="where">k = facesheet thermal conductivity &nbsp;·&nbsp; t = facesheet thickness (m) &nbsp;·&nbsp; edge = length of the shared boundary between two cells (m) &nbsp;·&nbsp; pitch = centre-to-centre distance between the two cells (m). Here A = t·edge is the cross-section the lateral heat flows through, and L = pitch is the distance it travels.</div></div>
+
+<div class="formula">g<sub>lat</sub> ≈ <span class="num">0.045</span> W/K  (example value per cell-to-cell link)
+<div class="where">Far smaller than the 1000 W/K vertical coupling. Heat spreads sideways through a thin facesheet only sluggishly, because the cross-section (thickness × edge) is tiny and the path (pitch) is comparatively long.</div></div>
+
+<div class="pitfall"><span class="lbl">Watch the scale difference</span>Vertical conductance (≈1000 W/K) dwarfs lateral conductance (≈0.045 W/K) by a factor of tens of thousands. Physically: a cell is glued <em>flat</em> against the substrate over its whole face (large A, tiny L), but connects to a neighbour only through a thin sliver of facesheet edge (tiny A, larger L). This is exactly why a hot spot stays <em>localised</em> — heat pours down into the substrate readily but creeps sideways only slowly, so a failed cell can reach a high local temperature before its neighbours feel much of it.</div>
+
+<div class="analogy"><span class="lbl">Analogy</span>Conductance is the width of a pipe and ΔT is the water pressure. A wide pipe (high conductance) lets a lot of water through for the same pressure; a narrow pipe (low conductance) trickles. The vertical path into the substrate is a fire hose; the lateral path to a neighbour is a drinking straw. Same pressure (temperature difference), wildly different flow.</div>
+
+<svg viewBox="0 0 460 210" width="100%" style="max-width:460px;display:block;margin:14px auto;font-family:sans-serif">
+<rect x="0" y="0" width="460" height="210" fill="#f7f8fc" stroke="#d7dcea"/>
+<rect x="60" y="30" width="70" height="34" fill="#e8852a"/><text x="95" y="52" text-anchor="middle" font-size="11" fill="#fff">hot cell</text>
+<rect x="140" y="30" width="70" height="34" fill="#ffd27f"/><text x="175" y="52" text-anchor="middle" font-size="11" fill="#333">cell</text>
+<rect x="220" y="30" width="70" height="34" fill="#ffe9c2"/><text x="255" y="52" text-anchor="middle" font-size="11" fill="#333">cell</text>
+<rect x="60" y="120" width="230" height="40" fill="#c9d2e8"/><text x="175" y="145" text-anchor="middle" font-size="11" fill="#333">substrate</text>
+<g stroke="#c0392b" stroke-width="2" fill="none" marker-end="url(#ah)"><path d="M95 64 L95 118"/></g>
+<g stroke="#2a6fc0" stroke-width="2" fill="none" marker-end="url(#ab)"><path d="M130 47 L138 47"/><path d="M210 47 L218 47"/></g>
+<defs>
+<marker id="ah" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#c0392b"/></marker>
+<marker id="ab" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2a6fc0"/></marker>
+</defs>
+<text x="118" y="98" font-size="11" fill="#c0392b">vertical c_cond ≈ 1000 W/K (strong)</text>
+<text x="160" y="22" font-size="11" fill="#2a6fc0">lateral g_lat ≈ 0.045 W/K (weak)</text>
+<text x="230" y="195" text-anchor="middle" font-size="11" fill="#7a85b5">heat pours DOWN easily, creeps SIDEWAYS slowly → localised hot spot</text>
+</svg>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.4</span>The Solar Cell and the IV Curve</h3>
+
+<p class="slow">A solar cell turns sunlight into electricity. To model what it does to the thermal picture, we must understand its electrical behaviour, and that behaviour is captured by a single graph: the <em>current–voltage curve</em>, universally called the IV curve. Every important number about a cell can be read off this one curve.</p>
+
+<div class="term"><span class="lbl">Current (I)</span>The rate of flow of electric charge, measured in amperes (A). In a solar cell, sunlight knocks electrons loose and the current is the stream of those electrons delivered to the circuit. More light, more current.</div>
+
+<div class="term"><span class="lbl">Voltage (V)</span>The electrical "pressure" or potential difference that pushes the current around the circuit, measured in volts (V). A single solar cell produces a modest voltage; many are wired in series to add their voltages up to something useful.</div>
+
+<div class="term"><span class="lbl">Power (P)</span>The rate of energy delivery, P = V × I, measured in watts (W). This is what the cell is for — electrical power to run the spacecraft. Power is the product of how hard you push (V) and how much flows (I).</div>
+
+<p class="slow">If you connect a solar cell to an adjustable load and sweep the load from a dead short to a fully open circuit while keeping the sunlight steady, you trace out the IV curve. It has a characteristic knee shape, and four landmark points define it:</p>
+
+<div class="term"><span class="lbl">I<sub>sc</sub> — short-circuit current</span>The current when the cell's terminals are shorted together (V = 0). This is the most current the cell can deliver. No voltage means no power here, but it sets the height of the curve.</div>
+
+<div class="term"><span class="lbl">V<sub>oc</sub> — open-circuit voltage</span>The voltage when no current is drawn (I = 0, open circuit). This is the most voltage the cell can produce. No current means no power here either, but it sets the width of the curve.</div>
+
+<div class="term"><span class="lbl">I<sub>mp</sub>, V<sub>mp</sub> — current and voltage at maximum power</span>The single operating point, somewhere around the knee, where the product P = V·I is largest. Here the cell delivers the most useful power.</div>
+
+<div class="keyidea"><span class="lbl">The Maximum Power Point (MPP)</span>Because power is V×I, and V is largest where I is zero and vice-versa, the maximum of their product sits at the bend of the knee — not at either extreme. Spacecraft power systems include electronics (a "maximum power point tracker") whose entire job is to keep the array operating right at this sweet spot as light and temperature change. Operating off the MPP wastes available power.</div>
+
+<div class="term"><span class="lbl">Fill Factor (FF)</span>A measure of how "square" the IV curve is — how close the cell comes to the ideal of delivering its full I_sc at its full V_oc simultaneously. Defined as the ratio of the actual maximum power to that ideal rectangle:</div>
+
+<div class="formula">FF = P<sub>mp</sub> / (V<sub>oc</sub> · I<sub>sc</sub>)
+<div class="where">P<sub>mp</sub> = V<sub>mp</sub>·I<sub>mp</sub> = the real maximum power (W) &nbsp;·&nbsp; V<sub>oc</sub>·I<sub>sc</sub> = the theoretical maximum if the cell delivered full current at full voltage at once (W). FF is between 0 and 1; good cells reach 0.8–0.85. Higher is better — it means a sharper, more rectangular knee.</div></div>
+
+<p class="slow">The cells modelled here are <em>triple-junction gallium-arsenide</em> (GaAs) cells — the workhorse of modern spacecraft. A single ordinary silicon cell makes only about 0.6 V. A triple-junction cell stacks three different semiconductor layers, each tuned to a different slice of the solar spectrum, so it captures more of the sunlight and produces a higher voltage — about <span class="num">2.3–2.6 V</span> per cell — at roughly <span class="num">28%</span> efficiency. That high per-cell voltage and high efficiency is exactly why they are worth their considerable cost in space.</p>
+
+<div class="term"><span class="lbl">Triple-junction GaAs cell</span>A solar cell built from three stacked semiconductor junctions of different materials, each absorbing a different band of the spectrum (typically a GaInP top cell, a GaAs middle cell, and a Ge bottom cell). The three add their voltages in series within one cell, giving ~2.3–2.6 V and ~28% conversion efficiency — roughly double a single silicon cell.</div>
+
+<div class="term"><span class="lbl">Efficiency</span>The fraction of incoming sunlight power that the cell converts into electrical power. At ~28%, a triple-junction cell turns just over a quarter of the sunlight into electricity; the remaining ~72% must be dealt with as heat (Section E.5).</div>
+
+<p class="slow">Crucially for a thermal handbook, <strong>efficiency drops as the cell gets hotter</strong>. The dominant effect is on voltage: as temperature rises, V_oc and V_mp fall (by a few millivolts per kelvin per junction), and since power is V×I, the delivered power and the efficiency fall with them. A hot cell is a worse cell. This couples electricity and temperature together: heat lowers the electrical output, and the lost output (plus the absorbed sunlight) shows up as still more heat.</p>
+
+<div class="analogy"><span class="lbl">Analogy</span>The IV curve is like a person pushing a swing. At one extreme they push very hard but the swing barely moves (high voltage, no current — open circuit). At the other they let the swing fly but give it no push (high current, no voltage — short circuit). The most <em>work</em> per second (power) happens in between, with a firm push and a good swing — that is the maximum power point. And a tired (hot) person pushes with less force: the whole curve sags, and the best they can manage drops.</div>
+
+<div class="deep"><span class="lbl">Going deeper — why voltage falls with heat</span>A solar cell is a diode in the light. Its open-circuit voltage is set by the balance between light-generated current and the diode's own "dark" leakage current. As temperature rises, that leakage current climbs steeply (it depends exponentially on temperature through the semiconductor bandgap), so it takes less forward voltage to balance the same light current — V_oc falls. The current I_sc actually rises very slightly with temperature, but the voltage loss dominates, so net power and efficiency decline with heat.</div>
+
+<svg viewBox="0 0 440 280" width="100%" style="max-width:440px;display:block;margin:14px auto;font-family:sans-serif">
+<rect x="0" y="0" width="440" height="280" fill="#ffffff" stroke="#d7dcea"/>
+<line x1="60" y1="230" x2="410" y2="230" stroke="#333" stroke-width="1.5"/>
+<line x1="60" y1="230" x2="60" y2="30" stroke="#333" stroke-width="1.5"/>
+<text x="235" y="265" text-anchor="middle" font-size="12" fill="#333">Voltage V</text>
+<text x="20" y="130" text-anchor="middle" font-size="12" fill="#333" transform="rotate(-90 20 130)">Current I</text>
+<path d="M60 60 L260 64 L320 110 L370 230" fill="none" stroke="#2a6fc0" stroke-width="2.5"/>
+<rect x="60" y="64" width="260" height="0" fill="none"/>
+<rect x="60" y="64" width="260" height="166" fill="#2a6fc0" opacity="0.08"/>
+<line x1="60" y1="64" x2="320" y2="64" stroke="#2a6fc0" stroke-dasharray="3 3"/>
+<line x1="320" y1="64" x2="320" y2="230" stroke="#2a6fc0" stroke-dasharray="3 3"/>
+<rect x="60" y="110" width="260" height="120" fill="#27ae60" opacity="0.15"/>
+<circle cx="60" cy="60" r="4" fill="#c0392b"/><text x="72" y="55" font-size="11" fill="#c0392b">I_sc (V=0)</text>
+<circle cx="370" cy="230" r="4" fill="#c0392b"/><text x="330" y="222" font-size="11" fill="#c0392b">V_oc (I=0)</text>
+<circle cx="300" cy="100" r="5" fill="#e8852a"/><text x="310" y="95" font-size="11" fill="#e8852a">MPP (V_mp, I_mp)</text>
+<text x="170" y="180" font-size="11" fill="#1d7a44">P = V·I area</text>
+<text x="200" y="200" font-size="10" fill="#666">(green box = P_mp; FF = green / blue dashed box)</text>
+</svg>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.5</span>Energy Balance of a Cell</h3>
+
+<p class="slow">We can now combine radiation, conduction, and the solar cell into the central bookkeeping idea of the whole simulator: the <em>energy balance</em>. The principle is conservation of energy — energy is never created or destroyed. In a steady state, every watt that goes into a cell must come back out. The cell's temperature settles at exactly the value that makes "energy in" equal "energy out".</p>
+
+<p class="slow">Energy comes in from the Sun. Let us tally it for one cell. The cell area is A = <span class="num">0.003 m²</span> (a few square centimetres — about a large postage stamp). At Earth's distance the sunlight delivers 1367 W per square metre (Section E.8). Multiplying area by that flux, accounting for the cell's absorptivity, the absorbed solar power for one cell is:</p>
+
+<div class="formula">q<sub>sun</sub> ≈ <span class="num">3.978 W</span> absorbed by one cell (A = 0.003 m²)
+<div class="where">This is the energy budget the cell must dispose of every second. Where it goes is the whole question.</div></div>
+
+<p class="slow">That incoming ~3.978 W has only two exits: it leaves as <em>electricity</em> (useful work carried away down the wires) or it leaves as <em>heat</em> (radiated to space and conducted into the substrate). There is no third option — conservation of energy forbids it.</p>
+
+<div class="formula">q<sub>sun</sub> = P<sub>electrical</sub> + P<sub>heat</sub>
+<div class="where">Absorbed sunlight (≈3.978 W) splits into electrical output and waste heat. At ~28% efficiency, about 0.28 × 3.978 ≈ 1.1 W leaves as electricity and the remaining ≈2.9 W must be dumped as heat.</div></div>
+
+<div class="keyidea"><span class="lbl">The cooling effect of doing work</span>Here is the elegant consequence. A <em>working</em> cell exports about 28% of the absorbed sunlight as electricity — that energy leaves down the wires and never has to be radiated away as heat. An <em>idle</em> cell (open circuit, producing no current, delivering no power) converts <strong>none</strong> of the sunlight to electricity; the full ~3.978 W must instead be shed as heat by radiation. More heat to radiate means a higher equilibrium temperature.</div>
+
+<p class="slow">This explains a result that surprises newcomers: <strong>a working cell runs cooler than an idle one.</strong> Using the verified figures from this handbook, a cell actively delivering power settles at about <span class="num">39 °C</span>, while the same cell sitting idle in the same sunlight settles at about <span class="num">65 °C</span>. The difference — some 26 °C — is precisely the energy that the working cell is shipping out as electricity instead of having to radiate as heat.</p>
+
+<table>
+<tr><th>Cell state</th><th>Electricity exported</th><th>Heat to radiate</th><th>Equilibrium temperature</th></tr>
+<tr><td>Working (at MPP)</td><td>≈ 28% (≈1.1 W)</td><td>≈ 72% (≈2.9 W)</td><td><span class="num">39 °C</span></td></tr>
+<tr><td>Idle (open circuit)</td><td>0%</td><td>100% (≈3.978 W)</td><td><span class="num">65 °C</span></td></tr>
+</table>
+
+<div class="analogy"><span class="lbl">Analogy</span>Imagine a person in a sunny room who must get rid of all the energy they absorb. If they do useful work — turning a hand crank that drives a generator — some of that energy leaves the room as electricity through the wire, and they sweat less. If they just sit there idle, every bit of absorbed energy has to leave as body heat, and they get hotter. The cell is the same: working it gives the energy a second door (the wires) to leave by, so less has to escape as heat and it runs cooler.</div>
+
+<p class="slow">To find the actual equilibrium temperature, the simulator sets the heat term equal to the radiated power from Section E.2 (plus the conduction terms from Section E.3) and solves for the temperature T that balances the books. Because radiation goes as T⁴, this is solved numerically, but the idea is simple: the cell heats up until it radiates away exactly as much as it needs to dispose of, and there it sits.</p>
+
+<div class="pitfall"><span class="lbl">Common mistake</span>Assuming "more sunlight always means hotter cells, regardless of load." It is the <em>heat</em> term, not the absorbed sunlight, that sets temperature. A cell delivering full power in bright sun can be cooler than an idle cell in the same sun, because the working cell is exporting a quarter of the energy electrically. Always ask: of the energy absorbed, how much is leaving as electricity, and how much is left over to be radiated as heat?</div>
+
+<div class="deep"><span class="lbl">Going deeper — the feedback loop</span>Notice the coupling: heat lowers the cell's voltage and efficiency (Section E.4), which means a hotter cell exports <em>less</em> electricity, which leaves <em>more</em> energy to be radiated as heat, which raises the temperature further. This is a feedback loop. For a healthy cell it is gentle and self-settling. For a <em>failed</em> cell driven into reverse bias (Section E.6), a similar loop runs away dramatically, because the cell is now <em>absorbing</em> electrical power instead of exporting it.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.6</span>Reverse Bias and the Bypass Diode</h3>
+
+<p class="slow">So far every cell has been a generous little engine: it absorbs sunlight and pushes out electricity. But cells are wired in long <em>series</em> strings — connected end to end so their voltages add up to the bus voltage the spacecraft needs. Series wiring has a hidden danger, and it is the most violent thermal event in this entire handbook.</p>
+
+<div class="term"><span class="lbl">Series string</span>A chain of cells connected in a line, positive terminal to negative terminal, so their voltages add. The same current must flow through every cell in the chain — there is only one path. This is how you build a high enough voltage from cells that each make only ~2.4 V.</div>
+
+<p class="slow">The trouble with "the same current must flow through every cell" is this: what happens if one cell can no longer produce that current? Suppose a single cell is shadowed, cracked, or failed, so it can only generate a trickle while its healthy neighbours are still pumping out the full string current. The string <em>insists</em> on its current — the healthy cells are still generating it — but the weak cell cannot supply it. Something has to give.</p>
+
+<div class="keyidea"><span class="lbl">Forced into reverse bias</span>The healthy cells in the string have spare voltage. They use it to <em>force</em> the failed cell's current through anyway, by driving the failed cell <strong>backwards</strong> — applying a large negative voltage across it. Instead of being a generator, the failed cell becomes a <em>load</em>: it now has current pushed through it the wrong way by a large reverse voltage. This is called <em>reverse bias</em>.</div>
+
+<div class="term"><span class="lbl">Reverse bias</span>Operating a cell (or diode) with the voltage applied in the opposite direction to its normal forward, power-generating direction. A normally-generating cell sits at, say, +2.4 V. A reverse-biased failed cell can be pushed to a large negative voltage — in our model around <span class="num">−20 V</span> — by the rest of the healthy string.</div>
+
+<p class="slow">Now apply the power equation P = V × I, but with a negative voltage. With the failed cell at about −20 V carrying the string current, the model gives a power of about <span class="num">−9.6 W</span>. The minus sign is the whole story:</p>
+
+<div class="formula">P = V · I ≈ (−20 V) × (string current) ≈ <span class="num">−9.6 W</span>
+<div class="where">Negative power means the cell is <em>absorbing</em> electrical energy, not generating it. The healthy cells are pumping ~9.6 W of electrical power <em>into</em> this one tiny failed cell. That power has nowhere to go but into heat — right there, inside an area of only 0.003 m².</div></div>
+
+<div class="keyidea"><span class="lbl">Why this is so dangerous</span>A healthy cell deals with ~3 W of waste heat and settles near 39 °C. The failed cell must now dispose of that <em>plus</em> roughly 9.6 W of reverse electrical power being forced into it — far more heat, concentrated in the same tiny postage-stamp area. The energy balance of Section E.5 still holds, but with a far larger heat term, the temperature that balances σT⁴ climbs to about <span class="num">187 °C</span> — a localised <em>hot spot</em> hot enough to threaten the materials around it (Section E.7).</div>
+
+<table>
+<tr><th>Quantity</th><th>Healthy cell</th><th>Reverse-biased failed cell</th></tr>
+<tr><td>Voltage</td><td><span class="num">+2.3 V</span></td><td><span class="num">−20 V</span></td></tr>
+<tr><td>Current</td><td><span class="num">0.48 A</span></td><td>≈ string current</td></tr>
+<tr><td>Power</td><td><span class="num">+1.1 W</span> (generated)</td><td><span class="num">−9.6 W</span> (absorbed → heat)</td></tr>
+<tr><td>Role</td><td>Source (engine)</td><td>Sink (heater)</td></tr>
+<tr><td>Temperature</td><td>≈ 39 °C</td><td>≈ <span class="num">187 °C</span> hot spot</td></tr>
+</table>
+
+<div class="analogy"><span class="lbl">Analogy</span>Picture a bucket brigade passing water down a line — each person must pass the same amount the others are passing. If one person freezes up (the failed cell), the others, determined to keep the line moving, physically grab them and shove the water through their arms by force. All that forcing exhausts and overheats the one weak link — they take the entire strain of the line. The healthy cells "forcing the current" through the failed cell is exactly that brutal shove, and the −9.6 W is the strain dumped into one person.</div>
+
+<p class="slow">The standard engineering remedy is the <em>bypass diode</em>.</p>
+
+<div class="term"><span class="lbl">Bypass diode</span>A diode wired in parallel across a group of cells (often one per sub-string), oriented so that it stays "off" and invisible during normal operation. If a cell fails and the string tries to drive it into deep reverse bias, the bypass diode "turns on" and offers the string current an alternative path <em>around</em> the failed cell. It thereby <strong>clamps</strong> the reverse voltage to a small value (roughly the diode's own forward drop, ~0.7 V, instead of −20 V) and dramatically limits the hot-spot power and temperature.</div>
+
+<div class="keyidea"><span class="lbl">What the diode buys you</span>By giving the current a detour, the bypass diode prevents the healthy cells from forcing their full current through the failed cell at a huge reverse voltage. The reverse voltage is clamped from ~−20 V to ~−0.7 V, so the reverse power that becomes heat collapses from ~9.6 W toward a fraction of a watt, and the 187 °C hot spot is tamed. You lose the output of that sub-string, but you save the panel.</div>
+
+<div class="pitfall"><span class="lbl">Model status — read this</span>The current version of the simulator models the reverse-bias hot spot (the −20 V, −9.6 W, 187 °C case) <strong>without</strong> a bypass diode. The bypass diode is a <em>planned model addition</em>, not yet implemented. When reading hot-spot results from the present model, remember they represent the unprotected, worst-case scenario. Adding the diode will clamp the reverse voltage and substantially lower the predicted hot-spot temperature — exactly the protective effect described above.</div>
+
+<svg viewBox="0 0 460 200" width="100%" style="max-width:460px;display:block;margin:14px auto;font-family:sans-serif">
+<rect x="0" y="0" width="460" height="200" fill="#ffffff" stroke="#d7dcea"/>
+<line x1="30" y1="70" x2="430" y2="70" stroke="#333" stroke-width="2"/>
+<line x1="30" y1="70" x2="30" y2="150" stroke="#333" stroke-width="2"/>
+<line x1="430" y1="70" x2="430" y2="150" stroke="#333" stroke-width="2"/>
+<line x1="30" y1="150" x2="430" y2="150" stroke="#333" stroke-width="2"/>
+<rect x="70" y="55" width="40" height="30" fill="#ffd27f" stroke="#333"/><text x="90" y="75" text-anchor="middle" font-size="9">cell</text>
+<rect x="150" y="55" width="40" height="30" fill="#ffd27f" stroke="#333"/><text x="170" y="75" text-anchor="middle" font-size="9">cell</text>
+<rect x="230" y="55" width="40" height="30" fill="#c0392b" stroke="#333"/><text x="250" y="73" text-anchor="middle" font-size="8" fill="#fff">FAILED</text>
+<rect x="310" y="55" width="40" height="30" fill="#ffd27f" stroke="#333"/><text x="330" y="75" text-anchor="middle" font-size="9">cell</text>
+<text x="250" y="48" text-anchor="middle" font-size="9" fill="#c0392b">−20 V, −9.6 W → 187 °C</text>
+<path d="M210 150 L240 130 L270 150 z" fill="none" stroke="#1d7a44" stroke-width="2"/>
+<line x1="210" y1="130" x2="270" y2="130" stroke="#1d7a44" stroke-width="2"/>
+<line x1="240" y1="130" x2="240" y2="110" stroke="#1d7a44" stroke-width="2"/><line x1="240" y1="150" x2="240" y2="110" stroke="#1d7a44" stroke-width="0"/>
+<text x="285" y="135" font-size="9" fill="#1d7a44">bypass diode</text>
+<text x="155" y="135" font-size="9" fill="#1d7a44">(detour path)</text>
+<polygon points="40,72 52,67 52,77" fill="#2a6fc0"/><text x="55" y="95" font-size="10" fill="#2a6fc0">string current →</text>
+<text x="230" y="185" text-anchor="middle" font-size="10" fill="#7a85b5">Diode clamps reverse V to ~−0.7 V and routes current around the failed cell (planned addition)</text>
+</svg>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.7</span>The Honeycomb Substrate and Melting</h3>
+
+<p class="slow">Why does a 187 °C hot spot matter? To answer that, we need to look at what the cells are actually mounted on — the <em>substrate</em> — and what heat does to it.</p>
+
+<div class="term"><span class="lbl">Substrate</span>The structural panel the solar cells are bonded to. It must be flat, stiff, light, and able to spread heat. The standard choice in spacecraft is an <em>aluminium honeycomb sandwich</em>.</div>
+
+<div class="term"><span class="lbl">Aluminium honeycomb sandwich</span>A panel made of two thin aluminium facesheets bonded to a core of aluminium foil folded into a honeycomb of hexagonal cells — like the cardboard core of a strong door, but in metal. The honeycomb core gives enormous stiffness for almost no weight, because the material sits where it does the most structural good and is mostly empty space elsewhere.</div>
+
+<div class="keyidea"><span class="lbl">Why honeycomb?</span>A spacecraft pays an enormous price per kilogram to launch. The honeycomb sandwich is the engineer's answer to "be as stiff and flat as possible while weighing almost nothing." The thin facesheets carry the bending loads (far apart, like the flanges of an I-beam), the lightweight core holds them apart and resists shear, and the whole assembly is a small fraction of the weight of a solid plate of the same stiffness.</div>
+
+<p class="slow">The cells are not welded to the panel — they are <em>glued</em> with a thin adhesive layer, and there is often a thin insulating layer too. Both the adhesive and the aluminium itself have limits. Aluminium is a fine structural metal, but it <em>softens</em> well before it fully melts (pure aluminium melts at about 660 °C, but alloys and the thin foil core lose strength much earlier). The adhesives are organic and degrade or soften at far lower temperatures still — often a couple of hundred degrees Celsius. A localised 187 °C hot spot is comfortably into the range where adhesives begin to weaken and outgas, and sustained or higher temperatures threaten the bond and the core.</p>
+
+<div class="pitfall"><span class="lbl">Why "concentrated" is the dangerous word</span>The total reverse power (~9.6 W) is not large in absolute terms — a phone charger handles more. The danger is <em>concentration</em>: all of it is dumped into a single cell's footprint, 0.003 m², a patch the size of a thumbnail. Power per unit area (heat flux) is enormous, and there is <strong>no convection</strong> (Section E.1) to carry it away and no fast lateral conduction (the weak g_lat of Section E.3) to spread it out. The heat piles up locally and the temperature spikes right under that one cell.</div>
+
+<div class="analogy"><span class="lbl">Analogy</span>Holding a magnifying glass to focus sunlight onto a single spot of paper. The total sunlight is harmless spread over your hand, but focused onto a thumbnail-sized point it chars and ignites the paper. A reverse-biased cell focuses electrical power into a thumbnail-sized point on the panel. And unlike on Earth, there is no breeze to blow the heat away — in vacuum the focused spot has only slow radiation and slow sideways conduction to relieve it, so it gets dangerously hot.</div>
+
+<p class="slow">This is the chain that makes the whole simulator worth building. A single failed cell (E.6) is forced into reverse bias, dumps ~9.6 W of concentrated heat into a thumbnail of honeycomb panel, and — with no convection to help and only sluggish lateral conduction to spread it — reaches ~187 °C, hot enough to soften the adhesive and threaten the substrate. The simulator's job is to predict exactly when and where this happens, so designers can add bypass diodes (E.6) and choose materials and layouts that keep every hot spot below the danger line.</p>
+
+<div class="deep"><span class="lbl">Going deeper — outgassing</span>There is a second, sneakier hazard beyond softening. When organic adhesives get hot in vacuum they <em>outgas</em> — they release volatile molecules. In the open vacuum of space these vapours can drift and re-condense on nearby cold surfaces such as optical sensors, lenses, or radiators, fogging them and degrading the whole spacecraft. So a hot spot can damage hardware far from the failed cell itself. Keeping temperatures down is therefore not only about the panel's own integrity but about protecting the rest of the satellite.</div>
+
+<svg viewBox="0 0 460 180" width="100%" style="max-width:460px;display:block;margin:14px auto;font-family:sans-serif">
+<rect x="0" y="0" width="460" height="180" fill="#ffffff" stroke="#d7dcea"/>
+<rect x="40" y="40" width="380" height="10" fill="#9aa6c4"/><text x="425" y="48" font-size="9" fill="#555">facesheet</text>
+<rect x="40" y="120" width="380" height="10" fill="#9aa6c4"/><text x="425" y="128" font-size="9" fill="#555">facesheet</text>
+<g stroke="#c9a24a" stroke-width="1.5" fill="none">
+<polygon points="50,50 70,60 70,110 50,120 30,110 30,60" transform="translate(20,0)"/>
+<polygon points="90,50 110,60 110,110 90,120 70,110 70,60" transform="translate(20,0)"/>
+<polygon points="130,50 150,60 150,110 130,120 110,110 110,60" transform="translate(20,0)"/>
+<polygon points="170,50 190,60 190,110 170,120 150,110 150,60" transform="translate(20,0)"/>
+<polygon points="210,50 230,60 230,110 210,120 190,110 190,60" transform="translate(20,0)"/>
+<polygon points="250,50 270,60 270,110 250,120 230,110 230,60" transform="translate(20,0)"/>
+<polygon points="290,50 310,60 310,110 290,120 270,110 270,60" transform="translate(20,0)"/>
+</g>
+<text x="230" y="90" text-anchor="middle" font-size="11" fill="#8a6d2a">aluminium honeycomb core (mostly empty → light + stiff)</text>
+<rect x="180" y="25" width="50" height="12" fill="#c0392b"/><text x="205" y="20" text-anchor="middle" font-size="9" fill="#c0392b">hot cell 187 °C</text>
+<text x="205" y="160" text-anchor="middle" font-size="10" fill="#7a85b5">thin adhesive bonds cell to facesheet — softens with heat; no convection to relieve the spot</text>
+</svg>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">E.8</span>The Orbit Environment</h3>
+
+<p class="slow">Everything so far assumed sunlight pours onto the cell. But a satellite travels around a planet, and as it does, its thermal environment changes constantly. This final section assembles the external energy inputs the simulator must track: direct sun, eclipse, albedo, planetary infrared, pointing, and the relentless thermal cycling that all of this produces.</p>
+
+<h4 style="margin-top:18px">Direct sunlight and the inverse-square law</h4>
+
+<p class="slow">The Sun's energy spreads out as it travels away from it, thinning over an ever-larger sphere. At Earth's distance — one <em>astronomical unit</em> (1 AU) — the sunlight arrives at about <span class="num">1367 W/m²</span>. This figure is called the <em>solar constant</em>. Travel farther out and the same total power is spread over a bigger sphere, so the intensity falls as the inverse square of the distance.</p>
+
+<div class="term"><span class="lbl">Astronomical unit (AU)</span>The average Earth–Sun distance, about 150 million kilometres, used as a convenient yardstick for distances in the solar system. Mars orbits at about 1.52 AU.</div>
+
+<div class="formula">P(d) = P<sub>1AU</sub> / d²  (d in AU)
+<div class="where">P<sub>1AU</sub> = 1367 W/m². At Mars (d = 1.52 AU): 1367 / 1.52² ≈ <span class="num">591.7 W/m²</span>. At d = 2 AU: 1367 / 4 ≈ <span class="num">341.75 W/m²</span>. Doubling the distance quarters the sunlight — that is the inverse square at work.</div></div>
+
+<table>
+<tr><th>Distance from Sun</th><th>Where</th><th>Solar flux</th></tr>
+<tr><td>1 AU</td><td>Earth</td><td><span class="num">1367 W/m²</span></td></tr>
+<tr><td>1.52 AU</td><td>Mars</td><td><span class="num">591.7 W/m²</span></td></tr>
+<tr><td>2 AU</td><td>Asteroid belt edge</td><td><span class="num">341.75 W/m²</span></td></tr>
+</table>
+
+<div class="keyidea"><span class="lbl">Why it gets dimmer with distance</span>The Sun radiates a fixed total power in all directions. At distance d that power is smeared over the surface of a sphere of radius d, whose area is 4πd². Double d and the sphere's area quadruples, so the power landing on each square metre falls to a quarter. This is the inverse-square law, and it is why a Mars-orbiting array sees less than half the sunlight an Earth-orbiting one does, and must be larger to make the same power.</div>
+
+<h4 style="margin-top:18px">Eclipse</h4>
+
+<p class="slow">As the satellite orbits, the planet periodically blocks the Sun — the spacecraft passes into the planet's shadow, an <em>eclipse</em>. During eclipse the direct sunlight, and the sunlight reflected from the planet (albedo, below), both fall to <strong>zero</strong>. The only external warmth left is the planet's own infrared glow. The array suddenly has nothing coming in but its own heat leaking away, and it cools rapidly.</p>
+
+<div class="term"><span class="lbl">Eclipse</span>The portion of an orbit spent in the planet's shadow, where direct sunlight (and reflected sunlight) drop to zero. For a low Earth orbit this can be a third of every ~90-minute orbit. Planetary infrared (below) continues throughout.</div>
+
+<h4 style="margin-top:18px">Albedo — reflected sunlight</h4>
+
+<div class="term"><span class="lbl">Albedo</span>The fraction of incoming sunlight a planet reflects back into space. Earth's average albedo is about <span class="num">0.3</span> — clouds, ice, and oceans bounce back roughly 30% of the sunlight that hits them. A satellite over the daylit side of Earth therefore receives a second, weaker dose of sunlight reflected up off the planet.</div>
+
+<div class="formula">q<sub>albedo</sub> ≈ <span class="num">44.325 W/m²</span> (example incident albedo flux)
+<div class="where">Reflected sunlight reaching the array, set by the solar flux, Earth's albedo (~0.3), and how much of the lit Earth the array can "see" (a view factor). It vanishes in eclipse along with the direct Sun, since there is no sunlight to reflect.</div></div>
+
+<h4 style="margin-top:18px">Planetary infrared</h4>
+
+<p class="slow">A planet is warmed by the Sun and, being warm, glows in the infrared — exactly the Stefan–Boltzmann radiation of Section E.2, just from a planet-sized blackbody. Earth radiates as though it were a body at roughly 255 K. Unlike sunlight and albedo, this planetary infrared does <strong>not</strong> switch off in eclipse — the planet keeps glowing whether or not the satellite is in its shadow.</p>
+
+<div class="formula">q<sub>IR</sub> ≈ σ · T<sub>planet</sub>⁴ · (view) ≈ <span class="num">71.93 W/m²</span>
+<div class="where">With T_planet ≈ 255 K and a view factor of ~0.3 (the fraction of the array's sky filled by the planet). Note σ·255⁴ ≈ 240 W/m²; times the 0.3 view factor gives ≈ 71.93 W/m². Present in eclipse as well as in sunlight.</div></div>
+
+<table>
+<tr><th>Source</th><th>In sunlight</th><th>In eclipse</th></tr>
+<tr><td>Direct Sun</td><td>up to 1367 W/m²</td><td>0</td></tr>
+<tr><td>Albedo (reflected Sun)</td><td>≈ 44.325 W/m²</td><td>0</td></tr>
+<tr><td>Planetary IR</td><td>≈ 71.93 W/m²</td><td>≈ 71.93 W/m² (unchanged)</td></tr>
+</table>
+
+<h4 style="margin-top:18px">Pointing and tilt</h4>
+
+<p class="slow">Sunlight delivers its full intensity only to a surface facing it square-on. Tilt the panel away from the Sun and it intercepts less — the effective flux is reduced by the cosine of the tilt angle. With tilt in two directions (call them α and β), the factor is the product of two cosines.</p>
+
+<div class="formula">flux<sub>effective</sub> = flux × cos α · cos β
+<div class="where">α, β = tilt angles away from facing the Sun in two perpendicular directions. cos 0° = 1 (full sun, square-on). Example: cos 30° = <span class="num">0.866</span>, so a 30° tilt costs about 13% of the flux.</div></div>
+
+<div class="analogy"><span class="lbl">Analogy</span>Catching rain in a bucket. Held flat-up, the bucket catches the most. Tilt it and its <em>opening as the rain sees it</em> shrinks by the cosine of the tilt — at 30° you catch about 87% as much. A solar panel "catches" sunlight the same way: face it dead-on for full power, and every degree of tilt costs you a cosine.</div>
+
+<h4 style="margin-top:18px">Thermal cycling and fatigue</h4>
+
+<p class="slow">Put these together over one orbit. In sunlight the array is bathed in up to ~1367 W/m² of direct Sun plus albedo plus planetary IR, and runs hot. Minutes later it slips into eclipse: direct Sun and albedo vanish, only the faint planetary IR remains, and the array plunges cold. Then it swings back into sunlight and heats up again. Every orbit — perhaps sixteen times a day in low Earth orbit — the whole array is heated and cooled through a large temperature swing. This is <em>thermal cycling</em>.</p>
+
+<div class="term"><span class="lbl">Thermal cycling</span>The repeated heating and cooling of the structure as it passes in and out of sunlight each orbit. Over a multi-year mission this means tens of thousands of hot–cold cycles.</div>
+
+<div class="keyidea"><span class="lbl">Why cycling causes fatigue</span>Different materials expand and contract by different amounts when heated (different coefficients of thermal expansion). A cell, its adhesive, and the aluminium facesheet all want to change size by different amounts every cycle, so they tug and shear against one another at their bond lines. One cycle does no harm; tens of thousands of cycles slowly work-harden, crack, and delaminate the joints — exactly like bending a paperclip back and forth until it snaps. This is <em>thermal fatigue</em>, and it is a leading cause of long-term solar-array degradation.</div>
+
+<div class="analogy"><span class="lbl">Analogy</span>Pouring boiling water into a cold glass, then ice water, then boiling again, over and over. Any one pour might be survivable, but the repeated expansion and contraction eventually cracks the glass. The orbiting array endures this every 90 minutes for years; thermal fatigue is the slow accumulation of those tiny strains until a bond finally fails.</div>
+
+<div class="pitfall"><span class="lbl">Common mistake</span>Designing only for the worst-case <em>peak</em> temperature and ignoring the cycling. Two designs can share the same peak temperature yet have very different lifetimes if one swings through a far larger hot-to-cold range each orbit. Fatigue is driven by the <em>size and number of the swings</em>, not just the maximum — which is why the simulator tracks the full per-orbit temperature history, not merely the hottest point.</div>
+
+<svg viewBox="0 0 460 210" width="100%" style="max-width:460px;display:block;margin:14px auto;font-family:sans-serif">
+<rect x="0" y="0" width="460" height="210" fill="#ffffff" stroke="#d7dcea"/>
+<line x1="50" y1="170" x2="430" y2="170" stroke="#333"/><line x1="50" y1="20" x2="50" y2="170" stroke="#333"/>
+<text x="240" y="200" text-anchor="middle" font-size="11" fill="#333">time (one orbit ≈ 90 min)</text>
+<text x="22" y="95" text-anchor="middle" font-size="11" fill="#333" transform="rotate(-90 22 95)">cell T</text>
+<rect x="50" y="20" width="130" height="150" fill="#fff3d6"/>
+<rect x="180" y="20" width="90" height="150" fill="#1b2440" opacity="0.15"/>
+<rect x="270" y="20" width="130" height="150" fill="#fff3d6"/>
+<rect x="400" y="20" width="30" height="150" fill="#1b2440" opacity="0.15"/>
+<path d="M50 60 Q115 50 180 55 L180 55 Q225 110 270 150 Q335 60 400 55 Q415 120 430 150" fill="none" stroke="#c0392b" stroke-width="2.5"/>
+<text x="115" y="40" text-anchor="middle" font-size="10" fill="#b5790a">SUNLIT (hot)</text>
+<text x="225" y="40" text-anchor="middle" font-size="10" fill="#2a3a6a">ECLIPSE (cold)</text>
+<text x="335" y="40" text-anchor="middle" font-size="10" fill="#b5790a">SUNLIT</text>
+<text x="240" y="135" text-anchor="middle" font-size="9" fill="#7a85b5">each swing strains the bonds → thermal fatigue over many orbits</text>
+</svg>
+
+<p class="slow">That completes the physics foundation. Heat in space leaves only by radiation (E.1) governed by σT⁴ (E.2); conduction moves it around inside, strongly downward and weakly sideways (E.3); the solar cell converts ~28% of absorbed sun to electricity and the rest to heat (E.4, E.5); a failed cell forced into reverse bias becomes a concentrated heater that threatens the honeycomb substrate (E.6, E.7); and all of it plays out against an orbit of changing sun, eclipse, albedo, IR, pointing, and relentless thermal cycling (E.8). Every number the simulator produces is some combination of these eight ideas.</p>
+</section>

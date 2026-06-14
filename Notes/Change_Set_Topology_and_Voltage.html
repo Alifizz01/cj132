@@ -1,0 +1,364 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>PowerPy Change Set</title>
+<style>
+@page{size:A4;margin:15mm 13mm}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"Segoe UI",Helvetica,Arial,sans-serif;color:#16222e;margin:0;padding:0}
+h1{color:#0b3d63;font-size:25px;margin:0 0 2px}.sub{color:#5d6b79;font-style:italic;margin:2px 0 14px}
+.opener{border:1px solid #d6dde4;border-top:6px solid #0b3d63;border-radius:6px;padding:16mm 12mm}
+h2{color:#0b3d63;font-size:16px;border-bottom:2px solid #0b3d63;padding-bottom:3px;margin:18px 0 8px}
+h2.pb{break-before:page}
+p.slow{font-size:11pt;line-height:1.55}
+.badge{display:inline-block;color:#fff;font-size:9.5px;font-weight:700;border-radius:3px;padding:1px 7px;margin-right:6px}
+.filehdr{break-before:page;border-left:6px solid #0b3d63;background:#eef3f8;border-radius:5px;padding:7px 11px;margin:14px 0 6px}
+.filehdr .path{font-family:"Cascadia Mono",Consolas,monospace;font-weight:700;color:#0b3d63;font-size:12px}
+.filehdr .meta{font-size:10px;color:#5d6b79;margin-top:2px}
+pre{font-family:"Cascadia Mono",Consolas,monospace;font-size:7.7pt;line-height:1.32;background:#f7f8fa;border:1px solid #e2e6ea;border-radius:5px;padding:8px 10px;white-space:pre-wrap;word-break:break-word;margin:0 0 6px}
+table.idx{border-collapse:collapse;width:100%;font-size:10px;margin:6px 0}
+table.idx td,table.idx th{border:1px solid #d6dde4;padding:4px 7px;text-align:left;vertical-align:top}
+table.idx th{background:#eef3f8;color:#0b3d63}
+.mono{font-family:"Cascadia Mono",Consolas,monospace}.small{font-size:10.5px;color:#5d6b79}
+figure{margin:10px 0;text-align:center}figure img{max-width:100%;border:1px solid #e6e9ee;border-radius:5px}
+figcaption{font-size:9pt;color:#5d6b79;margin-top:4px}
+.callout{background:#eef6f1;border-left:4px solid #2f8f6b;border-radius:6px;padding:8px 12px;font-size:10.5pt;margin:8px 0}
+.tbl{border-collapse:collapse;font-size:10.5px;margin:8px 0}.tbl td,.tbl th{border:1px solid #d6dde4;padding:4px 8px}
+</style></head><body><section class="opener">
+<h1>PowerPy &mdash; Change Set</h1>
+<div class="sub">Connecting the layout we want to the thermal analysis: the topology&rarr;layout helper and
+the zero-voltage analysis.</div>
+<p class="small">Diff for the work answering: <i>"the series number of SCAs, how many series in parallel then
+a block &mdash; how do we draw that and connect the dots between the layout and the thermal analysis?"</i>
+310 source lines across 6 files. Tests: 12/12 new (full suite 68).</p>
+</section><section style='padding:0 12mm'><h2>What changed</h2><table class='idx'><tr><th>Action</th><th>File</th><th>Lines</th><th>What</th></tr><tr><td><span class='badge' style='background:#b9851a'>UPDATE</span></td><td class='mono'>src/powerpy/config/layout.py  (added TileType.block + panel_from_topology)</td><td style='text-align:right'>57</td><td>New `block` field on TileType; new panel_from_topology() builds a PanelLayout from an electrical topology (n_blocks series x n_parallel x n_series). Only the new function is shown.</td></tr><tr><td><span class='badge' style='background:#b9851a'>UPDATE</span></td><td class='mono'>src/powerpy/config/__init__.py  (export)</td><td style='text-align:right'>4</td><td>Re-export panel_from_topology.</td></tr><tr><td><span class='badge' style='background:#1f7a44'>CREATE</span></td><td class='mono'>src/powerpy/analysis/voltage.py  (NEW)</td><td style='text-align:right'>106</td><td>Series voltage-balance / zero-voltage analysis: when reverse-bias voltages cancel the forward voltages so V_array = 0. Raw (no-diode) vs diode-clamped models; evaluate + search.</td></tr><tr><td><span class='badge' style='background:#b9851a'>UPDATE</span></td><td class='mono'>src/powerpy/analysis/__init__.py  (export)</td><td style='text-align:right'>4</td><td>Re-export the voltage-analysis functions.</td></tr><tr><td><span class='badge' style='background:#1f7a44'>CREATE</span></td><td class='mono'>tests/test_topology.py  (NEW, 6/6)</td><td style='text-align:right'>78</td><td>Tests panel_from_topology: shapes, block tagging, series-count recoverable, solves thermally.</td></tr><tr><td><span class='badge' style='background:#1f7a44'>CREATE</span></td><td class='mono'>tests/test_voltage.py  (NEW, 6/6)</td><td style='text-align:right'>61</td><td>Tests the zero-voltage analysis: symmetric half-cancellation, reverse&gt;forward, diodes prevent zero.</td></tr></table><h2>Connecting the layout to the thermal analysis</h2>
+<p class="slow">The electrical layout is a <b>logical wiring</b> (N_series SCAs in series = a string; strings in
+parallel, joined at nodes = a block; blocks in series). The thermal layout is a <b>physical 2-D grid</b> (where
+each tile sits, who its neighbours are for lateral conduction). A real panel is both at once &mdash; and the
+<b>per-tile <span class="mono">block</span> / <span class="mono">string</span> label is the bridge</b>:
+the string's series count sets <i>how much</i> reverse-bias heat a failed SCA makes; its physical grid position
+sets <i>where</i> that heat goes and which neighbours it cooks.</p>
+<p class="slow"><b><span class="mono">panel_from_topology(n_blocks, n_parallel, n_series)</span></b> generates the
+physical grid from the electrical topology, tagging every tile with its block and string, ready for
+<span class="mono">solve_panel</span>. For 3 blocks (series) &times; 4 parallel &times; 10 series &rarr; a 4&times;30
+= 120-cell grid with node bus bars between the series blocks:</p>
+<figure><img src="../reports/fig_panel_series_blocks.png"><figcaption>3 blocks IN SERIES &times; 4 parallel
+strings &times; 10 series SCAs. Vertical bars N0&ndash;N3 = the nodes where each block's 4 parallels meet;
+colour = block; rows = parallel strings; a failed SCA's heat (red) spreads to PHYSICAL neighbours.</figcaption></figure>
+<div class="callout"><b>Reverse bias is bounded per block.</b> Because the parallels rejoin at every node, a
+failed SCA is back-driven only by its block's ~10-series voltage (not the full 30), and the 3 parallel siblings
+shunt around it &mdash; so this architecture limits hot-spots by design.</div>
+<h2 class="pb">The zero-voltage case</h2>
+<p class="slow">A related analysis: the array's terminal voltage is the algebraic sum along the series path
+&mdash; healthy cells add +, reverse-biased cells add &minus;. When they cancel, <b>V_array = 0</b>: no bus
+output, yet cells may sit at high reverse bias (a hidden hot-spot). <span class="mono">analysis/voltage.py</span>
+computes this and finds the failure that nulls the panel, with vs without bypass diodes.</p>
+<table class="tbl"><tr><th>3 blocks &times; 10 series (69 V healthy)</th><th>V &rarr; 0 when&hellip;</th></tr>
+<tr><td>No diodes, reverse = forward</td><td><b>15 of 30</b> SCAs reverse-biased (50%)</td></tr>
+<tr><td>No diodes, reverse 3&times; forward</td><td>only <b>8 of 30</b> (25%)</td></tr>
+<tr><td>With bypass diodes</td><td><b>unreachable</b> &mdash; clamp 0.7 V &Lt; 69 V; diodes prevent it</td></tr></table><div class='filehdr'><span class='badge' style='background:#b9851a'>UPDATE</span><span class='path'>src/powerpy/config/layout.py  (added TileType.block + panel_from_topology)</span><div class='meta'>57 lines &middot; New `block` field on TileType; new panel_from_topology() builds a PanelLayout from an electrical topology (n_blocks series x n_parallel x n_series). Only the new function is shown.</div></div><pre>def panel_from_topology(n_blocks: int, n_parallel: int, n_series: int, *,
+                        block_combine: str = &quot;series&quot;,
+                        arrangement: str = &quot;side-by-side&quot;,
+                        cell_props: Optional[Dict] = None,
+                        pitch_mm: float = 55.0,
+                        name: Optional[str] = None) -&gt; PanelLayout:
+    &quot;&quot;&quot;Build a :class:`PanelLayout` from an electrical topology.
+
+    ``n_series`` SCAs in series = a *string*; ``n_parallel`` strings in parallel
+    tie at a block&#x27;s two nodes = a *block*; ``n_blocks`` blocks combined by
+    ``block_combine`` (``&quot;series&quot;`` =&gt; blocks chained node-to-node, voltages add;
+    the parallels of adjacent blocks meet at the shared node).
+
+    Physical ``arrangement`` (independent of the wiring -- it sets thermal
+    neighbours):
+      * ``&quot;side-by-side&quot;`` (default): rows = the ``n_parallel`` strings, columns =
+        series, the ``n_blocks`` placed left-to-right with node bus bars between
+        them -&gt; ``n_parallel x (n_blocks*n_series)``.
+      * ``&quot;stacked&quot;``: blocks stacked as row-groups -&gt; ``(n_blocks*n_parallel) x n_series``.
+
+    Every tile is tagged ``string=&#x27;B{b}S{s}&#x27;`` and ``block=&#x27;B{b}&#x27;`` so the
+    electrical context is recoverable (the series count of a string = the number of
+    tiles sharing its key). Returns a layout ready for ``solve_panel``.
+    &quot;&quot;&quot;
+    if min(n_blocks, n_parallel, n_series) &lt; 1:
+        raise ValueError(&quot;n_blocks, n_parallel, n_series must all be &gt;= 1&quot;)
+    props = dict(alpha_front=0.97, alpha_rear=0.93, epsilon_front=0.90,
+                 epsilon_rear=0.89, cell_type=&quot;GaAs-3J&quot;)
+    if cell_props:
+        props.update(cell_props)
+
+    palette: Dict[str, TileType] = {}
+    grid_rows: List[str] = []
+
+    def add_key(b: int, s: int) -&gt; str:
+        k = &quot;B%dS%d&quot; % (b, s)
+        if k not in palette:
+            palette[k] = TileType(key=k, is_cell=True, string=k, block=&quot;B%d&quot; % b, **props)
+        return k
+
+    if arrangement == &quot;side-by-side&quot;:
+        nrows, ncols = n_parallel, n_blocks * n_series
+        for r in range(nrows):
+            row = [add_key(c // n_series + 1, r + 1) for c in range(ncols)]
+            grid_rows.append(&quot; &quot;.join(row))
+    elif arrangement == &quot;stacked&quot;:
+        for r in range(n_blocks * n_parallel):
+            k = add_key(r // n_parallel + 1, r % n_parallel + 1)
+            grid_rows.append(&quot; &quot;.join([k] * n_series))
+    else:
+        raise ValueError(&quot;arrangement must be &#x27;side-by-side&#x27; or &#x27;stacked&#x27;, got %r&quot; % arrangement)
+
+    nm = name or (&quot;%d blocks (%s) x %d parallel x %d series = %d SCAs&quot;
+                  % (n_blocks, block_combine, n_parallel, n_series,
+                     n_blocks * n_parallel * n_series))
+    return PanelLayout(grid=_parse_layout_rows(grid_rows), palette=palette,
+                       pitch_mm=pitch_mm, name=nm)
+</pre><div class='filehdr'><span class='badge' style='background:#b9851a'>UPDATE</span><span class='path'>src/powerpy/config/__init__.py  (export)</span><div class='meta'>4 lines &middot; Re-export panel_from_topology.</div></div><pre>from .layout import (
+    PanelLayout, TileType, load_layout, from_dict as layout_from_dict,
+    panel_from_topology,
+)</pre><div class='filehdr'><span class='badge' style='background:#1f7a44'>CREATE</span><span class='path'>src/powerpy/analysis/voltage.py  (NEW)</span><div class='meta'>106 lines &middot; Series voltage-balance / zero-voltage analysis: when reverse-bias voltages cancel the forward voltages so V_array = 0. Raw (no-diode) vs diode-clamped models; evaluate + search.</div></div><pre># -*- coding: utf-8 -*-
+&quot;&quot;&quot;Series voltage-balance analysis: can the panel&#x27;s net voltage reach ZERO?
+
+In a series path the array&#x27;s terminal voltage is the ALGEBRAIC sum of every
+segment&#x27;s voltage: healthy segments add a positive (forward) voltage, reverse-
+biased ones add a negative voltage. When the negatives cancel the positives the
+array reads ~0 V -- a dangerous *hidden* state: no bus output, yet cells may sit
+at large reverse bias (hot-spot risk) while the panel looks &quot;off&quot;.
+
+Two models (compare them):
+  * raw (no/failed diodes): each failed cell holds a reverse voltage ``v_rev``;
+    a handful can cancel many forward cells.
+  * diode-clamped: a bypassed segment is held at only the diode drop ``v_diode``
+    (~0.7 V), so cancelling the big forward voltage needs an impossible number of
+    bypassed blocks -- i.e. **bypass diodes prevent the zero-voltage cancellation**.
+
+Representative constant-voltage model (no IV curve / no ngspice needed): a series
+path through ``n_blocks`` series blocks of ``n_series`` SCAs each has
+``N = n_blocks*n_series`` cells. Standalone &amp; tested.
+&quot;&quot;&quot;
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Dict
+
+
+def series_path_length(n_blocks: int, n_series: int) -&gt; int:
+    &quot;&quot;&quot;Number of SCAs in series along the array&#x27;s output path.&quot;&quot;&quot;
+    return int(n_blocks) * int(n_series)
+
+
+def panel_voltage_raw(n_blocks: int, n_series: int, n_failed: int, *,
+                      v_fwd: float = 2.3, v_rev: float = 2.3) -&gt; float:
+    &quot;&quot;&quot;Array voltage (V) with ``n_failed`` reverse-biased SCAs on the series path:
+    ``(N - n_failed)*v_fwd - n_failed*v_rev``. ``v_rev`` = reverse magnitude a
+    failed cell sustains (&gt;= v_fwd if driven hard).&quot;&quot;&quot;
+    N = series_path_length(n_blocks, n_series)
+    k = max(0, min(N, int(n_failed)))
+    return (N - k) * v_fwd - k * v_rev
+
+
+def panel_voltage_diode(n_blocks: int, n_series: int, n_bypassed_blocks: int, *,
+                        v_fwd: float = 2.3, v_diode: float = 0.7) -&gt; float:
+    &quot;&quot;&quot;Array voltage (V) when whole blocks are bypassed (diode clamps each
+    bypassed block to ``-v_diode`` instead of its ``+n_series*v_fwd``).&quot;&quot;&quot;
+    nb = max(0, min(int(n_blocks), int(n_bypassed_blocks)))
+    return (n_blocks - nb) * n_series * v_fwd - nb * v_diode
+
+
+def is_zero(v_array: float, v_forward_max: float, rel: float = 0.02) -&gt; bool:
+    &quot;&quot;&quot;True if |V_array| is within ``rel`` of the all-healthy forward voltage
+    (i.e. the output has effectively collapsed).&quot;&quot;&quot;
+    return abs(v_array) &lt;= rel * abs(v_forward_max)
+
+
+@dataclass
+class ZeroVoltageReport:
+    forward_max_v: float                 # all-healthy array voltage
+    raw_no_diode: Dict = field(default_factory=dict)
+    diode_clamped: Dict = field(default_factory=dict)
+
+
+def find_zero_voltage_raw(n_blocks: int, n_series: int, *,
+                          v_fwd: float = 2.3, v_rev: float = 2.3) -&gt; Dict:
+    &quot;&quot;&quot;Smallest reverse-biased-cell count that nulls the array (raw model).
+    ``(N-k)*v_fwd = k*v_rev`` -&gt; ``k = N*v_fwd/(v_fwd+v_rev)``.&quot;&quot;&quot;
+    N = series_path_length(n_blocks, n_series)
+    k_exact = N * v_fwd / (v_fwd + v_rev)
+    k_int = int(round(k_exact))
+    return {
+        &quot;n_series_path&quot;: N,
+        &quot;k_exact&quot;: round(k_exact, 3),
+        &quot;n_failed&quot;: k_int,
+        &quot;fraction_failed&quot;: round(k_exact / N, 4),
+        &quot;v_at_n_failed&quot;: round(panel_voltage_raw(n_blocks, n_series, k_int, v_fwd=v_fwd, v_rev=v_rev), 4),
+        &quot;achievable&quot;: 0.0 &lt;= k_exact &lt;= N,
+    }
+
+
+def find_zero_voltage_diode(n_blocks: int, n_series: int, *,
+                            v_fwd: float = 2.3, v_diode: float = 0.7) -&gt; Dict:
+    &quot;&quot;&quot;Can bypassing whole blocks null the array? (Scan 0..n_blocks bypassed.)
+    Normally NO -- the clamp is tiny vs the forward voltage.&quot;&quot;&quot;
+    best_nb, best_v = 0, panel_voltage_diode(n_blocks, n_series, 0, v_fwd=v_fwd, v_diode=v_diode)
+    for nb in range(n_blocks + 1):
+        v = panel_voltage_diode(n_blocks, n_series, nb, v_fwd=v_fwd, v_diode=v_diode)
+        if abs(v) &lt; abs(best_v):
+            best_nb, best_v = nb, v
+    reachable = abs(best_v) &lt;= v_diode
+    return {
+        &quot;closest_n_bypassed&quot;: best_nb,
+        &quot;min_abs_v&quot;: round(abs(best_v), 4),
+        &quot;zero_reachable&quot;: reachable,
+        &quot;note&quot;: (&quot;a clamp lands near 0&quot; if reachable
+                 else &quot;bypass diodes PREVENT zero-cancellation (clamp &lt;&lt; forward voltage)&quot;),
+    }
+
+
+def compare_models(n_blocks: int, n_series: int, *, v_fwd: float = 2.3,
+                   v_rev: float = 2.3, v_diode: float = 0.7) -&gt; ZeroVoltageReport:
+    &quot;&quot;&quot;Both models side-by-side: with vs without bypass diodes.&quot;&quot;&quot;
+    return ZeroVoltageReport(
+        forward_max_v=round(series_path_length(n_blocks, n_series) * v_fwd, 3),
+        raw_no_diode=find_zero_voltage_raw(n_blocks, n_series, v_fwd=v_fwd, v_rev=v_rev),
+        diode_clamped=find_zero_voltage_diode(n_blocks, n_series, v_fwd=v_fwd, v_diode=v_diode),
+    )
+</pre><div class='filehdr'><span class='badge' style='background:#b9851a'>UPDATE</span><span class='path'>src/powerpy/analysis/__init__.py  (export)</span><div class='meta'>4 lines &middot; Re-export the voltage-analysis functions.</div></div><pre>from .voltage import (
+    panel_voltage_raw, panel_voltage_diode, is_zero,
+    find_zero_voltage_raw, find_zero_voltage_diode, compare_models, ZeroVoltageReport,
+)</pre><div class='filehdr'><span class='badge' style='background:#1f7a44'>CREATE</span><span class='path'>tests/test_topology.py  (NEW, 6/6)</span><div class='meta'>78 lines &middot; Tests panel_from_topology: shapes, block tagging, series-count recoverable, solves thermally.</div></div><pre># -*- coding: utf-8 -*-
+&quot;&quot;&quot;Tests for panel_from_topology (electrical topology -&gt; physical layout).&quot;&quot;&quot;
+import importlib.util
+import os
+import sys
+
+import numpy as np
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PKG = os.path.join(_HERE, &quot;..&quot;, &quot;src&quot;, &quot;powerpy&quot;)
+
+
+def _load(relpath, name=None):
+    name = name or os.path.splitext(os.path.basename(relpath))[0]
+    spec = importlib.util.spec_from_file_location(name, os.path.join(_PKG, relpath))
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+th = _load(&quot;solve/thermal.py&quot;)
+lay = _load(&quot;config/layout.py&quot;)
+
+
+def test_side_by_side_shape_and_tags():
+    L = lay.panel_from_topology(3, 4, 10)              # 3 blocks series x 4 parallel x 10 series
+    assert L.n_rows == 4 and L.n_cols == 30 and L.n_tiles == 120
+    keys = L.flat_keys()
+    assert len(set(keys)) == 12                        # 3 blocks x 4 strings = 12 distinct strings
+    # each string runs 10 SCAs in series -&gt; appears 10 times
+    assert keys.count(&quot;B2S3&quot;) == 10
+    tt = L.palette[&quot;B2S3&quot;]
+    assert tt.is_cell and tt.string == &quot;B2S3&quot; and tt.block == &quot;B2&quot;
+    assert &quot;series&quot; in L.name
+
+
+def test_block_assignment_follows_columns():
+    L = lay.panel_from_topology(3, 4, 10, arrangement=&quot;side-by-side&quot;)
+    # columns 0-9 -&gt; B1, 10-19 -&gt; B2, 20-29 -&gt; B3 (row 0)
+    assert L.tile_at(0, 5).block == &quot;B1&quot;
+    assert L.tile_at(0, 15).block == &quot;B2&quot;
+    assert L.tile_at(0, 25).block == &quot;B3&quot;
+
+
+def test_stacked_arrangement_shape():
+    L = lay.panel_from_topology(3, 4, 10, arrangement=&quot;stacked&quot;)
+    assert L.n_rows == 12 and L.n_cols == 10 and L.n_tiles == 120
+    assert L.tile_at(0, 0).block == &quot;B1&quot; and L.tile_at(11, 0).block == &quot;B3&quot;
+
+
+def test_solves_thermally():
+    L = lay.panel_from_topology(3, 4, 10)
+    pe = np.full(L.n_tiles, 1.1); pe[1 * L.n_cols + 14] = -9.6   # fail one SCA in block 2
+    r = th.solve_panel(L, p_sun=1367.0, p_elec=pe, g_lat=0.05, c_cond=1000.0, area=0.003)
+    assert r.converged and float(r.t_front_c.max()) &gt; float(np.median(r.t_front_c))
+
+
+def test_series_count_recoverable():
+    L = lay.panel_from_topology(2, 3, 7)               # 7 in series -&gt; each string key appears 7x
+    keys = L.flat_keys()
+    assert keys.count(&quot;B1S2&quot;) == 7 and L.n_tiles == 2 * 3 * 7
+
+
+def test_bad_args_raise():
+    for bad in [(0, 4, 10), (3, 0, 10), (3, 4, 0)]:
+        try:
+            lay.panel_from_topology(*bad); assert False, &quot;expected ValueError&quot;
+        except ValueError:
+            pass
+
+
+if __name__ == &quot;__main__&quot;:
+    passed = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith(&quot;test_&quot;) and callable(fn):
+            fn(); print(&quot;PASS&quot;, name); passed += 1
+    print(&quot;\n%d/%d tests passed&quot; % (passed, passed))
+</pre><div class='filehdr'><span class='badge' style='background:#1f7a44'>CREATE</span><span class='path'>tests/test_voltage.py  (NEW, 6/6)</span><div class='meta'>61 lines &middot; Tests the zero-voltage analysis: symmetric half-cancellation, reverse&gt;forward, diodes prevent zero.</div></div><pre># -*- coding: utf-8 -*-
+&quot;&quot;&quot;Tests for the series voltage-balance / zero-voltage analysis.&quot;&quot;&quot;
+import importlib.util
+import os
+import sys
+
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PKG = os.path.join(_HERE, &quot;..&quot;, &quot;src&quot;, &quot;powerpy&quot;)
+
+
+def _load(relpath, name=None):
+    name = name or os.path.splitext(os.path.basename(relpath))[0]
+    spec = importlib.util.spec_from_file_location(name, os.path.join(_PKG, relpath))
+    mod = importlib.util.module_from_spec(spec); sys.modules[name] = mod
+    spec.loader.exec_module(mod); return mod
+
+
+v = _load(&quot;analysis/voltage.py&quot;)
+
+
+def test_all_healthy_forward_voltage():
+    assert abs(v.panel_voltage_raw(3, 10, 0, v_fwd=2.3) - 69.0) &lt; 1e-9   # 30 * 2.3
+
+
+def test_raw_zero_at_half_when_symmetric():
+    r = v.find_zero_voltage_raw(3, 10, v_fwd=2.3, v_rev=2.3)
+    assert r[&quot;n_series_path&quot;] == 30
+    assert abs(r[&quot;k_exact&quot;] - 15.0) &lt; 1e-9 and r[&quot;n_failed&quot;] == 15
+    assert abs(r[&quot;v_at_n_failed&quot;]) &lt; 1e-9            # exactly cancels
+    assert abs(r[&quot;fraction_failed&quot;] - 0.5) &lt; 1e-9 and r[&quot;achievable&quot;]
+
+
+def test_raw_fewer_failures_when_reverse_is_larger():
+    r = v.find_zero_voltage_raw(3, 10, v_fwd=2.3, v_rev=6.9)   # reverse 3x forward
+    assert abs(r[&quot;k_exact&quot;] - 7.5) &lt; 1e-9                       # 30 * 2.3/(2.3+6.9)
+
+
+def test_diode_clamp_prevents_zero():
+    assert abs(v.panel_voltage_diode(3, 10, 3, v_fwd=2.3, v_diode=0.7) - (-2.1)) &lt; 1e-9
+    d = v.find_zero_voltage_diode(3, 10, v_fwd=2.3, v_diode=0.7)
+    assert not d[&quot;zero_reachable&quot;]
+    assert d[&quot;min_abs_v&quot;] &gt; 1.0                       # never near zero by cancellation
+
+
+def test_is_zero_threshold():
+    assert v.is_zero(0.5, 69.0) and not v.is_zero(40.0, 69.0)
+
+
+def test_compare_models_returns_both():
+    rep = v.compare_models(3, 10, v_fwd=2.3, v_rev=2.3, v_diode=0.7)
+    assert abs(rep.forward_max_v - 69.0) &lt; 1e-9
+    assert rep.raw_no_diode[&quot;achievable&quot;] is True
+    assert rep.diode_clamped[&quot;zero_reachable&quot;] is False
+
+
+if __name__ == &quot;__main__&quot;:
+    passed = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith(&quot;test_&quot;) and callable(fn):
+            fn(); print(&quot;PASS&quot;, name); passed += 1
+    print(&quot;\n%d/%d tests passed&quot; % (passed, passed))
+</pre></body></html>

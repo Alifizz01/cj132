@@ -1,0 +1,38 @@
+[project]
+name = "powerpy"
+version = "0.2.0"
+description = "Satellite solar-array circuit & electro-thermal analysis framework"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.9",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "pyyaml>=6.0",
+]
+
+# NOTE: the office environment forbids `pip install`, so the SPICE binding is
+# VENDORED in-tree at src/powerpy/ngspice/ (do NOT remove it) and the project runs
+# from source via run.py / PYTHONPATH=src -- see docs/RUNNING_WITHOUT_PIP.md.
+# These extras are only for machines that DO allow installs; none are required.
+[project.optional-dependencies]
+parquet = ["pyarrow>=10.0"]          # results.save(*.parquet)
+hdf5 = ["tables>=3.7"]               # results.save(*.h5)
+orbit = ["hapsira>=0.18"]            # environment.propagate_fluxes (high-fidelity orbit)
+# (no 'spice' extra: ngspice is vendored at powerpy.ngspice, not pip-installed)
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+powerpy = "powerpy.app:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Ship the seed substrate + example layout JSON with the package so
+# load_substrate("msro_case2") / load_layout(...) work after a wheel install.
+[tool.setuptools.package-data]
+"powerpy" = ["data/substrates/*.json", "data/layouts/*.json"]

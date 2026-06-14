@@ -1,0 +1,219 @@
+<h3>3 &nbsp; The electro-thermal coupling loop: making electricity and temperature agree</h3>
+
+<p>Up to now we have treated a cell's temperature as if someone handed it to us. In Section&nbsp;2 we built a <em>vectorised Newton thermal solve</em> that, given how much power each cell dissipates, returns the temperature of every cell at once. But that hides a circularity we can no longer ignore. A cell's IV curve — the very current and voltage it produces — <em>depends on its temperature</em> (Chapter&nbsp;1 §3: temperature shifts <code>isc</code>, <code>imp</code>, <code>vmp</code>, <code>voc</code>). And a cell's temperature <em>depends on how much electrical power it extracts versus dissipates</em> (Chapter&nbsp;1 §7 and Chapter&nbsp;2 §2: the power it does <em>not</em> turn into useful electricity becomes heat). Electricity needs temperature; temperature needs electricity. Neither is known first.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> Temperature and the electrical operating point are <em>mutually dependent</em>. We cannot compute either in isolation, so instead of solving them separately we hunt for a <strong>self-consistent pair</strong> — a temperature field and an operating point that, when you feed each into the other, reproduce themselves. That pair is the answer. The whole section is one loop that chases it: build, solve the circuit, compute heat, solve temperature, repeat until nothing moves.
+</div>
+
+<h4>3.1 &nbsp; The chicken-and-egg problem, stated precisely</h4>
+
+<p>Imagine you want to know the temperature of one cell in a string. To find it from the thermal solve you need its dissipated power. To know its dissipated power you need its operating point (its voltage and current). To know its operating point you must solve the circuit. But the circuit's behaviour depends on every cell's IV curve — which depends on every cell's temperature, which is the thing you were trying to find. The dog is chasing its own tail.</p>
+
+<p>The way out is not to break the circle but to <em>find the point where the circle closes on itself</em> — a state that is unchanged by going once around the loop. Mathematicians call that a <strong>fixed point</strong>, and an engineer calls the result <strong>self-consistent</strong>.</p>
+
+<div class="term"><strong>Self-consistent solution / fixed point.</strong> A state that <em>maps to itself</em>. If you take the current temperature field, build the cells, solve the circuit, compute the heat, and run the thermal solve, you get a <em>new</em> temperature field. At a fixed point the new field equals the one you started with: solving changes nothing. Symbolically, if the whole "go once around the loop" operation is a function <code>F</code>, a fixed point is a temperature array <code>T*</code> with <code>F(T*) = T*</code>. That <code>T*</code> (and the operating point that goes with it) is the physically real, electrically-and-thermally-agreeing answer. Everything before it is just a guess on the way there.</div>
+
+<div class="callout">
+<strong>Why "fixed point" and not "the equation's root"?</strong> We could in principle write one enormous coupled system — every circuit equation and every thermal equation stacked together — and solve it in a single shot. But that system is huge (thousands of cells), nonlinear on <em>both</em> sides, and couples a SPICE circuit solver to a thermal solver that do not share a common Jacobian. It is far simpler to alternate: solve the circuit with temperatures held fixed, then solve the temperatures with powers held fixed, and let the two converge to each other. Alternating between two cheap solves is the entire trick. The fixed point is what they converge <em>to</em>.
+</div>
+
+<h4>3.2 &nbsp; The legacy approach, and what we keep from it</h4>
+
+<p>The original PowerPy had this idea already, in a method called <code>panel.thermalEquilibrium</code>. Its logic was sound:</p>
+
+<ul>
+<li>Guess a temperature for the panel.</li>
+<li>Build the cells at that temperature and compute the electrical power <code>P_elec</code>.</li>
+<li>Solve the thermal balance (heat in = heat out) for the temperature that power implies.</li>
+<li>Repeat, driving the guess and the result together — wrapped in a SciPy <code>minimize</code> call that searched for the temperature making the thermal residual zero.</li>
+</ul>
+
+<p>The idea is exactly the loop we are about to build. The <em>problem</em> was the implementation: it ran <strong>per panel</strong>, <strong>iteratively</strong>, and <strong>slowly</strong> — a general-purpose optimiser repeatedly evaluating a scalar residual, one panel at a time, with no use of the structure of the problem.</p>
+
+<div class="keyidea">
+<strong>Keep the loop, replace the engine.</strong> We keep the outer "guess&nbsp;→ power&nbsp;→ temperature&nbsp;→ repeat" loop, because the physics demands it. But we throw out the slow per-panel <code>minimize</code> and make each thermal step the <em>vectorised Newton solve from §2</em>, which updates the temperature of <strong>all cells simultaneously</strong> from a single power vector. One cheap, structured solve replaces a forest of scalar optimisations.
+</div>
+
+<h4>3.3 &nbsp; The new coupling loop</h4>
+
+<p>Here is the loop in full. Read it once as steps, then again as pseudocode — they say the same thing, but the steps explain <em>why</em> and the code pins down <em>exactly what</em>.</p>
+
+<ol>
+<li><strong>Initialise <code>T</code>.</strong> Set the temperature array — one entry per cell — to a guess, e.g. 28&nbsp;°C everywhere. The guess need not be good; the loop will correct it.</li>
+<li><strong>Build every cell's model at its current <code>T</code>.</strong> For each cell, look up <code>isc</code>/<code>imp</code>/<code>vmp</code>/<code>voc</code> shifted to that cell's temperature via the regressors (Chapter&nbsp;1 §3), and assemble its equivalent-circuit parameters.</li>
+<li><strong>Solve the circuit once.</strong> Run ngspice on the whole array at the bus voltage, with <code>savecurrents</code> enabled. Read back, for every cell, its terminal voltage <code>V_i</code> and its branch current <code>I_i</code>.</li>
+<li><strong>Form the per-cell power vector.</strong> Compute <code>P_elec,i = V_i · I_i</code> for every cell. Where a cell is <em>reverse-biased</em> (driven backwards by its neighbours — a shaded or failed cell), this product is <strong>negative</strong>: the cell is absorbing electrical power, i.e. it has become a <em>heat source</em>.</li>
+<li><strong>Run the vectorised thermal solve.</strong> Hand that whole <code>P_elec</code> vector to the Newton solver from §2. It returns a new temperature array <code>T_new</code> — every cell's temperature at once.</li>
+<li><strong>Relax.</strong> Do not jump straight to <code>T_new</code>. Take a <em>partial</em> step: <code>T ← T + ω·(T_new − T)</code>, with a damping factor <code>0 &lt; ω ≤ 1</code>. (Why we hold back is the whole of §3.4.)</li>
+<li><strong>Check convergence.</strong> If <code>max|T_new − T| &lt; tol</code>, the temperature stopped moving — stop. Otherwise return to step&nbsp;2 with the relaxed <code>T</code>.</li>
+</ol>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 620 170" xmlns="http://www.w3.org/2000/svg">
+<rect x="10" y="40" width="96" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="58.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">build cells</text><text font-family="Segoe UI,Arial,sans-serif" x="58.0" y="67" text-anchor="middle" font-size="9" fill="#1d2733">at T</text>
+<rect x="130" y="40" width="104" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="182.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">solve circuit</text><text font-family="Segoe UI,Arial,sans-serif" x="182.0" y="67" text-anchor="middle" font-size="9" fill="#1d2733">(ngspice)</text>
+<rect x="258" y="40" width="96" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="306.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">per-cell</text><text font-family="Segoe UI,Arial,sans-serif" x="306.0" y="67" text-anchor="middle" font-size="9" fill="#1d2733">P = V·I</text>
+<rect x="378" y="40" width="110" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="433.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">vectorised</text><text font-family="Segoe UI,Arial,sans-serif" x="433.0" y="67" text-anchor="middle" font-size="9" fill="#1d2733">thermal Newton</text>
+<rect x="512" y="40" width="96" height="24" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/><text font-family="Segoe UI,Arial,sans-serif" x="560.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">new T</text>
+<path d="M106 52 H128" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="128,52 122,48 122,56" fill="#b9851a"/><path d="M234 52 H256" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="256,52 250,48 250,56" fill="#b9851a"/><path d="M354 52 H376" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="376,52 370,48 370,56" fill="#b9851a"/><path d="M488 52 H510" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="510,52 504,48 504,56" fill="#b9851a"/>
+<path d="M560 76 V120 H58 V72" stroke="#0b3d63" stroke-width="1.6" fill="none" stroke-dasharray="5 3"/><polygon points="58,72 54,80 62,80" fill="#0b3d63"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="300" y="116" text-anchor="middle" font-size="9" fill="#0b3d63">repeat with damping  T ← T + ω·(T_new − T)  until |ΔT| &lt; tol</text>
+</svg>
+<figcaption>Figure 2.5 — The electro-thermal coupling loop: build cells at T → circuit solve → per-cell P=V·I → vectorised thermal Newton → new T, damped, until converged.</figcaption></figure>
+
+<p>And the same loop as pseudocode:</p>
+
+<pre>
+# Electro-thermal coupling loop
+T = full(n_cells, 28.0)          # step 1: initial guess, °C
+omega = 0.5                      # under-relaxation factor, 0 &lt; omega &lt;= 1
+tol   = 0.1                      # convergence tolerance, °C
+
+while True:
+    cells   = build_models(T)            # step 2: IV curves shifted to T (Ch.1 §3)
+    V, I    = solve_circuit(cells,        # step 3: one ngspice solve at the bus voltage
+                            v_bus,
+                            savecurrents=True)
+    P_elec  = V * I                       # step 4: per-cell power; &lt;0 ⇒ heat source
+    T_new   = thermal_newton(P_elec)      # step 5: vectorised solve over ALL cells (§2)
+
+    if max(abs(T_new - T)) &lt; tol:         # step 7: nothing moved ⇒ self-consistent
+        T = T_new
+        break
+
+    T = T + omega * (T_new - T)           # step 6: damped (under-relaxed) update
+
+return T, V, I                            # the self-consistent (temperature, operating point)
+</pre>
+
+<div class="callout">
+<strong>One outer iteration = one circuit solve + one thermal solve.</strong> Notice how little happens per pass: build the models (cheap array maths), one ngspice run, one element-wise multiply for the powers, one vectorised Newton solve. There is no inner optimiser, no per-cell search. That is what makes replacing <code>thermalEquilibrium</code>'s <code>minimize</code> with the §2 solve such a large win.
+</div>
+
+<h4>3.4 &nbsp; Why we damp: under- and over-relaxation</h4>
+
+<p>The obvious thing to do at step&nbsp;6 is set <code>T ← T_new</code> outright — accept whatever the thermal solve says. This is the <em>raw fixed-point update</em>, and on a strongly heating fault it can <strong>oscillate or even diverge</strong>: the solve overshoots, the next build overcorrects, and the temperature ping-pongs instead of settling. The cure is to move only <em>part</em> of the way toward <code>T_new</code> each pass.</p>
+
+<div class="term"><strong>Under-relaxation (<code>0 &lt; ω &lt; 1</code>).</strong> Take a <em>fractional</em> step toward the newly computed value instead of the full step: <code>T ← T + ω·(T_new − T)</code>. With <code>ω = 0.5</code> you move halfway; with <code>ω = 0.2</code> a fifth of the way. It deliberately <em>slows</em> the update to keep it from overshooting. You trade a few extra iterations for stability — almost always a good trade.</div>
+
+<div class="term"><strong>Over-relaxation (<code>ω &gt; 1</code>).</strong> The opposite: <em>overshoot</em> the computed value on purpose to reach the answer in fewer steps. It can accelerate convergence on well-behaved, gently-coupled problems, but it is risky — on a stiff or strongly heating problem it amplifies exactly the oscillation we are trying to avoid. For this coupling loop we use under-relaxation; over-relaxation is mentioned only so you recognise <code>ω &gt; 1</code> when you meet it.</div>
+
+<div class="formula">
+T &larr; T + &omega;&middot;(T<sub>new</sub> &minus; T)
+<div class="where">
+where<br>
+&bull; <code>T</code> = the temperature array we are iterating (one entry per cell, °C)<br>
+&bull; <code>T<sub>new</sub></code> = the array just returned by the thermal solve<br>
+&bull; <code>&omega;</code> = the <strong>relaxation / damping factor</strong>. <code>&omega; = 1</code> is the raw update (full step); <code>0 &lt; &omega; &lt; 1</code> is under-relaxation (partial step); <code>&omega; &gt; 1</code> is over-relaxation (overshoot). Setting <code>&omega; = 0.5</code> means "believe the new temperature only half-way, then look again".
+</div>
+</div>
+
+<div class="keyidea">
+<strong>What damping buys you.</strong> A raw update reacts to the <em>full</em> disagreement between old and new temperature every pass, so a violent fault yanks the temperature wildly and the loop chases its own overshoot. Damping feeds back only a <em>fraction</em> of the disagreement, so each pass is a gentle nudge in the right direction. The fixed point is unchanged — at <code>T* = T_new</code> the correction <code>ω·(T_new − T*)</code> is zero for any ω — so damping changes only the <em>path</em>, never the <em>destination</em>.
+</div>
+
+<h4>3.5 &nbsp; Convergence: why only a handful of passes</h4>
+
+<p>In practice this loop converges in a <em>handful</em> of outer iterations. The reason is physical: temperature and electrical power are only <strong>mildly coupled</strong>. A cell warming by ten degrees nudges its IV curve a little, which nudges its dissipation a little, which nudges its temperature a little less, and so on — each round-trip shrinks. There is no runaway feedback for a healthy array, so the disagreement <code>max|T_new − T|</code> falls quickly and the convergence test trips after a few passes.</p>
+
+<p>Because each pass is just one circuit solve plus one cheap vectorised thermal solve (§3.3), a handful of passes is genuinely fast. The cost is dominated by the ngspice solves, and there are only a few of them.</p>
+
+<h4>3.6 &nbsp; The hard practical part: reading V<sub>i</sub> and I<sub>i</sub> back</h4>
+
+<p>Everything above assumes step&nbsp;3 cleanly hands us a voltage and a current <em>for every cell</em>. That assumption is, honestly, where the real engineering risk lives.</p>
+
+<div class="pitfall">
+<strong>Main implementation risk — robustly reading per-cell V<sub>i</sub>/I<sub>i</sub> from ngspice.</strong> For a large netlist, getting each individual cell's terminal voltage and branch current back out of the ngspice raw output is fiddly and easy to get subtly wrong. A mis-parsed node, a current with the wrong sign, or two cells whose results get swapped will quietly poison <code>P_elec</code> and hence every temperature. This is the single biggest place the implementation can break, and it fails <em>silently</em> — the loop still "converges", just to the wrong answer.
+</div>
+
+<p>Two disciplines make it tractable:</p>
+
+<ul>
+<li><strong>Enable <code>savecurrents</code>.</strong> This ngspice option records the branch current through each device, so the per-cell currents <code>I_i</code> are actually available to read back rather than inferred.</li>
+<li><strong>Put each cell's id in its node names.</strong> Disciplined, systematic node naming — every node carrying the owning cell's identifier — means the raw output can be parsed back into a per-cell table unambiguously, with no guessing about which voltage belongs to which cell.</li>
+</ul>
+
+<div class="callout">
+<strong>Validate on a tiny 2&times;2 circuit first.</strong> Before trusting the read-back on a full array, build a 2&times;2 cell circuit whose voltages and currents you can work out by hand (or check against a single-cell solve), and confirm the parser returns exactly those numbers in the right order and sign. Only once the 2&times;2 matches by hand should you scale up. Debugging the parser on a thousand-cell netlist is a nightmare; debugging it on four cells is an afternoon.
+</div>
+
+<h4>3.7 &nbsp; Worked example — one outer iteration narrated <span class="badge hot">EXAM-HOT</span></h4>
+
+<div class="worked">
+<strong>Worked example — a single pass of the loop, with a healthy and a failed cell.</strong> We start everything at <code>T = 28&nbsp;°C</code> and walk one outer iteration, focusing on two cells: a healthy one and a reverse-biased failed one.
+
+<div class="step"><strong>Step 1 &mdash; build at 28&nbsp;°C and solve the circuit.</strong> Both cells' IV curves are evaluated at 28&nbsp;°C. ngspice solves the array at the bus voltage and (with <code>savecurrents</code>) returns each cell's <code>V_i</code> and <code>I_i</code>.</div>
+
+<div class="step"><strong>Step 2 &mdash; per-cell power <code>P_elec = V·I</code>.</strong>
+Healthy cell: it is delivering power, so <code>P_elec ≈ +1.1&nbsp;W</code> (positive — it is a net <em>generator</em>).<br>
+Failed cell: it is reverse-biased, so its voltage and current have opposite signs and <code>P_elec ≈ −9.6&nbsp;W</code> (negative — it is <em>absorbing</em> ~9.6&nbsp;W, dumping it as heat).</div>
+
+<div class="step"><strong>Step 3 &mdash; thermal solve.</strong> Feed that power vector to the §2 vectorised Newton solve. The healthy cell, dissipating only its small losses, settles near <code>T_new ≈ 39&nbsp;°C</code>. The failed cell, forced to absorb ~9.6&nbsp;W, runs away to <code>T_new ≈ 187&nbsp;°C</code> (these are the §2 results for these powers).</div>
+
+<div class="step"><strong>Step 4 &mdash; have we converged?</strong> The new temperatures (39&nbsp;°C and 187&nbsp;°C) differ enormously from the 28&nbsp;°C we built at — <code>max|T_new − T|</code> is ~159&nbsp;°C, nowhere near <code>tol</code>. So we do <em>not</em> stop; we take a damped step and iterate.</div>
+
+<div class="step"><strong>Step 5 &mdash; the damped update on the failed cell (<code>ω = 0.5</code>).</strong>
+<div class="formula">
+T &larr; T + &omega;&middot;(T<sub>new</sub> &minus; T) = 28 + 0.5&middot;(187 &minus; 28) = 28 + 0.5&middot;159 = 28 + 79.5 = <strong>107.5&nbsp;°C</strong>
+</div>
+Instead of leaping to 187&nbsp;°C in one go, the failed cell moves to 107.5&nbsp;°C this pass. Next iteration rebuilds at 107.5&nbsp;°C, re-solves, and the cell continues climbing — approaching 187&nbsp;°C over the following passes rather than overshooting it.</div>
+
+<div class="check"><strong>Sanity check.</strong> The arithmetic: <code>187 − 28 = 159</code>; half of 159 is 79.5; <code>28 + 79.5 = 107.5</code>. ✓ And the <em>sign</em> logic holds: the negative <code>P_elec</code> on the failed cell is precisely what drives its temperature <em>up</em>, because absorbed electrical power becomes heat. ✓</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 430 175" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<line stroke="#1d2733" x1="55" y1="150" x2="400" y2="150"/><line stroke="#1d2733" x1="55" y1="150" x2="55" y2="14"/>
+<polyline points="55.0,144.1 104.3,91.5 153.6,62.7 202.9,46.8 252.1,38.1 301.4,33.3 350.7,30.7 400.0,29.3" fill="none" stroke="#9a3b3b" stroke-width="2.2"/>
+<polyline points="55.0,144.1 104.3,140.1 153.6,138.1 202.9,137.1 252.1,136.6 301.4,136.3 350.7,136.2 400.0,136.1" fill="none" stroke="#1f6a6a" stroke-width="2.2"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="360" y="28" fill="#9a3b3b" font-size="9">failed → 187°C</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="350" y="140" fill="#1f6a6a" font-size="9">healthy → 39°C</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="230" y="170" text-anchor="middle" fill="#1d2733">outer iteration</text>
+<text font-family="Segoe UI,Arial,sans-serif" transform="translate(15,88) rotate(-90)" text-anchor="middle" fill="#1d2733">T_front (°C)</text>
+</svg>
+<figcaption>Figure 2.6 — Outer-iteration history: a healthy cell settles near 39 °C while a failed cell climbs to ~187 °C.</figcaption></figure>
+
+<h4>3.8 &nbsp; Why iterate instead of solving in one shot?</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). In this loop, what depends on what?</div>
+<div class="answer">Two dependencies that point at each other. The electrical operating point (each cell's V and I, hence its power) depends on every cell's <em>temperature</em>, because temperature shifts the IV curve (Chapter&nbsp;1 §3). And every cell's temperature depends on the <em>electrical power</em> it dissipates, because the power it does not export becomes heat (Chapter&nbsp;1 §7, Chapter&nbsp;2 §2). Electricity → temperature → electricity: a closed circle.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (build up). Given that circle, what does it mean to have <em>solved</em> the system — what are we actually looking for?</div>
+<div class="answer">A <strong>fixed point</strong>: a temperature field (and matching operating point) that is unchanged by going once around the loop. Build the cells at that temperature, solve the circuit, compute the heat, solve the temperature — and get the <em>same</em> temperature back. That self-consistent state is the physically real answer; any state that changes when you go around the loop is still just a guess.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (why). If we just set <code>T ← T_new</code> each pass (the raw update), why might the temperature <em>oscillate</em> instead of settling?</div>
+<div class="answer">Because the raw update reacts to the <em>full</em> disagreement every pass. On a strongly heating fault, the thermal solve overshoots; the next build at that overshot temperature swings the power the other way; the following solve overshoots back. With no damping, each pass corrects by the entire gap and can sail past the answer, so the temperature ping-pongs (or diverges) instead of converging.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (deep — the target). So why do we <em>iterate</em> between the circuit and the thermal model, with damping, instead of solving them together in one shot?</div>
+<div class="answer">Solving "in one shot" means stacking every circuit equation and every thermal equation into one giant coupled nonlinear system and solving it simultaneously. That is enormous (thousands of cells), nonlinear on both sides, and welds a SPICE circuit solver to a separate thermal solver that share no common Jacobian — painful to build and brittle to run. Iterating sidesteps all of that: alternate two <em>cheap, well-understood</em> solves (circuit with T fixed; temperature with power fixed) and let them converge to each other. <strong>Damping is what makes the alternation safe</strong> — by feeding back only a fraction <code>ω</code> of each disagreement, it kills the overshoot from Q&middot;c, costing a few extra passes (which are cheap, §3.5) in exchange for reliable convergence to the same fixed point. We iterate because two cheap damped solves beat one monstrous coupled one.</div>
+</div>
+</div>
+
+<div class="pitfall">
+<strong>Pitfall &mdash; choosing <code>ω</code> badly.</strong> Set <code>ω = 1</code> (the raw, full-step update) on a strongly heating fault and the loop can <em>overshoot and oscillate</em> — exactly the failure of Q&middot;c, because a 28&nbsp;°C→187&nbsp;°C jump in one pass swings the next build's power hard the other way. But set <code>ω</code> <em>too small</em> (say 0.05) and you waste iterations crawling toward the answer in tiny steps, paying for many more ngspice solves than you need. The sweet spot is a moderate value — <code>ω = 0.5</code> is a sane default here: damped enough to stay stable through a fault, large enough to converge in a handful of passes.
+</div>
+
+<div class="practice">
+<strong>Practice Q3-1.</strong> A cell currently built at <code>T = 40&nbsp;°C</code> has just produced a thermal-solve result of <code>T_new = 150&nbsp;°C</code>. Using under-relaxation with <code>ω = 0.5</code>, compute the temperature this cell takes <em>this pass</em>. Then repeat with <code>ω = 0.25</code>. Show the arithmetic, and say in one line which choice moves the cell further this pass and what each choice trades off.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q3-2.</strong> Explain, in two or three sentences, <em>why a negative</em> <code>P_elec</code> (a reverse-biased cell, e.g. <code>P_elec ≈ −9.6&nbsp;W</code>) <strong>raises</strong> a cell's temperature rather than lowering it. Tie your answer to what <code>P_elec = V·I</code> means physically and to where that power goes.
+<div class="answerspace lines-5"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q3-3.</strong> The loop's stop test is <code>max|T_new − T| &lt; tol</code>. Outline how you would <em>detect non-convergence</em> — a loop that is oscillating or diverging rather than settling — and name two things you could change to fix it. (Hint: watch the sequence of <code>max|T_new − T|</code> values across passes, and recall §3.4.)
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> A cell's electricity depends on its temperature and its temperature depends on its electricity, so we seek a <em>self-consistent</em> pair — a <strong>fixed point</strong> the loop maps to itself. The legacy <code>panel.thermalEquilibrium</code> had the right loop but a slow per-panel <code>minimize</code>; we keep the loop and make each thermal step the <em>vectorised Newton solve over all cells</em> (§2). Each pass is build&nbsp;→ ngspice solve (with <code>savecurrents</code>) → per-cell <code>P_elec = V·I</code> → thermal solve → <strong>damped</strong> update <code>T ← T + ω·(T_new − T)</code> → convergence check. Under-relaxation (<code>ω &lt; 1</code>) trades a few passes for stability; <code>ω = 1</code> can oscillate on a fault, too-small <code>ω</code> wastes passes. It converges in a handful of passes because temperature and power are only mildly coupled. The real risk is reading each cell's <code>V_i</code>/<code>I_i</code> back from ngspice at scale — solved by <code>savecurrents</code> plus cell-id node naming, validated on a 2&times;2 first.
+</div>

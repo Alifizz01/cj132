@@ -1,0 +1,9 @@
+{
+    "name": "SRP MSRO Case 2",
+    "alpha_front": 0.970,
+    "alpha_rear": 0.930,
+    "conductivity": 10,
+    "epsilon_front": 0.9,
+    "epsilon_rear": 0.89,
+    "thickness": 0.01
+}

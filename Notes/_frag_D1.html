@@ -1,0 +1,512 @@
+<!-- ===================================================================
+     SECTION D1 — What software design is, and the principles that matter
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     =================================================================== -->
+
+<p class="lede">You can already write code that runs. This part of the notes is
+about something the running code never tells you: whether the program is
+<em>built well</em> — whether, six months from now, you (or a teammate) can read
+one piece of it without reading all of it, and change that piece without
+breaking everything around it. That is what <strong>software design</strong> is
+about, and it is a skill quite separate from knowing a language. PowerPy is our
+worked specimen throughout: a Python tool that simulates a satellite solar
+array. We will see where its modern layout is designed <em>well</em>, where its
+older "legacy" files are designed <em>badly</em>, and exactly which principles
+tell the two apart. Every term and every acronym is defined the first time it
+appears.</p>
+
+<h3>D1.1 What "software design" actually means</h3>
+
+<p>Most beginners think of programming as a single activity: you sit down and
+type instructions until the computer does the thing. That works for a
+twenty-line script. It falls apart the moment a program grows to thousands of
+lines that many people must understand and edit over years. At that scale a
+second activity becomes just as important as typing — and it has a name.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Software design</strong>
+— deciding <em>how to split a program into parts, and how those parts talk to
+each other</em>, both <em>before</em> you write code and <em>while</em> you write
+it, so that the program stays understandable and changeable as it grows. It is
+not about making the code run (the computer does not care how you organise it);
+it is about making the code <em>survivable</em> for the humans who must live with
+it.</div>
+
+<p>Read that definition again, because two phrases in it do all the work.
+"Split into parts" — a big program is not one undifferentiated blob; it is a set
+of <em>pieces</em>, and you get to choose where the cuts go. "How those parts
+talk" — once cut apart, the pieces must still cooperate, so each piece exposes
+some way for the others to use it. Good design is mostly about <em>where you put
+the cuts</em> and <em>how thin you can make the connections across them</em>.</p>
+
+<div class="callout"><span class="lbl">Note</span> The computer is indifferent to
+design. A 2000-line file with everything jammed together and a tidy set of small
+modules can compile to the exact same behaviour and run at the exact same speed.
+Design is purely for the benefit of <em>people</em> — the reader, the tester, the
+person fixing a bug at 2&nbsp;a.m. If you ever catch yourself thinking "the
+machine doesn't care, so why bother," remember: you are not organising the code
+for the machine. You are organising it for the next human, who is often you.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Code that <em>works</em>
+and code that is <em>well designed</em> are two different achievements. Tests and
+the interpreter check the first. Only design discipline checks the second — and
+the second is what decides whether the program can still be changed cheaply a
+year from now. A program is read and modified far more often than it is written;
+design optimises for that long tail.</div>
+
+<h3>D1.2 The principles that matter</h3>
+
+<p>"Good design" sounds vague until you break it into named principles you can
+point at. The rest of this section is a tour of the handful that matter most.
+Each one gets a plain definition and a concrete PowerPy example, because a
+principle you cannot apply to real code is just a slogan.</p>
+
+<h4>Separation of concerns</h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>Separation of
+concerns</strong> — the principle that each part of a program should be
+responsible for <em>one kind of job</em>, and different kinds of job should live
+in different parts. A "concern" is simply one area of responsibility:
+<em>reading input</em> is one concern, <em>doing the physics</em> is another,
+<em>producing a report</em> is a third. Keep them apart and each can be
+understood and changed on its own.</div>
+
+<p>PowerPy's modern layout does this genuinely well. Instead of one giant file,
+it is organised into <em>subpackages</em>, each owning exactly one concern. (A
+<strong>subpackage</strong> is just a sub-folder of code that groups related
+modules together.)</p>
+
+<ul>
+  <li><code>schemas/</code> — defines the <em>shapes</em> of the data (what a
+  cell record looks like, what fields a substrate has). Concern: <em>what the
+  data is</em>.</li>
+  <li><code>loader/</code> — reads those data shapes from files on disk.
+  Concern: <em>getting data in</em>.</li>
+  <li><code>simulation/</code> — runs the actual physics (the electrical and
+  thermal model). Concern: <em>computing the answer</em>.</li>
+  <li><code>render/</code> — turns results into output (plots, reports).
+  Concern: <em>showing the answer</em>.</li>
+</ul>
+
+<p>Notice how cleanly the responsibilities divide. If the file format on disk
+changes, you edit <code>loader/</code> and nothing else. If you improve the
+physics, you edit <code>simulation/</code> and nothing else. If marketing wants
+prettier charts, you edit <code>render/</code> and nothing else. Each concern has
+its own home, and a change to one rarely disturbs the others.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 220" xmlns="http://www.w3.org/2000/svg" font-size="9.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<text class="tx" x="105" y="16" text-anchor="middle" fill="#9a3b3b" font-weight="bold">monolith — low cohesion</text>
+<rect x="40" y="40" width="130" height="150" rx="5" fill="#fcefea" stroke="#9a3b3b" stroke-width="1.6"/>
+<text class="tx" x="105" y="60" text-anchor="middle" font-weight="bold">cell.py</text>
+<text class="tx" x="105" y="80" text-anchor="middle" font-size="9">loads files</text><text class="tx" x="105" y="98" text-anchor="middle" font-size="9">parameter maths</text><text class="tx" x="105" y="116" text-anchor="middle" font-size="9">builds netlist</text><text class="tx" x="105" y="134" text-anchor="middle" font-size="9">runs ngspice</text><text class="tx" x="105" y="152" text-anchor="middle" font-size="9">plots</text>
+<line x1="20" y1="70" x2="40" y2="70" stroke="#5d6b79"/><line x1="20" y1="110" x2="40" y2="110" stroke="#5d6b79"/><line x1="20" y1="150" x2="40" y2="150" stroke="#5d6b79"/><line x1="170" y1="70" x2="200" y2="70" stroke="#5d6b79"/><line x1="170" y1="150" x2="200" y2="150" stroke="#5d6b79"/>
+<text class="tx" x="360" y="16" text-anchor="middle" fill="#3f7a4f" font-weight="bold">layered — high cohesion, low coupling</text>
+<rect x="290" y="40" width="150" height="26" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="365" y="57" text-anchor="middle">render/</text><rect x="290" y="76" width="150" height="26" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="365" y="93" text-anchor="middle">simulation/</text><rect x="290" y="112" width="150" height="26" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="365" y="129" text-anchor="middle">loader/</text><rect x="290" y="148" width="150" height="26" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="365" y="165" text-anchor="middle">schemas/</text>
+<line x1="365" y1="66" x2="365" y2="76" stroke="#1f6a6a" stroke-width="1.4"/><polygon points="365,76 361,70 369,70" fill="#1f6a6a"/><line x1="365" y1="102" x2="365" y2="112" stroke="#1f6a6a" stroke-width="1.4"/><polygon points="365,112 361,106 369,106" fill="#1f6a6a"/><line x1="365" y1="138" x2="365" y2="148" stroke="#1f6a6a" stroke-width="1.4"/><polygon points="365,148 361,142 369,142" fill="#1f6a6a"/>
+</svg>
+<figcaption>Figure 1 — One monolithic file doing five jobs (low cohesion, many couplings) versus separated layers each with one responsibility.</figcaption></figure>
+
+<h4>Cohesion and coupling</h4>
+
+<p>Separation of concerns has two measurable sides, and they are the two words
+you will hear most often when engineers judge a design. They are easy to mix up,
+so define them carefully — they pull in opposite directions.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Cohesion</strong> — how
+focused a single module is: how strongly the things <em>inside</em> it belong
+together and serve one purpose. A module where every function works toward the
+<em>same</em> job has <strong>high cohesion</strong> (good). A module that is a
+junk drawer of unrelated functions has <em>low</em> cohesion (bad). Cohesion is
+about what is <em>inside</em> one box.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>Coupling</strong> — how
+much one module <em>depends on</em> another: how much it must know about another
+module's internals, and how badly it breaks when that other module changes.
+Modules that lean on each other heavily are <strong>tightly coupled</strong>
+(bad); modules that interact only through a small, stable connection are
+<strong>loosely coupled</strong> (good). Coupling is about the wires
+<em>between</em> boxes.</div>
+
+<div class="keyidea"><span class="lbl">Key idea — the design rule in five
+words</span> <span class="badge hot">KEY</span> <strong>High cohesion, low
+coupling.</strong> Make each part tightly
+focused on one job (high cohesion) and make the parts depend on each other as
+little as possible (low coupling). Almost every other principle in this section
+is a specific way of moving a design toward those two goals at once. When you are
+unsure whether a change helps the design, ask: does it raise cohesion or lower
+coupling? If neither, it probably is not helping.</div>
+
+<div class="callout"><span class="lbl">Note</span> The two are not the same thing,
+and that is the usual confusion. Cohesion looks <em>inward</em> at one module ("is
+this box about one thing?"). Coupling looks <em>outward</em> at the connections
+("how tangled are the wires between boxes?"). You can have a module that is
+beautifully focused inside (high cohesion) yet wired into ten others (high
+coupling) — and that module is still painful to change, because every edit ripples
+outward. You want both fixed: each box about one thing, and thin wires between
+boxes.</div>
+
+<h4>Single Responsibility</h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>Single Responsibility</strong>
+— the principle that a module, class, or function should have <em>one reason to
+change</em>. Phrase it as a test: "what kinds of future change would force me to
+edit this piece?" If the honest answer lists several unrelated things, the piece
+is doing too much and should be split. One responsibility means one reason to
+change.</div>
+
+<p>This is exactly where PowerPy's <em>legacy</em> code falls down — and it is
+worth seeing the contrast, because it makes the principle concrete. The older
+design has a few big files — <code>cell.py</code>, <code>string.py</code>,
+<code>section.py</code>, <code>panel.py</code> — and inside each, one large class
+tries to do everything at once:</p>
+
+<ul>
+  <li><em>loads</em> its own data from files,</li>
+  <li>does the <em>parameter maths</em> (the equations that turn raw numbers into
+  cell behaviour),</li>
+  <li><em>generates a netlist</em> (a <strong>netlist</strong> is a text
+  description of an electrical circuit — which components connect to which — fed
+  to a circuit simulator),</li>
+  <li><em>runs the simulation</em>, and</li>
+  <li><em>plots</em> the results.</li>
+</ul>
+
+<p>Count the reasons that one class could need changing: the file format
+changes; a physics equation is corrected; the netlist syntax is updated for a new
+simulator; the simulation algorithm is improved; the plotting library is swapped.
+That is <strong>five</strong> different reasons to change, all colliding inside
+one class. The class violates Single Responsibility five times over. The
+practical pain is real: the file is long and hard to read, you cannot test the
+maths without also dragging in file-loading and plotting, and a careless edit to
+one job can silently break another.</p>
+
+<div class="callout"><span class="lbl">Note</span> Spot the relationship between
+the principles. The legacy monolith has <em>low cohesion</em> (one class mixing
+five unrelated jobs) <em>and</em> it forces <em>high coupling</em> (anything
+wanting the maths must also depend on the file-loading and the plotting bundled
+with it). The modern <code>schemas/ loader/ simulation/ render/</code> split is
+the same code reorganised for <em>high cohesion, low coupling</em>. Single
+Responsibility is, in effect, "high cohesion" applied at the level of one class or
+function.</div>
+
+<h4>Interfaces and encapsulation</h4>
+
+<p>Once you split a program into parts, the parts must cooperate without each one
+needing to know how the others are built inside. The mechanism for that is the
+<em>interface</em>, and the discipline behind it is <em>encapsulation</em>.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Interface</strong> — the
+small, stable set of named operations a part <em>exposes</em> to the outside
+world: the public "buttons" you are allowed to press on it. Callers use only the
+interface; they never reach inside. A good interface is small (few buttons) and
+stable (the buttons don't keep changing), so the code that depends on it stays
+simple and rarely needs updating.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>Encapsulation</strong> —
+the practice of <em>hiding a part's internal details behind its interface</em>,
+so that the inside can be changed freely without disturbing any caller. The part
+keeps its data and its private workings to itself and exposes only the public
+operations. Encapsulation is what makes the interface a real boundary rather than
+a polite suggestion: outsiders <em>cannot</em> depend on the internals because
+they cannot see them.</div>
+
+<p>A PowerPy example: imagine the substrate (the physical backing a panel is
+mounted on) exposes one public method, say <code>surface()</code>, that returns
+the area available for cells. Callers ask <code>substrate.surface()</code> and
+get a number. <em>How</em> the substrate computes that — from stored dimensions,
+from a lookup table, from a formula — is hidden inside. Tomorrow you can rewrite
+the internal calculation completely, and as long as <code>surface()</code> still
+returns the right number, not a single caller notices or breaks. That is
+encapsulation paying off: the inside changed, the outside did not care.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 420 160" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="120" y="30" width="180" height="100" rx="8" fill="#eef5fb" stroke="#0b3d63" stroke-width="1.6"/>
+<rect x="150" y="14" width="120" height="24" rx="12" fill="#1f6a6a"/><text class="tx" x="210" y="30" text-anchor="middle" fill="#fff">public method ( )</text>
+<text class="tx" x="210" y="70" text-anchor="middle" font-size="9" fill="#5d6b79">— hidden internals —</text>
+<rect x="150" y="84" width="34" height="11" fill="#cfe0ef" stroke="#11507a"/><rect x="190" y="84" width="34" height="11" fill="#cfe0ef" stroke="#11507a"/><rect x="230" y="84" width="34" height="11" fill="#cfe0ef" stroke="#11507a"/><rect x="150" y="100" width="34" height="11" fill="#cfe0ef" stroke="#11507a"/><rect x="190" y="100" width="34" height="11" fill="#cfe0ef" stroke="#11507a"/><rect x="230" y="100" width="34" height="11" fill="#cfe0ef" stroke="#11507a"/>
+<text class="tx" x="210" y="150" text-anchor="middle" font-size="9" fill="#1d2733">callers see the surface; internals can change freely</text>
+</svg>
+<figcaption>Figure 2 — Encapsulation: callers use a small public surface; the hidden internals can change without breaking them.</figcaption></figure>
+
+<div class="keyidea"><span class="lbl">Key idea — the test of a good
+boundary</span> A boundary (a module, class, or interface) is well placed if you
+can answer <em>yes</em> to both: <strong>(1)</strong> Can you understand the part
+from its interface alone, <em>without</em> reading its internals?
+<strong>(2)</strong> Can you change the internals <em>without</em> breaking the
+parts that use it? If either answer is <em>no</em> — you must read the guts to use
+it, or an internal tweak breaks its users — then the boundary is in the wrong
+place, and the part is leaking. Use this two-question test every time you draw a
+line in your code.</div>
+
+<h4>DRY and YAGNI</h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>DRY</strong> (Don't
+Repeat Yourself) — the principle that each piece of knowledge should live in
+<em>exactly one place</em> in the code. If the same logic is copied into several
+spots, the copies will <em>drift</em>: someone fixes a bug or changes a constant
+in one copy and forgets the others, so the program now behaves inconsistently and
+no one can tell which copy is "right." This is called <strong>copy-paste
+drift</strong>. The cure is to write the logic once and call it from everywhere it
+is needed.</div>
+
+<p>In PowerPy, suppose the formula that converts a measured current to a
+temperature-corrected current is pasted into <code>cell.py</code>,
+<code>string.py</code>, and <code>section.py</code>. A physicist later refines the
+formula. If you update only two of the three copies, sections now silently use the
+old, wrong physics — a bug that is maddening to find because the code "looks"
+correct in each place. DRY says: put that formula in one function and have all
+three call it. Fix it once, fixed everywhere.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>YAGNI</strong> (You
+Aren't Gonna Need It) — the principle that you should <em>not</em> build features,
+options, or generality on the speculation that they <em>might</em> be useful
+someday. Build what the current task actually needs; add the rest <em>when</em> a
+real need appears. Speculative code is pure cost: it must be written, read,
+tested, and maintained, yet usually the imagined future never arrives, or arrives
+in a shape your guess did not fit.</div>
+
+<div class="callout"><span class="lbl">Note</span> DRY and YAGNI pull in slightly
+different directions, and the tension is healthy. DRY pushes you to factor out
+shared logic; YAGNI warns you not to invent an elaborate, configurable
+"framework" to do so before you actually have two or three real cases that share
+the logic. Remove duplication you <em>have</em>; do not build machinery for
+duplication you merely <em>imagine</em>. Two real repetitions justify a shared
+function; one hypothetical future one does not.</div>
+
+<h4>Abstraction</h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>Abstraction</strong> —
+programming in terms of <em>what</em> something does, not <em>how</em> it is
+represented or implemented. You give an idea a name and a small set of meaningful
+operations, and then work with that idea rather than with its raw underlying
+data. Abstraction lets you think at the level of the problem ("a substrate has a
+surface area") instead of the level of the bytes ("a dictionary with a
+<code>'dims'</code> key holding a tuple").</div>
+
+<p>Concretely in PowerPy: a raw <code>dict</code> of substrate keys — something
+like <code>{'w': 0.3, 'h': 0.2, 'mat': 'carbon-fibre'}</code> — forces every caller to
+know the magic key names and to do the area arithmetic themselves, scattered
+everywhere. A <code>Substrate</code> <em>object</em> instead offers
+<code>substrate.surface()</code> and other named operations. Callers say
+<em>what</em> they want (the surface) and never touch the <em>how</em> (the keys,
+the multiplication). If the internal representation changes from a dict to
+something else, the object absorbs the change; with raw dicts, every caller would
+have to be hunted down and edited. Abstraction is the difference between naming an
+idea and exposing a pile of keys.</p>
+
+<h3>D1.3 Worked example — one function doing three jobs</h3>
+
+<p>Principles land best on real code. Here is a small, very common mistake: a
+single function that <em>loads a file, computes something, and plots the result</em>
+— three concerns fused into one. (Note: three concerns here, deliberately smaller
+than the legacy monolith's five jobs above — the lesson is the same at any size.)
+The toy reads a JSON file (JavaScript Object Notation, a plain-text format for
+structured data) and saves a PNG (Portable Network Graphics, an image file).</p>
+
+<div class="worked"><span class="lbl">Worked example</span>
+<strong>The bad version — three concerns in one function.</strong>
+<div class="step"><strong>Step 1 — look at what it mixes.</strong> Read it and
+list the jobs:
+<pre><code>def report_cell(path):
+    # concern 1: LOAD — read the cell data from disk
+    with open(path) as f:
+        data = json.load(f)
+
+    # concern 2: COMPUTE — the physics
+    pmp = data["vmp"] * data["imp"]
+    ff  = pmp / (data["voc"] * data["isc"])
+
+    # concern 3: PLOT — draw and save a chart
+    plt.bar(["Pmp", "FF"], [pmp, ff])
+    plt.savefig("report.png")
+    return pmp, ff</code></pre>
+One function, three concerns: <em>reading a file</em>, <em>doing the maths</em>,
+and <em>drawing a picture</em>. They are welded together.</div>
+<div class="step"><strong>Step 2 — feel the pain.</strong> Suppose you want to
+<em>test</em> the maths — check that a known cell gives the right Fill Factor. You
+cannot, not cleanly: calling <code>report_cell</code> forces a real file to exist
+on disk <em>and</em> pops open a plotting library and writes a PNG, just to get
+two numbers. Suppose you want the same maths in a web page that shows no chart:
+you cannot reuse it without also dragging in the file-reading and the plotting.
+The three concerns cannot be exercised, tested, or reused independently because
+they are not separate.</div>
+<div class="step"><strong>Step 3 — split along the concerns.</strong> Give each
+job its own function, each with a small, clear interface:
+<pre><code>def load(path):                 # concern 1: input only
+    with open(path) as f:
+        return json.load(f)
+
+def compute(data):              # concern 2: pure maths, no I/O
+    pmp = data["vmp"] * data["imp"]
+    ff  = pmp / (data["voc"] * data["isc"])
+    return pmp, ff
+
+def plot(pmp, ff):              # concern 3: output only
+    plt.bar(["Pmp", "FF"], [pmp, ff])
+    plt.savefig("report.png")
+
+# the caller wires the three thin pieces together:
+data       = load("cell.json")
+pmp, ff    = compute(data)
+plot(pmp, ff)</code></pre>
+</div>
+<div class="check">Check: the split is better on both design goals.
+<em>Cohesion</em> rose — each function now does exactly one job, so its name fully
+describes it. <em>Coupling</em> fell — <code>compute()</code> depends on nothing
+but the data it is handed; it touches no disk and no plotting library.
+Concretely: <code>compute()</code> is now <em>testable</em> on its own (feed it a
+dictionary of known numbers, assert the Fill Factor — no files, no charts) and
+<em>reusable</em> on its own (call it from a web page, a batch job, a test, with
+or without a plot). That is the entire payoff of separating concerns: each piece
+can be understood, tested, and reused by itself.</div></div>
+
+<div class="practice"><span class="lbl">Practice D1-1</span> A teammate writes one
+function <code>summarise_panel(path)</code> that (i) opens a CSV file (Comma-
+Separated Values, a plain-text table format) of panel measurements and parses it, (ii) sums the per-section powers and finds the
+weakest section, and (iii) prints a formatted table to the screen.
+(a) Name the three concerns this function mixes.
+(b) Sketch the function names you would split it into, saying for each what it
+takes in and what it returns (no full code needed).
+(c) State one concrete benefit, in terms of cohesion <em>or</em> coupling, of the
+split — and one thing you could now test that you could not test before.
+<div class="answerspace lines-8"></div></div>
+
+<h3>D1.4 Why splitting a working program makes it <em>better</em></h3>
+
+<p>A fair objection from someone new to design: "the original
+<code>report_cell</code> <em>worked</em>. Splitting it into three functions just
+made more functions to keep track of. How is more files an improvement?" This is
+the right question to wrestle with, so let us climb to the answer one rung at a
+time.</p>
+
+<div class="ladder">
+  <div class="laddertitle">Think it through — "why is splitting better, not just more files?"</div>
+  <div class="socratic">
+    <div class="q">Q1. What is a "reason to change" a piece of code?</div>
+    <div class="answer">It is any kind of future event that would force you to
+    edit that piece: a file format changes, a physics equation is corrected, a
+    plotting library is swapped. Each is an independent source of change. A piece
+    with one reason to change is touched rarely and for one clear cause; a piece
+    with five reasons is touched constantly, for unrelated causes.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q2. What is coupling, in one sentence, and why does it hurt?</div>
+    <div class="answer">Coupling is how much one piece depends on another's
+    internals. It hurts because dependence transmits breakage: if A is tightly
+    coupled to B, then changing B can break A even though you never touched A. The
+    more wires between pieces, the more places a single change can ripple to.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q3. So what happens when one 2000-line class mixes five jobs
+    (load, maths, netlist, simulate, plot)?</div>
+    <div class="answer">All five reasons to change now collide in one place, so the
+    class is edited constantly and for unrelated reasons. Because the jobs share
+    the same internals, they are tightly coupled to each other: a change to the
+    plotting can disturb the maths, an edit to the loader can break the
+    simulation, and you cannot touch one job without risking the other four. And
+    you cannot exercise any one job in isolation — to run the maths you must also
+    load files and open the plotter. The class is hard to read, hard to change
+    safely, and hard to test.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q4. How do small, separated parts help with testing and change?</div>
+    <div class="answer"><em>Testing:</em> a small part with one job and few
+    dependencies can be checked on its own — hand <code>compute()</code> some
+    numbers and assert the result, with no files and no plots in the way. You can
+    pin down each part's correctness independently. <em>Change:</em> because each
+    part has one reason to change and thin connections to the rest, an edit stays
+    <em>local</em> — fix the loader without touching the maths, swap the plotter
+    without touching the physics. The blast radius of any change shrinks to one
+    part.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q5. So — <em>why does splitting a working program into smaller
+    parts make it BETTER, not just more files?</em></div>
+    <div class="answer">Because "more files" is not the point — <em>fewer reasons
+    to change per part</em> and <em>fewer wires between parts</em> is. Splitting
+    raises cohesion (each part now does one job, so it is easy to understand) and
+    lowers coupling (each part depends on little, so changes stay local and do not
+    ripple). The payoff is concrete: you can read one part without reading the
+    whole, test each part alone, and change a part's insides without breaking its
+    users. The program does the same thing it always did — but it has become
+    <em>cheap to understand and safe to change</em>, which for code that lives for
+    years is worth far more than saving a few function definitions.</div>
+  </div>
+</div>
+
+<h3>D1.5 The opposite failure — over-engineering</h3>
+
+<p>By now the moral seems to be "always split, always abstract." Not quite. There
+is an equal and opposite mistake, and a beginner who has just discovered design
+principles is especially prone to it.</p>
+
+<div class="pitfall"><span class="lbl">Pitfall — over-engineering</span> Splitting
+a <em>simple</em> program into too many tiny abstractions is just as harmful as
+cramming a big program into one monolith — sometimes worse. If a fifty-line
+one-off script is shattered into a dozen micro-classes, five interfaces, and a
+configuration layer "for flexibility," nobody can follow the flow: the logic is
+smeared so thin across so many files that reading it means hopping between twenty
+places to trace one action. That is <em>low</em> readability by a different route,
+and it is the direct violation of <strong>YAGNI</strong> — you built generality
+and structure the problem never asked for. Match the structure to the size of the
+problem. A small script deserves a few clean functions, not an enterprise
+architecture; a large, long-lived system earns its subpackages and interfaces. The
+goal is never "maximum splitting" — it is the <em>right amount</em> of structure
+for the job, no more and no less.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Design is a balance, not a
+direction. Too little structure gives a tangled monolith; too much gives a fog of
+needless abstractions. Both are bad, and both lower the very readability you were
+trying to protect. Aim for the modest middle: enough separation that each part has
+one job and thin connections, and not one layer more than the problem genuinely
+needs. When in doubt, prefer the simpler structure and add more only when a real
+need shows up — that is YAGNI guarding you from over-engineering.</div>
+
+<div class="practice"><span class="lbl">Practice D1-2</span> Classify each design
+below by its <strong>cohesion</strong> (high or low) and its
+<strong>coupling</strong> (high or low), and say in one line which is the better
+design and why.
+<br><strong>Design A:</strong> a single <code>SolarThing</code> class that reads
+files, runs the physics, builds the netlist, runs the simulation, and draws the
+plots — and several other classes reach directly into <code>SolarThing</code>'s
+internal variables to get what they need.
+<br><strong>Design B:</strong> four focused modules
+(<code>schemas/ loader/ simulation/ render/</code>), each doing one job, that
+communicate only through small public methods and never touch one another's
+internals.
+<div class="answerspace lines-8"></div></div>
+
+<div class="practice"><span class="lbl">Practice D1-3</span> A junior engineer,
+fresh from reading about design, rewrites a 40-line script that loads one file and
+prints one number into: 9 classes, 4 "manager" layers, 3 interfaces, and a
+plug-in system "in case we need other file formats later" — though only one format
+is, or is ever expected to be, used.
+(a) Which principle has been violated, and what is this mistake called?
+(b) Is the result more or less readable than a few plain functions, and why?
+(c) What single guideline would have prevented it? (Name the acronym and expand
+it.)
+<div class="answerspace lines-6"></div></div>
+
+<hr class="sep">
+
+<div class="keyidea"><span class="lbl">Key idea — section recap</span>
+<strong>Software design</strong> is choosing how to split a program into parts and
+how those parts talk, so it stays understandable and changeable — a separate skill
+from making code run. The principles all serve one rule:
+<strong>high cohesion</strong> (each part does one job) and
+<strong>low coupling</strong> (parts depend on each other as little as possible).
+<em>Separation of concerns</em> gives each kind of job its own home (PowerPy's
+<code>schemas/ loader/ simulation/ render/</code>); <em>Single Responsibility</em>
+says one part, one reason to change (violated by the legacy
+<code>cell/string/section/panel</code> monoliths that mix five jobs);
+<em>interfaces</em> and <em>encapsulation</em> expose a small stable surface and
+hide internals; <em>DRY</em> (Don't Repeat Yourself) kills copy-paste drift;
+<em>YAGNI</em> (You Aren't Gonna Need It) forbids speculative machinery;
+<em>abstraction</em> programs to "what," not "how" (a <code>Substrate</code> object
+over a raw dict of keys). Test any boundary with two questions — can you
+understand the part without its internals, and change its internals without
+breaking its users? And remember the symmetric danger: over-engineering a small
+problem is as bad as a monolith. Match the structure to the size of the job.</div>

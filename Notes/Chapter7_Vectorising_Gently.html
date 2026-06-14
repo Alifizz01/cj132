@@ -1,0 +1,264 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>PowerPy — Vectorising the Thermal Solver, Gently · Chapter 7</title>
+<link rel="stylesheet" href="print-base.css">
+<link rel="stylesheet" href="design.css">
+<style>
+.analogy{ background:#eef6f1; border-left:4px solid #2f8f6b; border-radius:6px; padding:.7em 1em; margin:.9em 0; }
+.analogy .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#2f8f6b; }
+.step-card{ background:#fffdf8; border:1px solid #e0d8c4; border-left:6px solid #b9851a; border-radius:8px;
+  padding:.8em 1.1em; margin:1em 0; }
+.step-card .n{ font-family:"Segoe UI",sans-serif; font-weight:700; color:#8a6d1a; font-size:9pt;
+  letter-spacing:.1em; text-transform:uppercase; }
+.recap{ background:#f3f6fa; border:1px solid #d6dde4; border-radius:6px; padding:.7em 1.1em; margin:1em 0; }
+.recap .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#0b3d63; }
+.huge{ font-family:"Segoe UI",sans-serif; color:#9a3b3b; font-weight:700; font-size:15pt; text-align:center; margin:.5em 0; }
+.rowmath{ font-family:"Cascadia Mono",Consolas,monospace; font-size:11pt; text-align:center; margin:.5em 0;
+  background:#fff; border:1px solid var(--rule); border-radius:6px; padding:.7em; }
+p.slow{ font-size:11.4pt; line-height:1.62; }
+.num{ font-family:"Cascadia Mono",Consolas,monospace; }
+code.k{ background:#eef0f3; padding:.05em .35em; border-radius:3px; }
+</style>
+</head><body>
+
+<section class="chapter-opener">
+<div class="booktitle">PowerPy · A Solar-Array Engineer's Handbook</div>
+<h1>Chapter 7<br>Vectorising the<br>Thermal Solver, Gently</h1>
+<div class="subtitle">What "vector" really means, why doing all the cells at once is faster, and the whole
+two-node Newton step worked on one real cell — built one small idea at a time, the way we talked it through.</div>
+<p class="lede">This is the conversation we just had, written down so you can keep it. We start from "what is a
+vector" (two rows of numbers added), reach "the cells are just a row," then "where the corrections come from"
+(the Newton step you already know), then the only new wrinkle — a cell has <em>two</em> temperatures — and finish by
+running one real cell through the actual formulas. No leaps; each page is one step.</p>
+<div class="meta">Generated for izzuwan · All numbers verified against the live solver. Print on A4.</div>
+</section>
+
+<section class="toc"><h2>Contents</h2><ol>
+<li><span class="sec-num">1</span> What a vector is</li>
+<li><span class="sec-num">2</span> The cells are just a row</li>
+<li><span class="sec-num">3</span> Where the corrections come from</li>
+<li><span class="sec-num">4</span> Why doing the whole row is faster</li>
+<li><span class="sec-num">5</span> The one wrinkle: a cell has two temperatures</li>
+<li><span class="sec-num">6</span> The four slopes and the det recipe</li>
+<li><span class="sec-num">7</span> One real cell, all the way through</li>
+<li><span class="sec-num">8</span> One cell vs a thousand — the payoff</li>
+<li><span class="sec-num">9</span> What changes with lateral heat (a peek)</li>
+</ol></section>
+
+<!-- 1 -->
+<section class="page-break sec">
+<h2><span class="sec-num">1</span>What a vector is</h2>
+<p class="slow">A <strong>vector</strong> is just a <strong>row of numbers, treated as one thing.</strong> That's the whole definition.</p>
+<p class="slow">And <strong>vectorising</strong> means doing the same operation to the <em>whole row at once</em>, instead of one
+number at a time. The simplest example — add two rows:</p>
+
+<div class="rowmath">[10, 20, 30] &nbsp;+&nbsp; [1, 2, 3] &nbsp;=&nbsp; [11, 22, 33]</div>
+
+<p class="slow">The computer did all three adds (10+1, 20+2, 30+3) in <strong>one step</strong>, not three separate ones.
+Doing a whole row in one go — that is all "vector" means.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> One-at-a-time is a single cashier ringing up items one by one. Vectorised is
+running the whole basket down the belt in one pass. Same items, same total — just not in a slow queue.</div>
+</section>
+
+<!-- 2 -->
+<section class="page-break sec">
+<h2><span class="sec-num">2</span>The cells are just a row</h2>
+<p class="slow">Now the bridge — it's the <em>same</em> thing. Each solar cell has a temperature. Line them up in a row,
+and you can correct them all in one line.</p>
+
+<div class="rowmath">T &nbsp;= [ 65, &nbsp;39, &nbsp;187 ]&nbsp;&nbsp; ← three cells' temperatures<br>
+dT = [ +2, &nbsp;+1, &nbsp;&minus;5 ]&nbsp;&nbsp; ← each cell's correction<br>
+─────────────────────────<br>
+T &nbsp;= [ 67, &nbsp;40, &nbsp;182 ]&nbsp;&nbsp; ← all three updated in ONE line</div>
+
+<p class="slow">That is identical to <span class="num">[10,20,30] + [1,2,3]</span> — only now the rows <strong>are the cells.</strong>
+If there were a thousand cells, the same single line <code class="k">T = T + dT</code> would fix all thousand.</p>
+
+<div class="recap"><span class="lbl">So far</span>
+<p class="slow" style="margin:.3em 0"><strong>Vectorising the thermal solver = keep every cell's temperature in a row, and nudge the whole row
+each step</strong> — instead of fixing cell 1, then cell 2, then cell 3.</p></div>
+
+<p class="slow">The only question left: where does that <code class="k">dT</code> row (the corrections) come from?</p>
+</section>
+
+<!-- 3 -->
+<section class="page-break sec">
+<h2><span class="sec-num">3</span>Where the corrections come from</h2>
+<p class="slow">It's the Newton step you already know — nothing new. For a single unknown:</p>
+
+<div class="huge">dT = &minus; f &divide; f&prime;</div>
+<p class="slow" style="text-align:center; color:#5d6b79;">correction = &minus; (wrongness) &divide; (slope)</p>
+
+<p class="slow">The vectorised solver just does that on the whole row. Each cell has its own wrongness <code class="k">f</code>
+and slope <code class="k">f&prime;</code>, lined up:</p>
+
+<div class="rowmath">f &nbsp;= [ +11.07, &nbsp;&minus;2.0, &nbsp;+5.0 ]&nbsp;&nbsp; ← each cell's imbalance<br>
+f&prime; = [ &minus;0.033, &nbsp;&minus;0.10, &nbsp;&minus;0.05 ]&nbsp;&nbsp; ← each cell's slope<br>
+─────────────────────────────<br>
+dT = &minus;f &divide; f&prime; = [ +335, &nbsp;&minus;20, &nbsp;+100 ]</div>
+
+<p class="slow">(Check the first one: &minus;(11.07 &divide; &minus;0.033) = +335 — the exact step we computed by hand for the cold
+reverse-bias cell.) Then <code class="k">T = T + dT</code> applies them. So one Newton round is just two row-lines:</p>
+
+<div class="rowmath">dT = &minus;f &divide; f&prime; &nbsp;&nbsp;← Newton step, all cells at once<br>
+T &nbsp;= T + dT &nbsp;&nbsp;← update, all cells at once</div>
+</section>
+
+<!-- 4 -->
+<section class="page-break sec">
+<h2><span class="sec-num">4</span>Why doing the whole row is faster</h2>
+<p class="slow">It's <em>not</em> the same total work. The arithmetic is the same — but the one-at-a-time loop wraps a
+mountain of <strong>bookkeeping</strong> around every single number, and vectorising throws that away.</p>
+
+<div class="step-card"><span class="n">The big reason — overhead</span>
+<p class="slow" style="margin:.3em 0">In a loop, for <em>every</em> number the language quietly asks "what type is this? make an object to hold the
+result, fetch the next item, …" — and that bookkeeping <strong>dwarfs the actual add</strong>. You pay it 1000 times.
+A row operation hands the whole row to fast pre-compiled code that pays the bookkeeping <strong>once</strong> and just
+does the adds. That alone is most of the speed-up (often 10–100×).</p></div>
+
+<div class="analogy"><span class="lbl">The cashier again</span> The slow cashier, per item, walks to the shelf, looks up the price, walks
+back — <em>then</em> adds it. Almost all the time is walking, not adding. The fast lane runs the whole basket in one
+pass: the walking is done once, not per item.</div>
+
+<div class="step-card"><span class="n">The bonus reason — a little real "at once"</span>
+<p class="slow" style="margin:.3em 0">On top of that, the chip has special instructions (called SIMD) that genuinely add a small batch — say
+<strong>8 numbers</strong> — in a single tick, and big jobs can spread across several CPU cores. So some of it really is
+simultaneous — just ~8 at a time, not 1000. The main win is still the overhead removal above.</p></div>
+
+<div class="recap"><span class="lbl">In one line</span>
+<p class="slow" style="margin:.3em 0">Faster because the slow part was never the maths — it was the per-number bookkeeping, and vectorising pays
+it once for the whole row (plus the chip crunches a few at a literal once).</p></div>
+</section>
+
+<!-- 5 -->
+<section class="page-break sec">
+<h2><span class="sec-num">5</span>The one wrinkle: a cell has two temperatures</h2>
+<p class="slow">Everything above used one temperature per cell. A real cell has <strong>two</strong> — a sunlit <strong>front</strong>
+(T₁) and a shaded <strong>rear</strong> (T₂) — joined by heat conducting through the cell. That's the only complication,
+and it's where the letters <code class="k">a, b, c, d</code> come from.</p>
+
+<p class="slow">Two temperatures means two wrongnesses:</p>
+<div class="rowmath">f₁ = front's imbalance &nbsp;&nbsp;|&nbsp;&nbsp; f₂ = rear's imbalance</div>
+
+<p class="slow">And here's the new bit: with one unknown, the slope <code class="k">f&prime;</code> was <em>one</em> number. But now
+nudging the front changes <strong>both</strong> faces (heat flows front→rear), and nudging the rear changes both too. So
+one slope becomes <strong>four</strong>:</p>
+
+<table>
+<thead><tr><th></th><th>how it changes f₁ (front)</th><th>how it changes f₂ (rear)</th></tr></thead>
+<tbody>
+<tr><th>nudge T₁</th><td class="num">a</td><td class="num">c</td></tr>
+<tr><th>nudge T₂</th><td class="num">b</td><td class="num">d</td></tr>
+</tbody></table>
+
+<div class="analogy"><span class="lbl">Why four, in plain words</span> The two faces are tied together by a heat "pipe." So you can't move one
+without the other feeling it. The four numbers just record "if I nudge this face, how do <em>both</em> faces react."
+The two cross-numbers (<code class="k">b</code> and <code class="k">c</code>) are exactly that pipe.</div>
+</section>
+
+<!-- 6 -->
+<section class="page-break sec">
+<h2><span class="sec-num">6</span>The four slopes and the det recipe</h2>
+<p class="slow">With one unknown the step was simply <code class="k">dT = &minus;f &divide; f&prime;</code> — "divide by the slope."
+With two tangled unknowns you can't divide by a single slope; you undo the little 2×2 table of four slopes. A
+helper number called <strong>det</strong> makes that possible:</p>
+
+<div class="rowmath">det = a·d &minus; b·c<br><br>
+dT₁ = &minus;(d·f₁ &minus; b·f₂) &divide; det &nbsp;&nbsp;← front correction<br>
+dT₂ = &minus;(&minus;c·f₁ + a·f₂) &divide; det &nbsp;&nbsp;← rear correction</div>
+
+<p class="slow">It looks bigger, but it's the same move as before — "wrongness ÷ slope" — just written for two linked
+unknowns. Notice each correction uses <strong>both</strong> f₁ and f₂: that's the two faces borrowing from each other
+because they're tied together. <code class="k">det</code> is simply the two-unknown version of dividing by
+<code class="k">f&prime;</code>.</p>
+
+<div class="recap"><span class="lbl">The shape of one Newton step now</span>
+<p class="slow" style="margin:.3em 0">two imbalances (f₁, f₂) → four slopes (a, b, c, d) → one helper (det) → two corrections (dT₁, dT₂) → update
+both temperatures. Same spirit as the one-unknown step, one dimension richer.</p></div>
+</section>
+
+<!-- 7 -->
+<section class="page-break sec">
+<h2><span class="sec-num">7</span>One real cell, all the way through</h2>
+<p class="slow">The idle sunlit cell, starting from a guess of 28 °C. Every number here is real (checked against the
+live solver). Heat in from sun = <span class="num">3.978 W</span>; rear gets no sun; the conduction link
+<code class="k">C·A = 3.0</code>; start <code class="k">T₁ = T₂ = 301.15 K</code> (28 °C).</p>
+
+<div class="step-card"><span class="n">1 · the two imbalances</span>
+<div class="rowmath" style="text-align:left">f₁ = +2.719 W &nbsp;&nbsp;← front: surplus (sun in, not glowing enough yet → too cold)<br>
+f₂ = &minus;1.245 W &nbsp;&nbsp;← rear: shortfall (no sun, but still glowing)</div></div>
+
+<div class="step-card"><span class="n">2 · the four slopes</span>
+<div class="rowmath" style="text-align:left">a = &minus;3.017 &nbsp;&nbsp; b = 3.0<br>c = 3.0 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; d = &minus;3.017</div>
+<p class="slow" style="margin:.3em 0"><code class="k">b = c = 3.0</code> — that's exactly the conduction link <code class="k">C·A</code>, the "pipe"
+tying the faces. <code class="k">a</code> and <code class="k">d</code> are each face's own response plus that link.</p></div>
+
+<div class="step-card"><span class="n">3 · det</span>
+<div class="rowmath" style="text-align:left">det = a·d &minus; b·c = (&minus;3.017)(&minus;3.017) &minus; (3.0)(3.0) = 9.100 &minus; 9.000 = 0.100</div></div>
+
+<div class="step-card"><span class="n">4 · the corrections (plug in)</span>
+<div class="rowmath" style="text-align:left">dT₁ = &minus;(d·f₁ &minus; b·f₂)/det = &minus;[(&minus;3.017)(2.719) &minus; (3.0)(&minus;1.245)]/0.100<br>
+&nbsp;&nbsp;&nbsp;&nbsp;= &minus;[&minus;8.201 + 3.736]/0.100 = &minus;(&minus;4.465)/0.100 = <strong>+44.6</strong><br><br>
+dT₂ = &minus;(&minus;c·f₁ + a·f₂)/det = &minus;[&minus;(3.0)(2.719) + (&minus;3.017)(&minus;1.245)]/0.100<br>
+&nbsp;&nbsp;&nbsp;&nbsp;= &minus;[&minus;8.156 + 3.757]/0.100 = &minus;(&minus;4.400)/0.100 = <strong>+44.0</strong></div></div>
+
+<div class="step-card"><span class="n">5 · update</span>
+<div class="rowmath" style="text-align:left">new T₁ = 301.15 + 44.6 = 345.8 K = <strong>72.6 °C</strong><br>
+new T₂ = 301.15 + 44.0 = 345.1 K = <strong>72.0 °C</strong></div>
+<p class="slow" style="margin:.3em 0">From 28 °C, one step jumped both faces to ~72 °C — a little past the answer. A few more identical steps
+settle it to <span class="num">65.26 °C front / 64.60 °C rear</span> (the verified oracle numbers).</p></div>
+</section>
+
+<!-- 8 -->
+<section class="page-break sec">
+<h2><span class="sec-num">8</span>One cell vs a thousand — the payoff</h2>
+<p class="slow">Everything on the last page was a single number <em>for one cell</em>. For a fleet of cells, each of those
+becomes a <strong>row</strong>, and every line runs on the whole row in one shot:</p>
+
+<div class="rowmath" style="text-align:left">det = a*d &minus; b*c &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← every cell's det, one line<br>
+dT1 = &minus;(d*f1 &minus; b*f2)/det &nbsp;← every cell's front correction, one line<br>
+T1 &nbsp;= T1 + dT1 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← update all fronts, one line</div>
+
+<p class="slow"><strong>That is exactly the block of code that looked scary at first</strong> — now you can read it. It's just the
+two-unknown Newton step (the <code class="k">det</code> recipe), applied to whole rows of cells at the same time.</p>
+
+<div class="recap"><span class="lbl">The whole thing, end to end</span>
+<p class="slow" style="margin:.3em 0"><strong>One cell:</strong> 2 linked temperatures → 2 imbalances + a 2×2 of 4 slopes → solve with the
+<code class="k">det</code> recipe → get dT₁, dT₂ → update.</p>
+<p class="slow" style="margin:.3em 0"><strong>A thousand cells:</strong> the <em>same</em> lines, but every symbol is a row — all thousand solved together,
+no per-cell loop. That's the vectorised two-node Newton solver.</p></div>
+</section>
+
+<!-- 9 -->
+<section class="page-break sec">
+<h2><span class="sec-num">9</span>What changes with lateral heat (a peek)</h2>
+<p class="slow">One last thing, so you know the edge of this. Right now the cells are <strong>independent</strong> — each cell's
+2×2 stands alone. Stack them and you get separate little boxes down a diagonal, nothing linking them:</p>
+
+<figure class="fig-frame"><svg width="420" height="150" viewBox="0 0 420 150" xmlns="http://www.w3.org/2000/svg">
+<text x="105" y="16" font-size="9" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI" font-weight="bold">NOW — independent (block-diagonal)</text>
+<g transform="translate(40,26)">
+<rect x="0" y="0" width="110" height="110" fill="#fff" stroke="#cbb"/>
+<rect x="2" y="2" width="32" height="32" fill="#0b3d63"/><rect x="38" y="38" width="32" height="32" fill="#0b3d63"/><rect x="74" y="74" width="34" height="34" fill="#0b3d63"/>
+</g>
+<text x="320" y="16" font-size="9" text-anchor="middle" fill="#2f8f6b" font-family="Segoe UI" font-weight="bold">LATERAL — linked (sparse)</text>
+<g transform="translate(255,26)">
+<rect x="0" y="0" width="110" height="110" fill="#fff" stroke="#cbb"/>
+<rect x="2" y="2" width="32" height="32" fill="#2f8f6b"/><rect x="38" y="38" width="32" height="32" fill="#2f8f6b"/><rect x="74" y="74" width="34" height="34" fill="#2f8f6b"/>
+<rect x="38" y="2" width="32" height="32" fill="#9cc7b5"/><rect x="2" y="38" width="32" height="32" fill="#9cc7b5"/><rect x="74" y="38" width="34" height="32" fill="#9cc7b5"/><rect x="38" y="74" width="32" height="34" fill="#9cc7b5"/>
+</g>
+</svg><figcaption>Now: separate boxes — solvable with the tiny det formula on rows. With sideways heat: the boxes
+get linked (the green cross-terms), so it becomes one big connected matrix.</figcaption></figure>
+
+<p class="slow">If you turn on <strong>lateral heat</strong> (heat spreading sideways to neighbours — Chapter 4), the boxes get
+joined. Then there's no tiny <code class="k">det</code> formula anymore; you need a proper <strong>sparse matrix
+solver</strong>. The row idea survives (still no per-cell loop), but the cheap 2×2 trick is replaced by one big solve.</p>
+
+<div class="recap"><span class="lbl">The clean summary</span>
+<p class="slow" style="margin:.3em 0">The <strong>vector</strong> (all cells in one row, no loop) always survives. The cheap part — the 2×2-on-rows — works
+only because the cells are independent. Link them sideways and you trade it for one sparse solve.</p></div>
+</section>
+
+</body></html>

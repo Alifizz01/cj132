@@ -1,0 +1,62 @@
+\section{<< section.title | tex >>}
+
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|L|L|l|}
+    \hline
+    \reporthead{\textbf{Parameter} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Cell name             & << cell.name | tex >> & \\ \hline
+    Manufacturer          & << cell.manufacturer | tex >> & \\ \hline
+    Base material         & << cell.base_material | tex >> & \\ \hline
+    Junction              & << cell.junction | tex >> & \\ \hline
+    A/R coating           & << cell.ar_coating | tex >> & \\ \hline
+    Front contact         & << cell.front_contact | tex >> & \\ \hline
+    Rear contact          & << cell.rear_contact | tex >> & \\ \hline
+    Substrate material    & << cell.substrate_material | tex >> & \\ \hline
+    Cell length           & << cell.cell_length_mm | num(".2f") >> & mm\\ \hline
+    Cell width            & << cell.cell_width_mm | num(".2f") >> & mm\\ \hline
+    Cell thickness        & << cell.cell_thickness_um | num(".1f") >> & \si{\micro\metre}\\ \hline
+    Substrate thickness   & << cell.substrate_thickness_um | num(".1f") >> & \si{\micro\metre}\\ \hline
+    Cell area             & << cell.cell_area_cm2 | num(".3f") >> & \si{\square\centi\metre}\\ \hline
+    Cell mass             & << cell.cell_mass_mg | num(".1f") >> & mg\\ \hline
+    Electrical reference  & \texttt{\small << cell.reference_file.name | tex >>} & \\ \hline
+    Shunt-diode reference & \texttt{\small << cell.diode_reference_file.name | tex >>} & \\ \hline
+  \end{tabularx}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|L|r|l|}
+    \hline
+    \reporthead{\textbf{Parameter} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Cell Name               & << cell.name | tex >> & \\ \hline
+    Cell alpha              & << cell.electrical.alpha | num(".4f") >> & \\ \hline
+    Cell epsilon            & << cell.electrical.epsilon | num(".4f") >> & \\ \hline
+    \(I_{sc}\)              & << cell.electrical.isc_bol | num(".3f") >> & A\\ \hline
+    \(I_{mp}\)              & << cell.electrical.imp_bol | num(".3f") >> & A\\ \hline
+    \(V_{mp}\)              & << cell.electrical.vmp_bol | num(".3f") >> & V\\ \hline
+    \(V_{oc}\)              & << cell.electrical.voc_bol | num(".3f") >> & V\\ \hline
+    Resistance interconnect & << cell.electrical.r_interconnect | num(".4f") >> & \si{\ohm}\\ \hline
+    Temperature Ref.        & << cell.electrical.t_ref | num(".1f") >> & \si{\celsius}\\ \hline
+    Area                    & << cell.electrical.area_m2 | num(".6f") >> & \si{\square\metre}\\ \hline
+  \end{tabularx}
+\end{table}
+
+<<% if cell.diode %>>
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|L|L|l|}
+    \hline
+    \reporthead{\textbf{Parameter} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Diode Name       & << cell.diode.name | tex >> & \\ \hline
+    Diode Reference  & << cell.diode.reference | tex >> & \\ \hline
+    \(i_0\)          & << cell.diode.i0 | num(".3e") >> & A\\ \hline
+    Ideality \(n\)   & << cell.diode.n | num(".3f") >> & \\ \hline
+    \(R_s\)          & << cell.diode.rs | num(".3e") >> & \si{\ohm}\\ \hline
+    Temperature Ref. & << cell.diode.t_ref | num(".3f") >> & \si{\celsius}\\ \hline
+  \end{tabularx}
+\end{table}
+<<% endif %>>

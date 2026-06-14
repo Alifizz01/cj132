@@ -1,0 +1,274 @@
+<!-- ===================================================================
+     CHAPTER 2 · SECTION 1 — The customizable Circuit class:
+     a parametric, fault-addressable array
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     Practice IDs: Q1-1, Q1-2, Q1-3  (matched in _sol_Q1.html)
+     =================================================================== -->
+
+<h3><span class="sec-num">1</span> The customizable <code>Circuit</code> class: a parametric, fault-addressable array</h3>
+
+<p class="lede">Chapter 1 gave us a solar array built as a fixed ladder — <em>cell&nbsp;→&nbsp;string&nbsp;→&nbsp;section&nbsp;→&nbsp;panel</em> — with the wiring rules baked in: a string is always cells in series, a section is always strings in parallel. That hierarchy is perfect for describing one specific, well-behaved array. It is the wrong tool the moment you want to <em>experiment</em> with the wiring, or reach into the array and break one chosen cell on purpose. This chapter adds a new object, the <strong><code>Circuit</code></strong> class, that fixes exactly those limitations. You will learn to <em>declare</em> an array's shape with a handful of numbers, watch <code>Circuit</code> assemble the electrical netlist for you, and — the part everything later depends on — keep <em>every single cell individually addressable</em> so a fault study can fail any one of them by name. We define every term the moment it appears, as always.</p>
+
+<h4>1.1 Why the fixed hierarchy is not enough</h4>
+
+<p>The Chapter-1 hierarchy has three hard edges. The failure study we are about to build runs straight into all three:</p>
+
+<ul>
+  <li><strong>You cannot nest custom levels.</strong> The ladder has exactly four rungs, in one fixed order. If your real hardware groups cells into four levels that do <em>not</em> map onto cell/string/section/panel, you have no clean way to express it.</li>
+  <li><strong>You cannot flip a junction between series and parallel.</strong> "String&nbsp;=&nbsp;series" and "section&nbsp;=&nbsp;parallel" are wired into the class. If a wiring diagram is ambiguous — is this joint adding voltages or adding currents? — testing the other reading means rewriting code, not changing a setting.</li>
+  <li><strong>You cannot reach in and fail ONE specific cell.</strong> The hierarchy knows about <em>groups</em> of cells, not about cell number 7 of a particular line. To study what one dead cell does to the whole array, you must be able to point at that one cell.</li>
+</ul>
+
+<div class="term"><span class="lbl">Term</span> <strong>topology</strong> — the <em>shape</em> of a circuit: which components connect to which, and how the groups nest, irrespective of the exact numbers. When we say the <code>Circuit</code> class lets you "declare the topology," we mean you describe that shape with parameters, and the class works out the wiring.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> The new <code>Circuit</code> class turns the array's shape into <em>data</em>. Instead of a fixed four-level ladder written in code, you pass numbers — how many cells per line, how many lines in parallel, and so on — and a series/parallel choice at each level. The class then builds the netlist <em>and</em> hands every cell a permanent address. One declaration buys you all three things the fixed hierarchy could not give: custom nesting, switchable series/parallel, and per-cell access.</div>
+
+<div class="callout"><span class="lbl">Note</span> The word <strong>netlist</strong> appears throughout this section, so let us pin it down now. A <em>netlist</em> is the plain-text list of every electrical component in a circuit together with the named connection points (<em>nodes</em>) each one joins. It is what a circuit simulator actually reads. "Building the netlist" just means writing out that list of parts and connections — which is the bookkeeping the <code>Circuit</code> class does for you.</div>
+
+<h4>1.2 The four-level topology, level by level</h4>
+
+<p>The <code>Circuit</code> class is general, but the failure study uses one concrete four-level shape, derived from the project's design sketch. We will teach it from the bottom up. Each level is named, has one governing parameter (a number you choose), and has a default series-or-parallel rule.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>line</strong> — <code>cells_per_line</code> cells wired in <strong>series</strong> (end-to-end), e.g. 10. Series wiring makes voltages <em>add</em>, so a line's job is to <strong>build voltage</strong>. Ten cells of 2.35&nbsp;V in a line give about 23.5&nbsp;V.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>module</strong> — <code>lines_parallel</code> lines wired in <strong>parallel</strong> (side by side), e.g. 1, 2, or more. This is the project's "two parallel circuits" idea. Parallel wiring makes currents <em>add</em> while the voltage stays that of a single line, so a module's job is to <strong>build current and redundancy</strong> — if one line fails open, the others still carry current.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>block</strong> — <code>modules_per_block</code> modules combined, by default in <strong>series</strong>, e.g. about 3. Stacking modules in series adds their voltages, stepping the array up toward the spacecraft's roughly 70&nbsp;V power bus. (10&nbsp;cells&nbsp;×&nbsp;3&nbsp;modules&nbsp;×&nbsp;2.35&nbsp;V&nbsp;≈&nbsp;70.5&nbsp;V — almost exactly the target bus.)</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>circuit</strong> — <code>n_blocks</code> blocks combined, by default in <strong>parallel</strong>, e.g. about 20 (a realistic range is 15–25). Each block sits behind its own <em>blocking diode</em>. Putting many blocks in parallel adds their currents to reach the full array current, and the per-block diode keeps a failed block from dragging the healthy ones down.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>blocking diode</strong> — a diode is a one-way valve for current. A <em>blocking</em> diode in series with each block lets that block <em>push</em> current out to the bus but refuses to let current flow <em>backwards into</em> it. So if one block goes dark or shorts, current from the other parallel blocks cannot pour back through the bad one — the diode blocks it. That is why every block needs its own.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 640 220" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .br{fill:none;stroke:#0b3d63;stroke-width:1.4} .c{fill:#cfe0ef;stroke:#11507a}</style>
+<text class="tx" x="20" y="20" fill="#b9851a" font-size="10">cells_per_line = 10 (series)</text>
+<rect class="c" x="30" y="30" width="12" height="22"/><rect class="c" x="46" y="30" width="12" height="22"/><rect class="c" x="62" y="30" width="12" height="22"/><rect class="c" x="78" y="30" width="12" height="22"/><rect class="c" x="94" y="30" width="12" height="22"/><rect class="c" x="110" y="30" width="12" height="22"/><rect class="c" x="126" y="30" width="12" height="22"/><rect class="c" x="142" y="30" width="12" height="22"/>
+<text class="tx" x="200" y="46">= line</text>
+<text class="tx" x="20" y="78" fill="#b9851a" font-size="10">lines_parallel = 1–2 (parallel)</text>
+<rect class="br" x="28" y="64" width="150" height="40"/>
+<rect class="c" x="34" y="70" width="12" height="10"/><rect class="c" x="34" y="86" width="12" height="10"/><rect class="c" x="50" y="70" width="12" height="10"/><rect class="c" x="50" y="86" width="12" height="10"/><rect class="c" x="66" y="70" width="12" height="10"/><rect class="c" x="66" y="86" width="12" height="10"/><rect class="c" x="82" y="70" width="12" height="10"/><rect class="c" x="82" y="86" width="12" height="10"/><rect class="c" x="98" y="70" width="12" height="10"/><rect class="c" x="98" y="86" width="12" height="10"/><rect class="c" x="114" y="70" width="12" height="10"/><rect class="c" x="114" y="86" width="12" height="10"/><rect class="c" x="130" y="70" width="12" height="10"/><rect class="c" x="130" y="86" width="12" height="10"/><rect class="c" x="146" y="70" width="12" height="10"/><rect class="c" x="146" y="86" width="12" height="10"/>
+<text class="tx" x="200" y="90">= module</text>
+<text class="tx" x="20" y="132" fill="#b9851a" font-size="10">modules_per_block ≈ 3 (series → 70 V)</text>
+<rect class="br" x="28" y="120" width="48" height="26"/><rect class="br" x="82" y="120" width="48" height="26"/><rect class="br" x="136" y="120" width="48" height="26"/>
+<text class="tx" x="200" y="138">= block</text>
+<text class="tx" x="20" y="186" fill="#b9851a" font-size="10">n_blocks ≈ 20 (parallel, blocking diode each)</text>
+<rect class="br" x="28" y="172" width="30" height="22"/><polygon points="43,196 51,196 47,203" fill="#cfe0ef" stroke="#0b3d63"/><rect class="br" x="64" y="172" width="30" height="22"/><polygon points="79,196 87,196 83,203" fill="#cfe0ef" stroke="#0b3d63"/><rect class="br" x="100" y="172" width="30" height="22"/><polygon points="115,196 123,196 119,203" fill="#cfe0ef" stroke="#0b3d63"/><rect class="br" x="136" y="172" width="30" height="22"/><polygon points="151,196 159,196 155,203" fill="#cfe0ef" stroke="#0b3d63"/><rect class="br" x="172" y="172" width="30" height="22"/><polygon points="187,196 195,196 191,203" fill="#cfe0ef" stroke="#0b3d63"/><rect class="br" x="208" y="172" width="30" height="22"/><polygon points="223,196 231,196 227,203" fill="#cfe0ef" stroke="#0b3d63"/>
+<text class="tx" x="270" y="190">= circuit (≈70 V bus)</text>
+</svg>
+<figcaption>Figure 2.1 — The four-level parametric topology: cells in series → lines in parallel (a module) → modules in series (a block) → blocks in parallel (the circuit), one blocking diode per block.</figcaption></figure>
+
+<table>
+  <caption>The four shape parameters of the <code>Circuit</code> topology, smallest to largest.</caption>
+  <thead>
+    <tr><th>Level</th><th>Parameter</th><th>Typical value</th><th>Default combine</th><th>What it builds</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>line</td><td><code>cells_per_line</code></td><td>10</td><td>series</td><td>voltage</td></tr>
+    <tr><td>module</td><td><code>lines_parallel</code></td><td>1–2+</td><td>parallel</td><td>current / redundancy</td></tr>
+    <tr><td>block</td><td><code>modules_per_block</code></td><td>≈ 3</td><td>series</td><td>more voltage (toward ~70 V bus)</td></tr>
+    <tr><td>circuit</td><td><code>n_blocks</code></td><td>≈ 20 (15–25)</td><td>parallel</td><td>full current; each behind a blocking diode</td></tr>
+  </tbody>
+</table>
+
+<div class="keyidea"><span class="lbl">Key idea — series/parallel is a PARAMETER, not a law</span> Look at the "default combine" column: series, parallel, series, parallel. Those are <em>defaults</em>, not fixed facts. In <code>Circuit</code> the choice <code>combine&nbsp;=&nbsp;"series"</code> or <code>"parallel"</code> is a value you set at <em>every</em> level. So if a colleague reads the wiring diagram differently — say they think the modules in a block are actually paralleled — testing their reading is a <strong>one-value change</strong> (flip one <code>combine</code>), not a rewrite of the class. This is the single biggest advantage over the fixed Chapter-1 hierarchy.</div>
+
+<div class="callout"><span class="lbl">Note</span> Be careful with the two roles of "series" and "parallel" here. Within a <em>line</em>, series means cells nose-to-tail. Within a <em>block</em>, series means whole modules stacked. The <em>rule</em> is the same at both levels — series adds voltage, parallel adds current — but what is being combined (single cells vs. whole modules) differs. The recursive design in §1.3 is what lets one rule apply cleanly at every scale.</div>
+
+<h4>1.3 How <code>Circuit</code> stores the array: a recursive tree</h4>
+
+<p>Internally, <code>Circuit</code> does not store four nested Python loops. It stores a <strong>tree</strong>. To see why that is the natural choice, we first need the idea of recursion.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>recursion</strong> — a structure (or a procedure) defined in terms of <em>smaller copies of itself</em>. A folder on your computer is recursive: a folder contains files <em>and other folders</em>, each of which contains files and yet more folders, down to the bottom. Our array is the same: a block is made of modules, which are made of lines, which are made of cells. "Made of smaller copies of the same kind of thing" is the recursive pattern.</p></div>
+
+<div class="term"><span class="lbl">Term</span> <strong>tree</strong> — a branching structure with one top <em>node</em> (the root) that splits into child nodes, each of which may split again, ending in <em>leaves</em> that do not split. A family tree and a folder hierarchy are trees. Our array is a tree: the whole circuit is the root, blocks and modules and lines are internal nodes, and the individual cells are the leaves.</div>
+
+<p>The clever part is that the tree needs only <strong>one node type</strong> for every internal level, because every internal level does the same job: take some children and combine them either in series or in parallel.</p>
+
+<pre>Group(combine="series"|"parallel", children=[Group | CellRef], id="B3.M2.L1")</pre>
+
+<p>Read that as: a <code>Group</code> knows one thing about wiring — whether to combine its <code>children</code> in <strong>series</strong> or <strong>parallel</strong> — and it holds a list of children. Each child is itself <em>either</em> another <code>Group</code> (a sub-level) <em>or</em> a leaf. A block is a <code>Group</code> of module <code>Group</code>s; a module is a <code>Group</code> of line <code>Group</code>s; a line is a <code>Group</code> whose children are leaves. Same node type, nested.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong><code>CellRef</code></strong> — the <em>leaf</em> node: <code>CellRef(cell, id)</code>. It wraps one actual cell object (the Chapter-1 cell) together with a permanent <strong>id</strong>. The leaves are where the real photovoltaic devices live; the <code>Group</code>s above them only describe wiring.</div>
+
+<p>Every node carries a stable, human-readable <strong>hierarchical id</strong> that names its exact place in the tree. A leaf id looks like:</p>
+
+<div class="formula">
+<code>B3.M2.L1.C7</code>
+<div class="where">read left to right as <strong>B</strong>lock&nbsp;3, <strong>M</strong>odule&nbsp;2, <strong>L</strong>ine&nbsp;1, <strong>C</strong>ell&nbsp;7. Each segment names one level of the tree, so the id is literally the path from the root down to that one cell. Internal groups get the shorter prefix — the line itself is <code>B3.M2.L1</code>.</div>
+</div>
+
+<p>Walking the tree to find one cell would be slow if you had to search it every time. So <code>Circuit</code> also keeps a flat lookup table:</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>flat registry — <code>circuit.cells</code></strong> — a dictionary <code>dict[id&nbsp;-&gt;&nbsp;cell]</code> mapping every leaf id straight to its cell, e.g. <code>circuit.cells["B3.M2.L1.C7"]</code> hands you that exact cell. It is "flat" because it ignores the nesting — one giant table, every cell reachable in one hop.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>O(1)</strong> ("order one", <em>constant time</em>) — a description of how long a lookup takes as the array grows. <strong>O(1)</strong> means the time does <em>not</em> depend on how many cells there are: finding one cell in a 10-cell array and in a 10&nbsp;000-cell array takes the same constant effort. A dictionary gives O(1) access; searching the whole tree would be slower (it grows with the number of cells).</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 560 230" xmlns="http://www.w3.org/2000/svg" font-size="10.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .n{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.3} .l{fill:#eaf2f0;stroke:#1f6a6a;stroke-width:1.3} .e{stroke:#5d6b79;stroke-width:1}</style>
+<rect class="n" x="220" y="12" width="120" height="26" rx="4"/><text class="tx" x="280" y="29" text-anchor="middle">Circuit (parallel)</text>
+<line class="e" x1="280" y1="38" x2="120" y2="62"/><rect class="n" x="80" y="62" width="80" height="24" rx="4"/><text class="tx" x="120" y="78" text-anchor="middle" font-size="9">Block (series)</text><line class="e" x1="280" y1="38" x2="280" y2="62"/><rect class="n" x="240" y="62" width="80" height="24" rx="4"/><text class="tx" x="280" y="78" text-anchor="middle" font-size="9">Block (series)</text><line class="e" x1="280" y1="38" x2="440" y2="62"/><rect class="n" x="400" y="62" width="80" height="24" rx="4"/><text class="tx" x="440" y="78" text-anchor="middle" font-size="9">Block (series)</text>
+<line class="e" x1="120" y1="86" x2="90" y2="110"/><rect class="n" x="60" y="110" width="56" height="22" rx="3"/><text class="tx" x="88" y="125" text-anchor="middle" font-size="8">Module ∥</text><line class="e" x1="120" y1="86" x2="150" y2="110"/><rect class="n" x="120" y="110" width="56" height="22" rx="3"/><text class="tx" x="148" y="125" text-anchor="middle" font-size="8">Module ∥</text>
+<line class="e" x1="88" y1="132" x2="74" y2="152"/><rect class="l" x="52" y="152" width="42" height="20" rx="3"/><text class="tx" x="73" y="166" text-anchor="middle" font-size="8">Line —</text><line class="e" x1="88" y1="132" x2="104" y2="152"/><rect class="l" x="82" y="152" width="42" height="20" rx="3"/><text class="tx" x="103" y="166" text-anchor="middle" font-size="8">Line —</text>
+<line class="e" x1="73" y1="172" x2="62" y2="190"/><circle cx="62" cy="198" r="7" fill="#cfe0ef" stroke="#0b3d63"/><line class="e" x1="73" y1="172" x2="84" y2="190"/><circle cx="84" cy="198" r="7" fill="#cfe0ef" stroke="#0b3d63"/><line class="e" x1="73" y1="172" x2="106" y2="190"/><circle cx="106" cy="198" r="7" fill="#cfe0ef" stroke="#0b3d63"/>
+<text class="tx" x="62" y="220" font-size="8" fill="#5d6b79">leaf = CellRef</text>
+<rect x="360" y="150" width="180" height="60" rx="5" fill="#fbf4e2" stroke="#c9a227"/>
+<text class="tx" x="370" y="168" font-size="9" fill="#b9851a">flat registry</text>
+<text class="tx" x="370" y="184" font-size="8.5">cells["B3.M2.L1.C7"] → cell</text>
+<text class="tx" x="370" y="200" font-size="8.5">O(1) fault injection &amp; readout</text>
+</svg>
+<figcaption>Figure 2.2 — The recursive Group/CellRef tree with stable hierarchical ids, plus the flat registry that gives O(1) access to any cell for fault injection.</figcaption></figure>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Two views of the same array, each good at a different job. The <strong>tree</strong> (Group/CellRef) captures the <em>wiring</em> — who is in series with whom — which is what you need to build the netlist. The <strong>flat registry</strong> (<code>circuit.cells</code>) captures <em>addressability</em> — instant access to any one cell by id — which is what you need to inject a fault. The hierarchical id is the bridge: it is both a path through the tree and a key into the dictionary.</div>
+
+<h4>1.4 Building the netlist: one recursive walk</h4>
+
+<p>To simulate the array we must turn the tree into a netlist the circuit simulator can read. PowerPy's simulator is <strong>ngspice</strong>, an open-source version of <strong>SPICE</strong> (Simulation Program with Integrated Circuit Emphasis — the classic analog-circuit simulator). The netlist is generated by a single <em>recursive walk</em> of the tree that assigns nodes as it goes.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>node</strong> — a named electrical connection point; every wire junction is a node. Components that share a node are electrically joined there. A <strong>rail</strong> is just a node that many things connect to in common — for a parallel group, the two shared nodes its children all hang between.</div>
+
+<p>The walk treats the two combine types differently — and this is the electrical heart of the whole class:</p>
+
+<div class="worked">
+<span class="lbl">The recursive node-assignment rule</span>
+<div class="step"><strong>A SERIES group chains its children head-to-tail.</strong> The output node of one child <em>is</em> the input node of the next — neighbours <em>share one node</em>. Because the children sit one after another, their voltages <strong>add</strong> from the bottom of the chain to the top. (This is how a line stacks cell voltages, and how a block stacks module voltages.)</div>
+<div class="step"><strong>A PARALLEL group ties all its children between the same two rail nodes.</strong> Every child hangs between the one top rail and the one bottom rail, so they all see the <em>same</em> voltage, and their currents <strong>add</strong> into the rails. (This is how a module sums line currents, and how the circuit sums block currents.)</div>
+<div class="step"><strong>Each leaf emits its cell.</strong> At a <code>CellRef</code> the walk calls <code>cell.buildModel(name=id)</code> — the very Chapter-1 routine that writes one cell's SPICE <em>subcircuit</em> — passing the leaf's id as the instance name so the cell appears in the netlist under its hierarchical address.</div>
+<div class="step"><strong>A blocking diode is appended per block.</strong> As the walk finishes each block it adds that block's series blocking diode before the block ties onto the parallel bus.</div>
+<div class="check">The walk bottoms out at the leaves (there is always a finite number of cells), so the recursion terminates. Series groups merge nodes (voltages add); parallel groups fan out to shared rails (currents add). The top of the tree exposes two terminals, conventionally <code>out</code> and <code>gnd</code>. ✓</div>
+</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>subcircuit</strong> — in SPICE, a reusable named block of components (here, one solar cell's equivalent circuit) that the netlist can instantiate many times, like calling a function. <code>cell.buildModel</code> writes one such subcircuit instance per leaf.</div>
+
+<p>With the netlist built and two terminals exposed, you <em>drive</em> it to get an answer: either apply a test source at the bus voltage to read the operating point, or <strong>sweep</strong> the voltage across a range to trace the array's full current–voltage (IV) curve — exactly the curve idea from Chapter 1, now for the whole array.</p>
+
+<div class="keyidea"><span class="lbl">Key idea — only the assembly is new</span> Notice what the <code>Circuit</code> class does <em>not</em> reinvent. The single-cell physics (<code>cell</code>), the SPICE model writer (<code>cellBuilder</code> / <code>cell.buildModel</code>), and the simulation runner (<code>ng_sim</code>) are all the <em>proven Chapter-1 primitives</em>, untouched. <code>Circuit</code> only adds the <em>assembly</em>: how those cells are wired together and addressed. New scaffolding, same bricks — which is why the results stay trustworthy.</div>
+
+<div class="practice">
+<span class="lbl">Practice Q1-1</span>
+A line is declared with <code>cells_per_line&nbsp;=&nbsp;4</code> using cells of <var>V</var><sub>mp</sub>&nbsp;=&nbsp;2.35&nbsp;V and <var>I</var><sub>mp</sub>&nbsp;=&nbsp;0.48&nbsp;A.
+(a) Is a line a series or a parallel group? &nbsp;(b) What is the line's max-power voltage, and what is its max-power current? &nbsp;(c) A module places <code>lines_parallel&nbsp;=&nbsp;2</code> such lines in parallel — now what are the module's max-power voltage and current? &nbsp;(d) In one sentence, state which quantity adds in series and which adds in parallel.
+<div class="answerspace lines-8"></div>
+</div>
+
+<h4>1.5 Failing one cell on purpose: fault injection</h4>
+
+<p>Here is the payoff of giving every cell an address. To study failures you must be able to plant a fault at a chosen location and re-run the simulation. <code>Circuit</code> exposes one method for this:</p>
+
+<div class="formula">
+<span class="badge api">circuit.fail(cell_id, mode)</span>
+<div class="where">looks up <code>cell_id</code> in the flat registry (O(1)) and degrades <em>that one cell</em> according to <code>mode</code>. Everything else in the array is untouched.</div>
+</div>
+
+<p>The failure <strong>modes</strong> reuse Chapter-1 cell controls — no new physics, just a chosen way to break a cell:</p>
+
+<ul>
+  <li><strong><code>open</code> / <code>dead</code></strong> &nbsp;&rarr;&nbsp; <code>cell.setSeason(0)</code>. With the season (illumination) set to zero, the cell generates <em>no photocurrent</em> — it is producing nothing. This is the default "failed cell," the most common thing to model.</li>
+  <li><strong><code>short</code></strong> &nbsp;&rarr;&nbsp; the cell is given a <em>near-zero resistance</em>, so it behaves like a piece of wire — no voltage develops across it.</li>
+  <li><strong><code>crack(frac)</code></strong> &nbsp;&rarr;&nbsp; a partial failure: scale the cell's <em>area</em> (and hence its short-circuit current <var>I</var><sub>sc</sub>) by the fraction <code>frac</code>, modelling a cracked cell that still works but delivers less current.</li>
+</ul>
+
+<div class="term"><span class="lbl">Term</span> <strong>Monte-Carlo (sweep)</strong> — a method that runs the simulation many times, each time planting a failure at a <em>randomly chosen</em> cell (or set of cells), to build up statistics on how the array behaves when faults strike. The name comes from the casino: it leans on random sampling. Each run of the sweep simply calls <code>circuit.fail(...)</code> at a random id, simulates, and records the result.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> The stable per-cell id is what makes the Monte-Carlo study possible. Because <em>every</em> cell has a unique address and <code>circuit.fail</code> can reach any of them in O(1), the sweep can fail "a random cell," re-run, and repeat thousands of times — measuring, for example, how much bus voltage is lost when a random cell dies, or how many simultaneous failures the array tolerates. Without per-cell addressing this entire study would be impossible.</div>
+
+<h4>1.6 Constructing a whole circuit from one prototype cell</h4>
+
+<p>Typing out a 4000-cell tree by hand is unthinkable. Following PowerPy's style, <code>Circuit</code> offers a constructor that <em>clones</em> a single example cell into the entire tree:</p>
+
+<div class="formula">
+<span class="badge api">Circuit.fromPrototype(cell, cells_per_line, lines_parallel, modules_per_block, n_blocks, combine_levels=...)</span>
+<div class="where"><code>cell</code> is one prototype (e.g. a 3G30 triple-junction cell from Chapter 1); the four counts set the shape at each level; the optional <code>combine_levels</code> overrides the default series/parallel rule per level (the one-value-change lever of §1.2). The constructor builds the full Group/CellRef tree, assigns every id, and fills the flat registry.</div>
+</div>
+
+<div class="callout"><span class="lbl">Note</span> "Clones one prototype" means every cell starts identical — same four numbers, same area. That is exactly what you want as a <em>baseline</em>: a perfectly uniform array. Faults are then introduced deliberately, one <code>circuit.fail</code> at a time, so any change in the array's output is unambiguously due to the fault you planted, not to cells differing at the start.</div>
+
+<h4>1.7 Worked examples</h4>
+
+<div class="worked">
+<span class="lbl">Worked Q1-A — count the cells and find the bus voltage of a tiny circuit</span>
+<p><strong>Given:</strong> <code>Circuit.fromPrototype(cell, cells_per_line=2, lines_parallel=2, modules_per_block=2, n_blocks=2)</code> with default combines (line series, module parallel, block series, circuit parallel). The prototype cell has <var>V</var><sub>mp</sub>&nbsp;=&nbsp;2.35&nbsp;V and max-power current <var>I</var><sub>mp</sub>. Find (i) the total number of cells and (ii) the nominal bus voltage and the parallel current multiple.</p>
+
+<div class="step"><strong>Step 1 — total cell count.</strong> Multiply the four counts together, because the tree nests them: 2&nbsp;cells/line × 2&nbsp;lines/module × 2&nbsp;modules/block × 2&nbsp;blocks = 2×2×2×2 = <strong>16 cells</strong>.</div>
+
+<div class="step"><strong>Step 2 — find the series depth (what adds voltage).</strong> Voltage adds <em>only</em> along series links. Walking from a cell up to the bus, the series levels are: cells within a line (<code>cells_per_line</code> = 2 in series) and modules within a block (<code>modules_per_block</code> = 2 in series). The parallel levels in between do <em>not</em> add voltage. So the number of cells stacked in series from bottom to top is cells_per_line × modules_per_block = 2 × 2 = <strong>4 cells in series</strong>.</div>
+
+<div class="step"><strong>Step 3 — nominal bus voltage.</strong> Four cells in series at the max-power point: <var>V</var><sub>bus</sub> = 4 × <var>V</var><sub>mp</sub> = 4 × 2.35&nbsp;V = <strong>9.4&nbsp;V</strong>.</div>
+
+<div class="step"><strong>Step 4 — find the parallel width (what adds current).</strong> Current adds <em>only</em> across parallel links. The parallel levels are: lines within a module (<code>lines_parallel</code> = 2 in parallel) and blocks within the circuit (<code>n_blocks</code> = 2 in parallel). So the number of parallel current paths is lines_parallel × n_blocks = 2 × 2 = <strong>4 paths</strong>, giving a bus current of <strong>4 × <var>I</var><sub>mp</sub></strong>.</div>
+
+<div class="check"><strong>Cross-check (this proves the topology reading AND the count at once):</strong> series-depth × parallel-width = 4 × 4 = 16 = the total cell count from Step 1. The two independent routes to 16 agree, so the series/parallel bookkeeping is self-consistent. As a scale anchor, the same rule on the <em>full</em> array (cells_per_line = 10, modules_per_block = 3) gives 10 × 3 × 2.35 ≈ <strong>70.5&nbsp;V</strong> — right at the project's ~70&nbsp;V bus, confirming the method scales. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked Q1-B — address and fail the 7th cell of block 3, module 2, line 1</span>
+<p><strong>Goal:</strong> mark one specific cell as dead so the next simulation shows its effect. The cell is cell 7, in line 1, of module 2, of block 3.</p>
+<div class="step"><strong>Step 1 — build the id from the path.</strong> The hierarchical id is the path from the root to the cell, segment by segment: block 3 → <code>B3</code>, module 2 → <code>M2</code>, line 1 → <code>L1</code>, cell 7 → <code>C7</code>. Join with dots: <code>B3.M2.L1.C7</code>.</div>
+<div class="step"><strong>Step 2 — locate the cell (conceptually).</strong> That id is the key into the flat registry: <code>circuit.cells["B3.M2.L1.C7"]</code> is the one cell we mean, reached in O(1). We do not have to walk the tree.</div>
+<div class="step"><strong>Step 3 — inject the fault.</strong> Call <code>circuit.fail("B3.M2.L1.C7", "dead")</code>. Internally this finds that cell and applies <code>cell.setSeason(0)</code>, so it stops producing photocurrent; every other cell is untouched.</div>
+<div class="check">The single line <code>circuit.fail("B3.M2.L1.C7", "dead")</code> does the whole job. Re-running the netlist build and simulation now reflects exactly one dead cell, at a known location — the atomic operation a Monte-Carlo sweep repeats with random ids. ✓</div>
+</div>
+
+<h4>1.8 Why a recursive tree, not four nested loops? — a Socratic ladder</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — Why represent the array as a recursive tree instead of just four nested Python loops?</div>
+
+<div class="socratic">
+<div class="q">Q1. First, the foundation: what <em>is</em> a tree here, in one sentence?</div>
+<div class="answer">A branching structure whose top node (the whole circuit) splits into child nodes (blocks, then modules, then lines) and bottoms out at leaves (individual cells). Each internal node is a <code>Group</code> that combines its children in series or in parallel; each leaf is a <code>CellRef</code> wrapping one real cell. It is recursive because a <code>Group</code>'s children can themselves be <code>Group</code>s — smaller copies of the same thing.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q2. What does each node need to <em>know</em> so the walk can emit a netlist?</div>
+<div class="answer">Astonishingly little: just <strong>its combine type</strong> (series or parallel) and <strong>its list of children</strong>. That single fact — series vs. parallel — tells the walk whether to chain children head-to-tail (share a node, voltages add) or tie them between two rails (currents add). A leaf needs only its cell and its id, so it can emit <code>cell.buildModel(name=id)</code>. The same handful of rules works at every level, which is precisely what a uniform node type buys you.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q3. Why do we insist on a <em>stable, unique id</em> for every cell?</div>
+<div class="answer">Because a fault study has to name the cell it breaks. Four anonymous nested loops can <em>count</em> cells but give no permanent handle to "this exact one." A hierarchical id like <code>B3.M2.L1.C7</code> is a permanent address: it survives across runs, it doubles as the key into the flat <code>circuit.cells</code> registry, and it reads back as a human-checkable path through the tree.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q4. Now tie it together: how does the tree-plus-id design <em>enable</em> Monte-Carlo fault injection in a way four nested loops would not?</div>
+<div class="answer">The tree gives correct wiring (so the netlist is right no matter how the levels are nested or flipped); the ids plus the flat registry give O(1) access to <em>any</em> cell by name. Together they let the sweep do its core loop — pick a random id, call <code>circuit.fail(id, mode)</code>, simulate, record — thousands of times, cheaply and unambiguously. Four hard-coded loops would bake the topology in (no flipping a level, no custom nesting) and would offer no addressable handle to fail one chosen cell. The recursive tree is what makes the array both <em>reconfigurable</em> and <em>fault-addressable</em> — the two things Chapter 1 could not do.</div>
+</div>
+</div>
+
+<div class="pitfall"><span class="lbl">Pitfall — count series and parallel levels correctly <span class="badge hot">EXAM-HOT</span></span>
+Voltage adds <strong>only</strong> along SERIES segments; current adds <strong>only</strong> across PARALLEL segments. The classic mistake is to multiply <var>V</var><sub>mp</sub> by the <em>total</em> cell count, or to mix a parallel level into the voltage product. In Worked Q1-A the bus voltage is <var>V</var><sub>mp</sub> × (cells_per_line × modules_per_block) = <var>V</var><sub>mp</sub> × 4 = 9.4&nbsp;V — <em>not</em> <var>V</var><sub>mp</sub> × 16 = 37.6&nbsp;V. If you ever find yourself multiplying voltage by every cell in the array, you have folded the parallel levels into the series product. Identify which levels are series (here: line, block) and which are parallel (here: module, circuit) <em>first</em>, then multiply only the series counts for voltage and only the parallel counts for current.</div>
+
+<div class="practice">
+<span class="lbl">Practice Q1-2</span>
+You need a small test circuit that delivers a nominal bus voltage of about <strong>23.5&nbsp;V</strong> and exactly <strong>3 parallel current paths</strong>, using the same 2.35&nbsp;V (<var>V</var><sub>mp</sub>) cell, default combines (line series, module parallel, block series, circuit parallel).
+(a) How many cells must sit in series? &nbsp;(b) Give one set of <code>cells_per_line</code> and <code>modules_per_block</code> that achieves it. &nbsp;(c) Give one set of <code>lines_parallel</code> and <code>n_blocks</code> that gives exactly 3 parallel paths. &nbsp;(d) With your numbers, how many cells does the circuit contain in total?
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice Q1-3</span>
+Two short tasks on addressing and wiring.
+(a) Write the hierarchical id of cell number 5, in line 3, of module 1, of block 12. &nbsp;(b) A wiring review concludes that the modules inside each block are actually wired <em>side by side</em> (so their currents add and the block voltage stays that of one module), not stacked. Which single parameter do you change, and to what value? &nbsp;(c) In one sentence, explain why this is a one-value change in <code>Circuit</code> but would have been a rewrite in the fixed Chapter-1 hierarchy.
+<div class="answerspace lines-8"></div>
+</div>
+
+<h4>1.9 The <code>Circuit</code> API at a glance</h4>
+
+<div class="callout">
+<span class="lbl">PowerPy <code>Circuit</code> surface</span>
+<ul>
+<li><span class="badge api">Circuit.fromPrototype(cell, cells_per_line, lines_parallel, modules_per_block, n_blocks, combine_levels=...)</span> — clone one prototype cell into the full Group/CellRef tree, assign all ids, fill the registry.</li>
+<li><span class="badge api">Group(combine, children, id)</span> — an internal node; combines its children in <code>"series"</code> or <code>"parallel"</code>.</li>
+<li><span class="badge api">CellRef(cell, id)</span> — a leaf node; wraps one cell with its hierarchical id.</li>
+<li><span class="badge api">circuit.cells</span> — the flat registry, <code>dict[id -&gt; cell]</code>, for O(1) access to any cell.</li>
+<li><span class="badge api">circuit.fail(cell_id, mode)</span> — inject a fault (<code>open</code>/<code>dead</code>, <code>short</code>, <code>crack(frac)</code>) at one addressed cell.</li>
+<li><span class="badge api">cell.buildModel(name=id)</span> — the reused Chapter-1 routine each leaf calls to emit its SPICE subcircuit under its id.</li>
+</ul>
+<p>Under the hood the netlist is built and run by the proven Chapter-1 primitives — <code>cell</code>, <code>cellBuilder</code>, and <code>ng_sim</code>. <code>Circuit</code> is only the new assembly and addressing layer on top.</p>
+</div>
+
+<hr class="sep">
+
+<div class="keyidea"><span class="lbl">Key idea — section recap</span>
+Chapter 1's fixed <em>cell→string→section→panel</em> ladder cannot nest custom levels, flip a junction between series and parallel, or fail one chosen cell — all three of which the failure study needs. The new <strong><code>Circuit</code></strong> class declares the topology with four counts (<code>cells_per_line</code>, <code>lines_parallel</code>, <code>modules_per_block</code>, <code>n_blocks</code>) and a per-level <code>combine</code> choice, then stores the array as a <strong>recursive tree</strong> of <code>Group</code> (internal, series-or-parallel) and <code>CellRef</code> (leaf) nodes. Every cell carries a stable hierarchical id like <code>B3.M2.L1.C7</code>, and a flat <code>circuit.cells</code> registry gives O(1) access. One recursive walk builds the netlist — series groups chain head-to-tail so voltages add, parallel groups tie to two rails so currents add, each leaf emits <code>cell.buildModel(name=id)</code>, and each block gets a blocking diode — reusing the proven Chapter-1 cell, <code>cellBuilder</code>, and <code>ng_sim</code> primitives; only the assembly is new. <code>circuit.fail(id, mode)</code> then plants a fault at any addressed cell, which is exactly what the Monte-Carlo sweep repeats. Remember the trap: voltage adds only along series, current only across parallel — so the bus voltage is <var>V</var><sub>mp</sub> × (series cell count), never <var>V</var><sub>mp</sub> × (every cell).</div>

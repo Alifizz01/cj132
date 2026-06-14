@@ -1,0 +1,304 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>PowerPy — The Bounce, Very Slowly · Chapter 5</title>
+<link rel="stylesheet" href="print-base.css">
+<link rel="stylesheet" href="design.css">
+<style>
+.analogy{ background:#eef6f1; border-left:4px solid #2f8f6b; border-radius:6px; padding:.7em 1em; margin:.9em 0; }
+.analogy .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#2f8f6b; }
+.big{ font-family:"Segoe UI",sans-serif; color:#0b3d63; font-weight:700; font-size:14pt; line-height:1.3;
+  margin:.4em 0; text-align:center; }
+.huge{ font-family:"Segoe UI",sans-serif; color:#9a3b3b; font-weight:700; font-size:16pt; text-align:center; margin:.5em 0; }
+.step-card{ background:#fffdf8; border:1px solid #e0d8c4; border-left:6px solid #b9851a; border-radius:8px;
+  padding:.8em 1.1em; margin:1em 0; }
+.step-card .n{ font-family:"Segoe UI",sans-serif; font-weight:700; color:#8a6d1a; font-size:9pt;
+  letter-spacing:.1em; text-transform:uppercase; }
+.recap{ background:#f3f6fa; border:1px solid #d6dde4; border-radius:6px; padding:.7em 1.1em; margin:1em 0; }
+.recap .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#0b3d63; }
+.onemax{ font-size:11.4pt; }
+p.slow{ font-size:11.4pt; line-height:1.62; }
+</style>
+</head><body>
+
+<section class="chapter-opener">
+<div class="booktitle">PowerPy · A Solar-Array Engineer's Handbook</div>
+<h1>Chapter 5<br>The Bounce,<br>Very Slowly</h1>
+<div class="subtitle">How do you solve a problem where two things each depend on the other — and you know
+neither of them? This is the idea that's been hard. So here it is taken as slowly as it goes: one small
+step per page, the same example repeated until it's boring, nothing clever held back for later.</div>
+<p class="lede">You asked the exact right question: "electricity and temperature each depend on the other, and
+both are missing — how do we even solve that?" It <em>feels</em> impossible. It isn't. There's a single trick, and
+once you see it you'll wonder why it looked hard. We'll get there in tiny steps. If any one page feels too
+fast, that's a page to re-read — there's no prize for rushing.</p>
+<div class="meta">Generated for izzuwan · A gentle companion. One idea at a time. Print on A4.</div>
+</section>
+
+<!-- ============ PAGE: GROUND ZERO -->
+<section class="page-break sec">
+<h2>Start at zero — why a satellite even cares</h2>
+<p class="slow">Before any maths, let's stand on Earth and follow the whole story, step by step, so you can see
+<em>why</em> we end up needing this at all.</p>
+
+<div class="step-card"><span class="n">1 · you build a satellite</span>
+<p class="slow" style="margin:.3em 0">On Earth, in a clean room, you build a satellite. It has computers, radios, cameras — all of which need
+<strong>electricity</strong> to run. There are no power sockets in space.</p></div>
+
+<div class="step-card"><span class="n">2 · so you give it solar panels</span>
+<p class="slow" style="margin:.3em 0">You bolt on big wings covered in <strong>solar cells</strong> — thousands of little tiles that turn sunlight into
+electricity. These panels are the satellite's only power source. If they fail, the whole satellite goes dark.</p></div>
+
+<div class="step-card"><span class="n">3 · you launch it; it circles the Earth</span>
+<p class="slow" style="margin:.3em 0">A rocket carries it up. Now it loops around the Earth, over and over. On the sunny side the panels soak up
+sunlight and make power; then it swings behind the Earth into shadow (an <em>eclipse</em>), goes cold and dark,
+then back into the sun. Round and round, hot–cold, hot–cold.</p></div>
+
+<figure class="fig-frame"><svg width="420" height="200" viewBox="0 0 420 200" xmlns="http://www.w3.org/2000/svg">
+<!-- sun -->
+<circle cx="38" cy="38" r="20" fill="#f0c75a"/>
+<g stroke="#e0b13a" stroke-width="2">
+<line x1="38" y1="6" x2="38" y2="-2"/><line x1="64" y1="38" x2="74" y2="38"/><line x1="58" y1="18" x2="66" y2="10"/><line x1="58" y1="58" x2="66" y2="66"/></g>
+<text x="38" y="74" font-size="8" text-anchor="middle" fill="#a9772a" font-family="Segoe UI">Sun</text>
+<!-- earth -->
+<circle cx="220" cy="110" r="46" fill="#bcd6ef" stroke="#0b3d63"/><circle cx="220" cy="110" r="46" fill="none" stroke="#0b3d63"/>
+<path d="M195 88 q14 8 8 22 q12 6 22 2 q6 14 -6 24" fill="#9cc7a0" opacity="0.8"/>
+<text x="220" y="113" font-size="9" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">Earth</text>
+<!-- shadow cone -->
+<path d="M266 88 L410 70 L410 150 L266 132 Z" fill="#0b1b2a" opacity="0.10"/>
+<text x="360" y="112" font-size="7.5" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">night side</text>
+<text x="360" y="123" font-size="7.5" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">(eclipse)</text>
+<!-- orbit -->
+<ellipse cx="220" cy="110" rx="92" ry="74" fill="none" stroke="#9a3b3b" stroke-dasharray="4 4"/>
+<!-- satellite on sunny side -->
+<g transform="translate(220,36)">
+<rect x="-7" y="-7" width="14" height="14" fill="#33485c"/>
+<rect x="-26" y="-4" width="16" height="8" fill="#11507a"/><rect x="10" y="-4" width="16" height="8" fill="#11507a"/>
+</g>
+<text x="220" y="20" font-size="8" text-anchor="middle" fill="#11507a" font-family="Segoe UI">satellite (panels in sun)</text>
+</svg><figcaption>The satellite loops around the Earth: panels make power in sunlight, then pass through the
+Earth's shadow (eclipse) and go cold — over and over, for years.</figcaption></figure>
+
+<div class="step-card"><span class="n">4 · one day, a cell fails</span>
+<p class="slow" style="margin:.3em 0">After years of radiation and tiny impacts, one solar cell dies. Now its still-working neighbours shove
+electricity <em>backwards</em> through the dead one — and instead of making power, it turns into a tiny
+<strong>heater</strong> stuck on the panel. That hot spot can get hot enough to <strong>melt</strong> the panel underneath.</p></div>
+
+<div class="step-card"><span class="n">5 · here's the catch: you can't fix it</span>
+<p class="slow" style="margin:.3em 0">There is no repair truck in orbit. Whatever you launched is what you live with. So the only safe moment to
+deal with this is <strong>before launch</strong>, back on Earth — by <em>predicting</em>, on a computer, which cell failures
+would be dangerous and which would be harmless.</p></div>
+
+<div class="analogy"><span class="lbl">So what must we predict?</span>
+"Dangerous" means "gets too hot." So for any failure we imagine, we must answer one question:
+<strong>what temperature does that cell reach?</strong> Below the melt limit → safe. Above it → trouble. Everything in
+this handbook exists to compute that one temperature number, for a satellite that hasn't flown yet.</div>
+
+<div class="recap"><span class="lbl">And that is where today's hard idea comes from</span>
+<p class="slow" style="margin:.3em 0">To get that temperature, we hit a snag: a cell's temperature depends on its electricity, and its electricity
+depends on its temperature. Each needs the other first. <strong>That</strong> is the knot this chapter is about — and the
+rest of these pages is the simple trick that unties it.</p></div>
+</section>
+
+<!-- ============ PAGE: THE PROBLEM -->
+<section class="page-break sec">
+<h2>First — what exactly is hard</h2>
+<p class="slow">Two things. Call them <strong>temperature</strong> and <strong>electricity</strong>.</p>
+<p class="slow">Here is the knot:</p>
+<div class="big">To know the electricity, you first need the temperature.<br>
+To know the temperature, you first need the electricity.</div>
+<p class="slow">So you sit down to start… and you can't. To begin with electricity, you'd need the temperature
+— which you don't have. To begin with temperature, you'd need the electricity — which you don't have either.</p>
+<p class="slow"><strong>Neither one will go first.</strong> That's the whole difficulty. It's not the maths. It's that
+there seems to be no place to <em>start</em>.</p>
+
+<div class="analogy"><span class="lbl">A picture for the knot</span>
+Two polite people at a door. Each says: <em>"After you."</em> The other says: <em>"No — after you."</em>
+Neither steps through. They could stand there all day. Nothing is broken; they're just both waiting for the
+other to go first.</div>
+
+<figure class="fig-frame"><svg width="380" height="120" viewBox="0 0 380 120" xmlns="http://www.w3.org/2000/svg">
+<circle cx="120" cy="60" r="26" fill="#cfe3f6" stroke="#0b3d63"/><text x="120" y="58" font-size="9" text-anchor="middle" font-family="Segoe UI" fill="#0b3d63">temperature</text><text x="120" y="70" font-size="7.5" text-anchor="middle" font-family="Segoe UI" fill="#5d6b79">"after you"</text>
+<circle cx="260" cy="60" r="26" fill="#fdecea" stroke="#9a3b3b"/><text x="260" y="58" font-size="9" text-anchor="middle" font-family="Segoe UI" fill="#9a3b3b">electricity</text><text x="260" y="70" font-size="7.5" text-anchor="middle" font-family="Segoe UI" fill="#5d6b79">"no, after you"</text>
+<path d="M148 50 Q190 30 232 50" fill="none" stroke="#5d6b79" stroke-dasharray="3 3"/><polygon points="232,50 222,46 224,54" fill="#5d6b79"/>
+<path d="M232 76 Q190 96 148 76" fill="none" stroke="#5d6b79" stroke-dasharray="3 3"/><polygon points="148,76 158,80 156,72" fill="#5d6b79"/>
+</svg><figcaption>Each waits for the other to go first. That standstill is the entire problem.</figcaption></figure>
+</section>
+
+<!-- ============ PAGE: THE TRICK -->
+<section class="page-break sec">
+<h2>The trick — and it's the whole secret</h2>
+<p class="slow">Watch how the two people actually get through the door in real life. One of them just…
+<strong>goes.</strong> Picks a moment and steps through. Not because they were told to — they just break the
+standstill by <em>moving</em>.</p>
+
+<p class="slow">We do the same. We can't get temperature or electricity to go first… so we <strong>make one up.</strong>
+We pick a temperature. Any temperature. We don't know if it's right — that's fine, it's a placeholder.</p>
+
+<div class="huge">Pretend you know the temperature.</div>
+
+<p class="slow">And here is the magic that makes it all work:</p>
+
+<div class="keyidea"><span class="lbl">The one sentence to remember</span>
+<span class="onemax">The moment you <strong>pretend</strong> you know the temperature, the electricity stops being a
+mystery — because the <em>only</em> reason electricity was unknown was that temperature was unknown.</span></div>
+
+<p class="slow">Read that again. Electricity wasn't unknowable. It was just <em>waiting</em> for temperature. Hand it
+a temperature — even a fake one — and it can be worked out like any normal sum.</p>
+
+<div class="analogy"><span class="lbl">Why a fake number is allowed</span>
+Think of a recipe that says <em>"add salt to taste."</em> You can't compute "to taste" in advance. So you just
+<strong>guess</strong> a pinch, taste it, and adjust. The guess isn't cheating — it's how you get unstuck. You fix it
+after.</div>
+</section>
+
+<!-- ============ PAGE: ONE WORD -->
+<section class="page-break sec">
+<h2>One word that trips everyone: "unknown"</h2>
+<p class="slow">"Unknown" sounds like "we can never know it." That's not what it means here.</p>
+
+<div class="term"><span class="lbl">What "unknown" really means here</span>
+It means <em>"I can't work this out <strong>yet</strong> — because it's waiting on the other thing."</em> Not "impossible."
+Just "not until I know its partner."</div>
+
+<p class="slow">So both were "unknown" only because they were waiting on each other. Break the waiting — feed one
+of them a number — and the other becomes a plain, ordinary calculation. No mystery left in it.</p>
+
+<div class="recap"><span class="lbl">So far, in three short lines</span>
+<p class="slow" style="margin:.3em 0">1. The hard part is only that neither will go first.</p>
+<p class="slow" style="margin:.3em 0">2. So we make one up (pretend a temperature).</p>
+<p class="slow" style="margin:.3em 0">3. With that, the other one (electricity) is easy to work out.</p></div>
+
+<p class="slow">That's already most of the idea. The only thing left is: our made-up number was probably wrong.
+What do we do about that? Next page.</p>
+</section>
+
+<!-- ============ PAGE: THE BOUNCE -->
+<section class="page-break sec">
+<h2>Fixing the fake — the bounce</h2>
+<p class="slow">We made up a temperature. It was a guess, so it's probably wrong. Here's the beautiful part:
+<strong>we use it to get a better one, then throw the old one away.</strong> Over and over. Each one better than the last.</p>
+
+<p class="slow">Let's do it with real numbers, one step at a time. Don't skim — read each box fully before the next.</p>
+
+<div class="step-card"><span class="n">Step 1 · make one up</span>
+<p class="slow" style="margin:.3em 0">Pretend the cell is at <strong>28 °C</strong> (just room temperature — a placeholder, nothing special).</p></div>
+
+<div class="step-card"><span class="n">Step 2 · now the rest is easy</span>
+<p class="slow" style="margin:.3em 0">Because the temperature is now "known" (28 °C), we can work out the electricity, and from that the heat,
+and from that the <em>real</em> temperature. Out comes <strong>65 °C</strong>.</p></div>
+
+<div class="step-card"><span class="n">Step 3 · compare</span>
+<p class="slow" style="margin:.3em 0">We <em>pretended</em> 28 °C, but it actually came out <strong>65 °C</strong>. Those don't match. So our pretend was wrong.
+No problem — we just learned a better number.</p></div>
+
+<div class="step-card"><span class="n">Step 4 · do it again with the better number</span>
+<p class="slow" style="margin:.3em 0">Now pretend <strong>65 °C</strong> instead, and run the same easy steps again. This time it comes back… <strong>65 °C</strong>.</p></div>
+
+<div class="step-card"><span class="n">Step 5 · it matched — stop</span>
+<p class="slow" style="margin:.3em 0">We put in 65 and got out 65. <strong>The number stopped changing.</strong> That means temperature and electricity
+finally agree with each other. <strong>That is the answer.</strong> We're done.</p></div>
+</section>
+
+<!-- ============ PAGE: STAIRCASE FIGURE -->
+<section class="page-break sec">
+<h2>The same thing, as a picture</h2>
+<p class="slow">Each round, the number you put in and the number you get out come closer together, until they're
+the same. Like walking down stairs that get shallower until the floor is flat.</p>
+
+<figure class="fig-frame"><svg width="420" height="220" viewBox="0 0 420 220" xmlns="http://www.w3.org/2000/svg">
+<line x1="50" y1="190" x2="390" y2="190" stroke="#888"/><line x1="50" y1="30" x2="50" y2="190" stroke="#888"/>
+<text x="44" y="40" font-size="8" text-anchor="end" fill="#5d6b79" font-family="Segoe UI">°C</text>
+<text x="220" y="210" font-size="8" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">round →</text>
+<!-- target line at 65 -->
+<line x1="50" y1="95" x2="390" y2="95" stroke="#2f8f6b" stroke-dasharray="4 3"/>
+<text x="385" y="71" font-size="8.5" text-anchor="end" fill="#2f8f6b" font-family="Segoe UI">the answer: 65°C</text>
+<!-- points: round1 guess 28 (low), out 65; we plot the running value approaching 65 -->
+<!-- value path: 28 -> 70 -> 66 -> 65.2 -> 65.1 -->
+<polyline points="80,170 160,80 240,92 320,94 360,95" fill="none" stroke="#0b3d63" stroke-width="2"/>
+<circle cx="80" cy="170" r="4" fill="#9a3b3b"/><text x="80" y="184" font-size="8" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI">28 (made up)</text>
+<circle cx="160" cy="80" r="4" fill="#0b3d63"/><text x="160" y="73" font-size="8" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">70</text>
+<circle cx="240" cy="92" r="4" fill="#0b3d63"/><text x="240" y="85" font-size="8" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">66</text>
+<circle cx="320" cy="94" r="4" fill="#0b3d63"/><text x="320" y="87" font-size="8" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">65.2</text>
+<circle cx="360" cy="95" r="5" fill="#2f8f6b"/><text x="360" y="110" font-size="8" text-anchor="middle" fill="#2f8f6b" font-family="Segoe UI">65.1 ✓</text>
+</svg><figcaption>The made-up 28 °C jumps to 70, then 66, then 65.2, then settles on 65 °C. Each round the
+change gets smaller, until the number stops moving. When it stops, you've found the answer.</figcaption></figure>
+
+<div class="recap"><span class="lbl">The whole method in one breath</span>
+<p class="slow" style="margin:.3em 0"><strong>Make one up → work out the rest → replace your made-up number with the better one → repeat
+until the number stops changing.</strong></p></div>
+</section>
+
+<!-- ============ PAGE: A/B/C -->
+<section class="page-break sec">
+<h2>The three questions people get stuck on</h2>
+<p class="slow">If something still itches, it's almost always one of these three. Each is answered on its own,
+slowly.</p>
+
+<div class="ladder"><div class="laddertitle">A · "Why does picking a temperature make the electricity workable?"</div>
+<div class="socratic"><div class="q">The short answer</div>
+<div class="answer"><p class="slow" style="margin:0">Because electricity was only stuck <em>waiting</em> for the temperature. A cell at a <em>fixed, known</em> temperature
+has a definite electrical behaviour you can just calculate — the same way a kettle at a known setting draws a
+definite power. Fix the temperature (even a fake one) and the "waiting" ends; the sum becomes ordinary.</p></div></div></div>
+
+<div class="ladder"><div class="laddertitle">B · "Why redo it? Why not trust the first answer?"</div>
+<div class="socratic"><div class="q">The short answer</div>
+<div class="answer"><p class="slow" style="margin:0">Because the first answer was built on a <em>made-up</em> temperature (28 °C). The cell isn't really at 28 °C,
+so the electricity we computed was slightly off, so the temperature it gave (65 °C) is better but still not
+final. We redo it with 65 °C to remove the leftover error. Each redo uses a truer starting number, so each
+answer is truer.</p></div></div></div>
+
+<div class="ladder"><div class="laddertitle">C · "Why does it ever settle? Why not bounce forever?"</div>
+<div class="socratic"><div class="q">The short answer</div>
+<div class="answer"><p class="slow" style="margin:0">Because each round the mistake shrinks. 28 was off by a lot; 70 was off by less; 66 by less still; 65.2 by
+almost nothing. The corrections get tinier and tinier until they're too small to matter — the number stops
+moving. When putting a number in gives the same number out, there's nothing left to fix. That's the signal
+to stop.</p></div></div></div>
+</section>
+
+<!-- ============ PAGE: EVERYDAY MIRROR -->
+<section class="page-break sec">
+<h2>One more everyday version, to lock it in</h2>
+<div class="analogy"><span class="lbl">Guessing the shower temperature</span>
+You step toward a shower with an unfamiliar tap. You can't <em>calculate</em> the right tap position — it depends on
+the water, which depends on the tap… the same knot. So what do you actually do? You <strong>pick a position</strong>
+(guess), feel the water (work out the result), and <strong>nudge</strong> (replace your guess with a better one). Too cold
+→ nudge warmer. A bit too warm → nudge back a touch. Each nudge is smaller. Within a few tries it's just right
+and you stop nudging. <strong>You just ran the exact method</strong> — guess, check, nudge, repeat until it stops
+changing — without anyone calling it maths.</div>
+
+<p class="slow">That shower is the whole chapter. The cell does the same dance between its temperature and its
+electricity; the computer just nudges with numbers instead of your hand on the tap.</p>
+
+<div class="practice"><span class="lbl">Check yourself 1</span> In the shower story, what plays the role of the
+"made-up temperature" we start with, and what plays the role of "the number stopped changing"?
+<div class="answerspace lines-4"></div></div>
+
+<div class="practice"><span class="lbl">Check yourself 2</span> We start by pretending a temperature, get 65 °C out, then redo
+with 65 °C and get 65 °C again. In one sentence: why do we stop there?
+<div class="answerspace lines-3"></div></div>
+</section>
+
+<!-- ============ PAGE: RECAP + SOLUTIONS -->
+<section class="page-break sec">
+<h2>The one page to keep</h2>
+<div class="recap"><span class="lbl">If you remember nothing else</span>
+<p class="slow" style="margin:.35em 0"><strong>The knot:</strong> two things each need the other first, so neither will start.</p>
+<p class="slow" style="margin:.35em 0"><strong>The fix:</strong> make one up. Pretending one is known turns the other into an easy sum.</p>
+<p class="slow" style="margin:.35em 0"><strong>The cleanup:</strong> your made-up number was wrong, so replace it with the better one you just got — and
+do it again.</p>
+<p class="slow" style="margin:.35em 0"><strong>The finish:</strong> when the number stops changing (same in, same out), the two things finally agree —
+that's the answer.</p></div>
+
+<p class="slow onemax" style="text-align:center; color:#0b3d63;"><strong>Guess · work out the rest · replace the guess · repeat until it stops moving.</strong></p>
+
+<div class="solutions" style="break-before:auto;">
+<h2>Answers</h2>
+<div class="soln"><span class="sid">Check 1.</span> The first tap position you pick (before feeling the water) is the
+"made-up temperature." "The number stopped changing" is when the water feels right and you stop nudging the
+tap — another nudge would change nothing.</div>
+<div class="soln"><span class="sid">Check 2.</span> Because putting 65 °C in gave 65 °C back out — the number didn't change,
+which means temperature and electricity now agree, so there is nothing left to fix.</div>
+</div>
+</section>
+
+</body></html>

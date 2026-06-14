@@ -1,0 +1,101 @@
+<!-- ===================================================================
+     SECTION D1 — Worked solutions to the practice questions
+     PowerPy study notes · solutions fragment
+     IDs match _frag_D1.html: D1-1, D1-2, D1-3
+     =================================================================== -->
+
+<div class="soln"><span class="sid">D1-1.</span>
+A function <code>summarise_panel(path)</code> that (i) opens and parses a CSV
+file, (ii) sums section powers and finds the weakest section, and (iii) prints a
+formatted table.
+<br><br>
+<strong>(a) The three concerns.</strong> They are exactly the same trio as the
+worked example, in different clothing: <em>concern 1 — input/loading</em> (open
+and parse the CSV into data); <em>concern 2 — computation</em> (sum the
+per-section powers, find the minimum); <em>concern 3 — output/presentation</em>
+(format and print the table to the screen). Reading a file, doing the maths, and
+showing the result are three different kinds of job fused into one function.
+<br><br>
+<strong>(b) The split.</strong> One focused function per concern, each with a
+small interface:
+<ul>
+  <li><code>load(path)</code> — takes a file path, returns the parsed data
+  (e.g. a list of section records). Input only; no maths, no printing.</li>
+  <li><code>compute(data)</code> — takes that data, returns the results
+  (e.g. <code>total_power</code> and the <code>weakest</code> section). Pure
+  computation; no file access, no printing.</li>
+  <li><code>show(total_power, weakest)</code> — takes the computed results and
+  prints the formatted table. Output only; no maths.</li>
+</ul>
+The caller wires them: <code>data = load(path); total, weakest = compute(data);
+show(total, weakest)</code>.
+<br><br>
+<strong>(c) A concrete benefit + a new test.</strong> <em>Cohesion rose</em> (each
+function now does one job, fully described by its name) and <em>coupling fell</em>
+(<code>compute()</code> depends only on the data handed to it — no disk, no
+screen). The thing you can now test that you could not before: <code>compute()</code>
+in isolation — hand it a hand-built list of known section powers and assert that
+the total and the identified weakest section are correct, with <em>no</em> CSV file
+on disk and <em>nothing</em> printed. Previously, testing the arithmetic meant
+creating a real file and capturing console output just to check two numbers.
+</div>
+
+<div class="soln"><span class="sid">D1-2.</span>
+Classifying the two designs by cohesion and coupling.
+<br><br>
+<strong>Design A</strong> — one <code>SolarThing</code> class doing five jobs
+(load, physics, netlist, simulate, plot), with other classes reaching directly
+into its internal variables.
+<ul>
+  <li><strong>Cohesion: LOW.</strong> A single class mixing five unrelated jobs is
+  unfocused — it has five reasons to change, so it is the opposite of "one part,
+  one job."</li>
+  <li><strong>Coupling: HIGH.</strong> Other classes reach <em>directly into its
+  internal variables</em>, so they depend on exactly how <code>SolarThing</code>
+  is built inside. Change an internal variable and those classes break — the
+  internals are not hidden, so the dependence is tight. (No encapsulation: there
+  is no real boundary to protect the insides.)</li>
+</ul>
+<strong>Design B</strong> — four focused modules
+(<code>schemas/ loader/ simulation/ render/</code>), each doing one job,
+communicating only through small public methods.
+<ul>
+  <li><strong>Cohesion: HIGH.</strong> Each module does exactly one job, so each
+  has a single reason to change and is easy to understand on its own.</li>
+  <li><strong>Coupling: LOW.</strong> Modules talk only through small public
+  methods and never touch one another's internals, so a change inside one module
+  stays local and does not ripple to the others (encapsulation is respected).</li>
+</ul>
+<strong>Which is better, and why (one line).</strong> <strong>Design B.</strong> It
+achieves the design rule "high cohesion, low coupling": each part is understandable
+alone, testable alone, and changeable inside without breaking the others — whereas
+Design A is a low-cohesion, high-coupling monolith where every change is risky and
+ripples outward.
+</div>
+
+<div class="soln"><span class="sid">D1-3.</span>
+A 40-line script (load one file, print one number) rewritten into 9 classes, 4
+manager layers, 3 interfaces, and a plug-in system for file formats that will only
+ever have one format.
+<br><br>
+<strong>(a) Principle violated, and the name of the mistake.</strong> This violates
+<strong>YAGNI</strong> — building generality and structure on speculation ("in case
+we need other formats later") that the problem never actually asked for. The
+mistake is called <strong>over-engineering</strong>: imposing far more abstraction
+and machinery than the size of the problem warrants.
+<br><br>
+<strong>(b) More or less readable, and why.</strong> <em>Less</em> readable. The
+logic of a trivial 40-line task is now smeared across more than a dozen files, so
+following a single action means hopping between many classes, layers, and
+interfaces to trace what should be a couple of straightforward steps. Excessive
+splitting lowers readability just as surely as a giant monolith does — the flow is
+buried under structure that earns nothing. A few plain functions would let a reader
+see the whole job at a glance.
+<br><br>
+<strong>(c) The guideline that would have prevented it.</strong>
+<strong>YAGNI — "You Aren't Gonna Need It."</strong> Build only what the current
+task genuinely needs and add structure when a real need appears, rather than on the
+guess that it might be useful one day. Following it, the engineer would have kept a
+few clean functions and added the plug-in system only if and when a second file
+format actually arrived.
+</div>

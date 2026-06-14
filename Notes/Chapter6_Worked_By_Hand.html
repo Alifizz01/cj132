@@ -1,0 +1,524 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>PowerPy — The Maths, Worked by Hand · Chapter 6</title>
+<link rel="stylesheet" href="print-base.css">
+<link rel="stylesheet" href="design.css">
+<style>
+.analogy{ background:#eef6f1; border-left:4px solid #2f8f6b; border-radius:6px; padding:.7em 1em; margin:.9em 0; }
+.analogy .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#2f8f6b; }
+.deep{ background:#eef2f8; border:1px solid #c7d4e4; border-left:5px solid #11507a; border-radius:7px;
+  padding:.7em 1em; margin:.9em 0; }
+.deep .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#11507a; }
+.recap{ background:#f3f6fa; border:1px solid #d6dde4; border-radius:6px; padding:.7em 1.1em; margin:1em 0; }
+.recap .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#0b3d63; }
+.worked .step{ margin:.3em 0; }
+.num{ font-family:"Cascadia Mono",Consolas,monospace; }
+figure img{ max-width:100%; border:1px solid #e6e9ee; border-radius:5px; }
+table.cases td,table.cases th{ text-align:center; }
+.verifybadge{ display:inline-block; font-family:"Segoe UI",sans-serif; font-size:7.5pt; font-weight:700;
+  letter-spacing:.08em; padding:.15em .5em; border-radius:3px; background:#dff0e6; color:#1f6a4a; margin-left:6px; }
+</style>
+</head><body>
+
+<section class="chapter-opener">
+<div class="booktitle">PowerPy · A Solar-Array Engineer's Handbook</div>
+<h1>Chapter 6<br>The Maths,<br>Worked by Hand</h1>
+<div class="subtitle">The exact cases the Python code solves — now done on paper, A to Z, no shortcuts.
+Several worked examples, every number traced, with the real plots the equations make, the analogies to
+picture it, and a slow explanation of any idea that gets thick.</div>
+<p class="lede">Everything here is the <em>real</em> model from <code>thermal_vectorized.py</code>, with the real
+substrate numbers. Each answer was computed two ways and they agree: by the <strong>hand method</strong> on these
+pages, and by the <strong>actual code</strong> (shown with a <span class="verifybadge">code ✓</span> badge). Where the
+hand method uses a gentle approximation, the page says so and gives the code's exact value beside it — so you
+can trust the arithmetic and still see where the last fraction of a degree comes from.</p>
+<div class="meta">Generated for izzuwan · All figures generated from the live equations
+(<code>_build_ch6_compute.py</code>). Print on A4.</div>
+</section>
+
+<section class="toc"><h2>Contents</h2><ol>
+<li><strong>The setup</strong> — the numbers we'll use everywhere</li>
+<li><span class="sec-num">1</span> The master equation: in = out</li>
+<li><span class="sec-num">2</span> Case A — the idle sunlit cell → 65 °C</li>
+<li><span class="sec-num">3</span> Case B — a cell making power → 39 °C</li>
+<li><span class="sec-num">4</span> Case C — the reverse-bias hot-spot → 187 °C</li>
+<li><span class="sec-num">5</span> All three on one graph + the vectorised array</li>
+<li><span class="sec-num">6</span> The T⁴ law, explained slowly</li>
+<li><span class="sec-num">7</span> Newton's method — the full hand trace</li>
+<li><span class="sec-num">8</span> Two temperatures — front vs rear, the 2×2</li>
+<li><span class="sec-num">9</span> The electro-thermal bounce — worked rounds</li>
+<li><span class="sec-num">10</span> The breakdown (melt) check</li>
+<li><span class="sec-num">11</span> The orbit fluxes — sun, albedo, IR, tilt</li>
+<li><span class="sec-num">12</span> Monte-Carlo — the run-count maths</li>
+<li><strong>Glossary</strong> · <strong>Worked solutions</strong></li>
+</ol></section>
+
+<!-- ============================== SETUP -->
+<section class="page-break sec">
+<h2>The setup — the numbers we use everywhere</h2>
+<p class="lede">One cell, one panel material. These exact values come from the real substrate file
+<code>msro_case2.json</code> and the test case. Keep this page open as a reference for all the worked cases.</p>
+
+<table class="cases">
+<thead><tr><th>Symbol</th><th>Meaning</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td class="num">α<sub>F</sub></td><td>front absorptivity (how much sun the front soaks up, 0–1)</td><td class="num">0.970</td></tr>
+<tr><td class="num">α<sub>R</sub></td><td>rear absorptivity</td><td class="num">0.930</td></tr>
+<tr><td class="num">ε<sub>F</sub></td><td>front emissivity (how well the front glows heat away, 0–1)</td><td class="num">0.90</td></tr>
+<tr><td class="num">ε<sub>R</sub></td><td>rear emissivity</td><td class="num">0.89</td></tr>
+<tr><td class="num">C</td><td>conduction = conductivity ÷ thickness = 10 ÷ 0.01</td><td class="num">1000 W/m²K</td></tr>
+<tr><td class="num">A</td><td>cell area</td><td class="num">0.003 m²</td></tr>
+<tr><td class="num">P<sub>sun</sub></td><td>sunlight flux at Earth</td><td class="num">1367 W/m²</td></tr>
+<tr><td class="num">σ</td><td>Stefan–Boltzmann constant (a fixed number of nature)</td><td class="num">5.670367×10⁻⁸</td></tr>
+<tr><td class="num">T<sub>space</sub></td><td>deep-space background temperature</td><td class="num">2.7 K</td></tr>
+</tbody></table>
+
+<div class="term"><span class="lbl">Kelvin vs Celsius — read this first</span> All the physics is done in <strong>kelvin (K)</strong>, which is just
+Celsius shifted: <span class="num">K = °C + 273.15</span>. Why? Because the glow law uses temperature to the 4th
+power, and that only works from <em>absolute zero</em> (−273.15 °C = 0 K), the coldest anything can be. So we compute
+in kelvin, then subtract 273.15 at the very end to report °C.</div>
+
+<div class="analogy"><span class="lbl">The one mental model</span> Every case below is a <strong>bathtub</strong>: heat pours in (sunlight, and for a
+failed cell, reverse-bias heat), heat drains out (the cell glowing to space). The temperature is the water
+level, and it settles where the tap rate equals the drain rate. All we ever do is find that level.</div>
+</section>
+
+<!-- ============================== 1 MASTER EQ -->
+<section class="page-break sec">
+<h2><span class="sec-num">1</span>The master equation: in = out</h2>
+<p class="lede">At steady state nothing is changing, so heat in must equal heat out. Writing that down <em>is</em> the
+whole solver. Let's build it in plain pieces.</p>
+
+<h3>Heat IN — what the cell absorbs</h3>
+<div class="formula">Q<sub>in</sub> = α<sub>F</sub> · A · P<sub>sun</sub> &nbsp;(+ any electrical heat if the cell is failed)
+<div class="where">front soaks up a fraction α<sub>F</sub> of the sunlight falling on its area A.</div></div>
+
+<h3>Heat OUT — what the cell glows away</h3>
+<div class="formula">Q<sub>out</sub> = ε · A · σ · T⁴
+<div class="where">a warm surface radiates at a rate set by its emissivity ε, its area A, the constant σ, and its
+temperature to the 4th power. (Section 6 unpacks the T⁴.)</div></div>
+
+<div class="deep"><span class="lbl">A useful simplification — and why it's allowed</span>
+The real model tracks the front and rear faces separately, joined by conduction C. But that conduction term
+is <strong>huge</strong> here (C·A = 1000 × 0.003 = 3 W per degree), so the two faces are dragged to almost the same
+temperature — they end up only ~0.66 °C apart. So for hand-work we may treat the cell as <strong>one
+temperature</strong> that glows from both faces at once. We add the two emissivities:
+<div class="formula" style="margin-top:.5em">Q<sub>out</sub> ≈ (ε<sub>F</sub> + ε<sub>R</sub>) · A · σ · T⁴ = k · T⁴,&nbsp;&nbsp; with&nbsp; k = (ε<sub>F</sub>+ε<sub>R</sub>)·A·σ</div>
+This "lumped" answer lands within about 1 °C of the exact two-node code — close enough to follow by hand, and
+Section 8 then shows where the last degree comes from.</div>
+
+<div class="worked"><span class="lbl">Compute the constant k once, reuse it forever</span>
+<div class="step">k = (ε<sub>F</sub> + ε<sub>R</sub>) · A · σ</div>
+<div class="step">= (0.90 + 0.89) × 0.003 × 5.670367×10⁻⁸</div>
+<div class="step">= 1.79 × 0.003 × 5.670367×10⁻⁸</div>
+<div class="step">= 1.79 × 1.7011×10⁻¹⁰</div>
+<div class="step" class="num"><strong>k = 3.0450×10⁻¹⁰</strong> &nbsp;(units: W/K⁴)</div>
+<div class="check">Check: it's a tiny number because σ is tiny — that's fine, it gets multiplied by T⁴ which is huge
+(T⁴ ≈ 10¹⁰). Tiny × huge = a sensible number of watts.</div></div>
+
+<div class="keyidea"><span class="lbl">The master equation we'll solve, three times</span>
+<span class="num">Q<sub>in</sub> = k · T⁴</span> &nbsp;→&nbsp; <span class="num">T = (Q<sub>in</sub> / k)<sup>1/4</sup></span>.
+The only thing that changes between cases is Q<sub>in</sub>. That's it.</div>
+</section>
+
+<!-- ============================== 2 CASE A -->
+<section class="page-break sec">
+<h2><span class="sec-num">2</span>Case A — the idle sunlit cell → 65 °C</h2>
+<p class="slow">A healthy cell in full sun that is <em>not</em> being asked for power yet. The only heat in is the sunlight.</p>
+
+<div class="worked"><span class="lbl">Worked, A to Z</span>
+<div class="step"><strong>Step 1 — heat in.</strong> Q<sub>in</sub> = α<sub>F</sub>·A·P<sub>sun</sub> = 0.970 × 0.003 × 1367.</div>
+<div class="step">First 0.003 × 1367 = 4.101. Then 0.970 × 4.101 = <span class="num"><strong>3.978 W</strong></span>. The cell soaks up 3.978 joules every second.</div>
+<div class="step"><strong>Step 2 — set in = out.</strong> 3.978 = k · T⁴ = 3.0450×10⁻¹⁰ · T⁴.</div>
+<div class="step"><strong>Step 3 — solve for T⁴.</strong> T⁴ = 3.978 ÷ 3.0450×10⁻¹⁰ = <span class="num">1.3064×10¹⁰</span>.</div>
+<div class="step"><strong>Step 4 — take the 4th root</strong> (that's two square roots in a row).</div>
+<div class="step">√(1.3064×10¹⁰) = 1.14298×10⁵. Then √(1.14298×10⁵) = <span class="num">338.08</span>. So T = 338.08 K.</div>
+<div class="step"><strong>Step 5 — back to Celsius.</strong> 338.08 − 273.15 = <span class="num"><strong>64.93 °C</strong></span>.</div>
+<div class="check">Code's exact two-node answer: <span class="num">front 65.26 °C, rear 64.60 °C</span> <span class="verifybadge">code ✓</span>.
+Our hand value 64.93 sits right between them — the lumped model gives the average of the two faces, as expected.</div></div>
+
+<div class="analogy"><span class="lbl">Why 65 °C and not boiling?</span> 3.978 W on a thumbnail-sized cell sounds small, and it is —
+so the cell only needs to be modestly warm to glow it all back out. The T⁴ drain is generous: by ~65 °C the
+glow already carries off all 3.978 W, so it stops warming there.</div>
+
+<div class="practice"><span class="lbl">Practice 1</span> Redo Step 1 if the sunlight were only 1000 W/m² (a dimmer orbit). What is Q<sub>in</sub>?
+(You don't need to finish the temperature.)
+<div class="answerspace lines-3"></div></div>
+</section>
+
+<!-- ============================== 3 CASE B -->
+<section class="page-break sec">
+<h2><span class="sec-num">3</span>Case B — a cell making power → 39 °C</h2>
+<p class="slow">Now the same cell is actually delivering electricity to the satellite — it <em>extracts</em> 1.1 W. Energy
+that leaves as electricity is energy that does <strong>not</strong> stay as heat, so less is left to glow off, so the cell
+runs <em>cooler</em>.</p>
+
+<div class="worked"><span class="lbl">Worked, A to Z</span>
+<div class="step"><strong>Step 1 — heat in, minus what leaves as electricity.</strong> The sun still puts in 3.978 W, but 1.1 W
+walks out as electrical power. Net heat to glow off = 3.978 − 1.1 = <span class="num">2.878 W</span>.</div>
+<div class="step"><strong>Step 2 — in = out.</strong> 2.878 = 3.0450×10⁻¹⁰ · T⁴.</div>
+<div class="step"><strong>Step 3.</strong> T⁴ = 2.878 ÷ 3.0450×10⁻¹⁰ = <span class="num">9.452×10⁹</span>.</div>
+<div class="step"><strong>Step 4.</strong> √(9.452×10⁹) = 97 221. √(97 221) = <span class="num">311.80</span> K.</div>
+<div class="step"><strong>Step 5.</strong> 311.80 − 273.15 = <span class="num"><strong>38.65 °C</strong></span>.</div>
+<div class="check">Code exact: <span class="num">38.89 °C</span> <span class="verifybadge">code ✓</span>. And it's cooler than the idle 65 °C — exactly as
+expected, because power that left as electricity isn't there to heat the cell.</div></div>
+
+<div class="deep"><span class="lbl">A surprising-but-true point</span> Pulling out just 1.1 W dropped the temperature from 65 °C to 39 °C —
+a big fall for a small power. Why so dramatic? Because of the T⁴ drain again: near 65 °C the cell is glowing
+hard, so removing even a little incoming heat lets the temperature drop a fair amount before the (weaker, cooler)
+glow re-balances. Small change in heat, noticeable change in temperature.</div>
+
+<div class="practice"><span class="lbl">Practice 2</span> Using the steps above, find the temperature if the cell extracts <strong>2.0 W</strong>
+instead of 1.1 W. (Net heat = 3.978 − 2.0.) Carry it to °C.
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ============================== 4 CASE C -->
+<section class="page-break sec">
+<h2><span class="sec-num">4</span>Case C — the reverse-bias hot-spot → 187 °C</h2>
+<p class="slow">The dangerous one. A failed cell is driven <em>backwards</em> by its neighbours and, instead of giving
+power, it <strong>absorbs</strong> 9.6 W of electrical power — all of which becomes heat, on top of the sunlight.</p>
+
+<div class="worked"><span class="lbl">Worked, A to Z</span>
+<div class="step"><strong>Step 1 — heat in, now bigger.</strong> Sun puts in 3.978 W, and the reverse-bias adds another 9.6 W of
+heat (extracted power is −9.6 W, and subtracting a negative <em>adds</em>): 3.978 − (−9.6) = 3.978 + 9.6 = <span class="num">13.578 W</span>.</div>
+<div class="step"><strong>Step 2 — in = out.</strong> 13.578 = 3.0450×10⁻¹⁰ · T⁴.</div>
+<div class="step"><strong>Step 3.</strong> T⁴ = 13.578 ÷ 3.0450×10⁻¹⁰ = <span class="num">4.459×10¹⁰</span>.</div>
+<div class="step"><strong>Step 4.</strong> √(4.459×10¹⁰) = 211 164. √(211 164) = <span class="num">459.53</span> K.</div>
+<div class="step"><strong>Step 5.</strong> 459.53 − 273.15 = <span class="num"><strong>186.38 °C</strong></span>.</div>
+<div class="check">Code exact: <span class="num">187.48 °C</span> <span class="verifybadge">code ✓</span>. This is the hot-spot the whole project worries about —
+hot enough to threaten the glue and the aluminium honeycomb underneath.</div></div>
+
+<div class="analogy"><span class="lbl">Why this melts and the others don't</span> Idle 65 °C, working 39 °C, failed 187 °C — same little cell,
+same sunlight. The difference is entirely the <strong>9.6 W of reverse heat</strong> dumped into a thumbnail of area. Big
+heat, tiny spot, no air to carry it away → a temperature that can cook the panel.</div>
+
+<div class="recap"><span class="lbl">Three cases, one equation</span>
+The <em>only</em> thing that changed across A, B, C was the heat in: 3.978 W (idle) → 2.878 W (working) → 13.578 W
+(failed). Feed each into <span class="num">T = (Q<sub>in</sub>/k)<sup>1/4</sup></span> and out come 65, 39, 187 °C.</div>
+</section>
+
+<!-- ============================== 5 ALL THREE + ARRAY -->
+<section class="page-break sec">
+<h2><span class="sec-num">5</span>All three on one graph + the vectorised array</h2>
+<p class="lede">Here is the master equation drawn. The navy curve is the glow (out); each dashed line is a case's
+heat-in. Where a dashed line meets the curve is that case's balance temperature.</p>
+
+<figure class="fig-frame"><img src="fig_ch6_balance.png" alt="balance graph">
+<figcaption>The T⁴ glow curve (navy) versus each case's constant heat-in (dashed). Crossing point = the
+temperature where in equals out. Idle 65 °C, working 39 °C, reverse-bias 187 °C — the three answers we just
+computed by hand, read straight off the graph.</figcaption></figure>
+
+<p class="slow">And here is what "vectorised" means in practice. The code solves <em>all four</em> cells of a little array
+in one shot — two healthy, one idle, one failed — and out come four temperatures together:</p>
+
+<figure class="fig-frame"><img src="fig_ch6_array.png" alt="four-cell array bars">
+<figcaption>One vectorised solve, four cells at once: healthy 38.89 °C, healthy 38.89 °C, idle 65.26 °C, failed
+187.48 °C <span class="verifybadge">code ✓</span>. Same three numbers we worked by hand, computed simultaneously rather than
+one-at-a-time.</figcaption></figure>
+
+<div class="deep"><span class="lbl">What the picture proves about vectorising</span> Notice each bar only needed <em>its own</em> heat-in to be
+solved — cell 4 didn't need cell 3's answer. Because the cells are independent like that, the computer can do
+all four (or four thousand) at the same time instead of looping. That independence is the whole reason the
+solver is fast. (When cells start sharing heat sideways — Chapter 4 — that independence breaks and the maths
+gets bigger.)</div>
+</section>
+
+<!-- ============================== 6 T4 LAW -->
+<section class="page-break sec">
+<h2><span class="sec-num">6</span>The T⁴ law, explained slowly</h2>
+<p class="lede">We've leaned on "glow ∝ T⁴" three times. It's worth understanding, because it's <em>why</em> the
+temperatures settle where they do instead of running away.</p>
+
+<div class="term"><span class="lbl">Stefan–Boltzmann law</span> Every warm object radiates heat as invisible infrared light. The rate it
+radiates grows with the <strong>fourth power</strong> of its absolute temperature (in kelvin): double the kelvin
+temperature and the glow goes up <span class="num">2⁴ = 16</span> times.</div>
+
+<figure class="fig-frame"><img src="fig_ch6_t4.png" alt="T to the fourth curve">
+<figcaption>The glow per square metre, σT⁴, against temperature. It starts gentle and then rears up steeply —
+that steepness is the cell's safety brake.</figcaption></figure>
+
+<div class="deep"><span class="lbl">Why "to the 4th power" makes the cell safe</span>
+Because the drain ramps up so steeply, a cell can shed a <em>lot</em> more heat with only a modest rise in
+temperature. When the reverse-bias dumped an extra 9.6 W, the cell didn't climb to thousands of degrees — it
+climbed to 187 °C, where the (now much stronger) glow already matches the bigger heat-in. The T⁴ is a
+self-tightening brake: the hotter it gets, the much-faster it sheds, so it always finds a finite balance.</div>
+
+<div class="analogy"><span class="lbl">Everyday version</span> A trickling drain (cool object) barely empties the tub. But this drain widens
+fast as the water rises — by the time the level is high, it's a gushing torrent. So the level can't run away;
+a little extra height unleashes a lot more draining. That "widens fast with height" is the T⁴.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · feel the 4th power</div>
+<div class="socratic"><div class="q">Q1. Glow ∝ T⁴. If kelvin temperature doubles, the glow multiplies by what?</div>
+<div class="answer">2⁴ = 16. Four factors of 2 multiplied together.</div></div>
+<div class="socratic"><div class="q">Q2. Our idle cell was 338 K, the hot-spot 460 K. Ratio of temperatures ≈ 1.36. Roughly how much more does the
+hot-spot glow?</div>
+<div class="answer">1.36⁴ ≈ 3.4 times more glow. So the hot-spot sheds about 3.4× the heat per second the idle cell does —
+which it must, because it's being fed about 3.4× the heat (13.6 W vs 3.98 W). It checks out.</div></div>
+<div class="socratic"><div class="q">Q3. Why must we use kelvin, not Celsius, in T⁴?</div>
+<div class="answer">Because the law counts heat from the true zero of temperature (absolute zero). Celsius has its zero at
+freezing water, an arbitrary point — raising 0 °C to the 4th power would give 0 glow, which is nonsense. Kelvin
+fixes that.</div></div>
+</div>
+</section>
+
+<!-- ============================== 7 NEWTON -->
+<section class="page-break sec">
+<h2><span class="sec-num">7</span>Newton's method — the full hand trace</h2>
+<p class="slow">Taking a 4th root with a calculator is easy. But the <em>real</em> equation (two faces, conduction)
+can't be rearranged into "T = …" at all, so the code doesn't take a root — it <strong>searches</strong> with Newton's
+method. Let's watch it solve the reverse-bias case from a cold start, every step by hand.</p>
+
+<p class="slow">We hunt for the T where the <strong>net heat</strong> is zero:</p>
+<div class="formula">f(T) = 13.578 − k·T⁴ &nbsp;(net heat, want = 0) &nbsp;&nbsp;|&nbsp;&nbsp; f′(T) = −4·k·T³ (its slope)
+<div class="where">Newton's rule: next T = T − f(T) ÷ f′(T). Start at 28 °C = 301.15 K.</div></div>
+
+<div class="worked"><span class="lbl">Iteration 0 — start cold at 301.15 K (28 °C)</span>
+<div class="step">T⁴ = 301.15⁴ = 8.225×10⁹. So f = 13.578 − 3.0450×10⁻¹⁰ × 8.225×10⁹ = 13.578 − 2.505 = <span class="num">+11.07 W</span> (way too much heat — too cold).</div>
+<div class="step">T³ = 301.15³ = 2.732×10⁷. Slope f′ = −4 × 3.0450×10⁻¹⁰ × 2.732×10⁷ = <span class="num">−0.0333</span>.</div>
+<div class="step">next T = 301.15 − (11.07 ÷ −0.0333) = 301.15 + 332.8 = <span class="num">634.0 K = 360.9 °C</span>.</div>
+<div class="check">It <em>overshot</em> way past the answer! That's expected here — read the note below.</div></div>
+
+<div class="deep"><span class="lbl">Why the first jump overshoots (a real, honest detail)</span>
+At a cold 28 °C the glow curve is nearly <em>flat</em> (the slope f′ is tiny, −0.033). Newton follows that shallow
+slope a long way before it predicts a zero-crossing, so it leaps past. No problem — from the next point the
+curve is steeper and it homes in fast. This is exactly why the code starts from a sensible 28 °C and still
+<em>always</em> converges within a few more steps.</div>
+
+<div class="worked"><span class="lbl">Iterations 1→5 (same arithmetic each time)</span>
+<table class="cases"><thead><tr><th>step</th><th>T (°C)</th><th>net heat f (W)</th></tr></thead><tbody>
+<tr><td>0</td><td class="num">28.00</td><td class="num">+11.073</td></tr>
+<tr><td>1</td><td class="num">360.88</td><td class="num">−35.629</td></tr>
+<tr><td>2</td><td class="num">246.11</td><td class="num">−8.560</td></tr>
+<tr><td>3</td><td class="num">195.92</td><td class="num">−1.163</td></tr>
+<tr><td>4</td><td class="num">186.67</td><td class="num">−0.034</td></tr>
+<tr><td>5</td><td class="num">186.38</td><td class="num">−0.00003</td></tr>
+</tbody></table>
+<div class="check">Settles on <span class="num">186.38 °C</span> — the same hand answer as Case C. The net heat collapses toward
+zero, and notice the accuracy roughly <em>doubling</em> near the end (−1.16 → −0.034 → −0.00003).</div></div>
+
+<figure class="fig-frame"><img src="fig_ch6_newton.png" alt="newton steps on f(T)">
+<figcaption>The net-heat curve f(T). Each amber dot is a guess; Newton follows the slope to the red zero-line.
+The first cold guess sits on the flat left tail — hence the big first leap.</figcaption></figure>
+
+<figure class="fig-frame"><img src="fig_ch6_newtonconv.png" alt="newton convergence">
+<figcaption>The same run as temperature-versus-step: a big overshoot, then a fast settle onto 186 °C.</figcaption></figure>
+
+<div class="practice"><span class="lbl">Practice 3</span> At iteration 3 the guess is 195.92 °C with net heat −1.163 W. The slope there is
+f′ ≈ −0.1257. Compute Newton's next guess (in °C). (next = 195.92 − f/f′, but careful: f and f′ are evaluated in
+kelvin terms — here just use next = 195.92 − (−1.163)/(−0.1257) to get the °C step.)
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ============================== 8 TWO NODE -->
+<section class="page-break sec">
+<h2><span class="sec-num">8</span>Two temperatures — front vs rear, and the 2×2</h2>
+<p class="slow">Our hand method used one temperature. The code uses two — a front and a rear — because the sunlit
+front really is a touch hotter than the shaded rear. Here's where that last fraction of a degree lives.</p>
+
+<div class="formula">f<sub>1</sub> = Q<sub>front</sub> − ε<sub>F</sub>·A·σ·(T₁⁴ − T<sub>sp</sub>⁴) − P<sub>elec</sub> + C·A·(T₂ − T₁) = 0
+<div class="where">front balance: sun in, front glow out, electricity out, and heat <em>conducted</em> to the rear.</div></div>
+<div class="formula">f<sub>2</sub> = Q<sub>rear</sub> − ε<sub>R</sub>·A·σ·(T₂⁴ − T<sub>sp</sub>⁴) − C·A·(T₂ − T₁) = 0
+<div class="where">rear balance: (here no rear sun) rear glow out, and the same conducted heat arriving from the front.</div></div>
+
+<div class="deep"><span class="lbl">Why the front ends up hotter — and only just</span>
+All the sunlight lands on the front, so the front would love to be hotter. But the conduction term
+C·A·(T₂−T₁), with C·A = 3 W per degree, is a fat pipe shovelling that heat to the rear almost as fast as it
+arrives. The result: front 65.26 °C, rear 64.60 °C — a gap of only <span class="num">0.66 °C</span>. The fat pipe nearly
+ties them together, which is exactly why our one-temperature hand method (64.93 °C, the average) was so close.</div>
+
+<div class="deep"><span class="lbl">What the "2×2 Jacobian" is, in plain words</span>
+With two unknowns (T₁, T₂) and two equations (f₁, f₂), Newton needs the <em>slopes</em> — but now there are four of
+them: how f₁ changes with T₁, with T₂, and how f₂ changes with T₁, with T₂. Arrange those four slopes in a
+little 2-by-2 box and you have the <strong>Jacobian</strong> — just "the slope, but for two equations at once." The code
+inverts that tiny box with the schoolbook formula for a 2×2 and takes the Newton step. Same idea as Section 7,
+one dimension richer.</div>
+
+<div class="formula">Jacobian = [ a&nbsp; b ; c&nbsp; d ],&nbsp; a = −4ε<sub>F</sub>Aσ T₁³ − CA,&nbsp; b = c = +CA,&nbsp; d = −4ε<sub>R</sub>Aσ T₂³ − CA
+<div class="where">a, d are each face's own glow-slope plus the shared conduction; b, c are the conduction link
+between them. Invert, step, repeat — converged in 5–7 steps.</div></div>
+
+<div class="analogy"><span class="lbl">Picture the 2×2</span> Two bathtubs (front, rear) joined by a fat pipe. To predict both levels you can't
+treat one tub alone — pushing the front level changes the rear through the pipe. The 2×2 box is just the
+bookkeeping of "if I nudge this tub, how do both tubs respond," which is what you need to correct both guesses
+together.</div>
+</section>
+
+<!-- ============================== 9 BOUNCE -->
+<section class="page-break sec">
+<h2><span class="sec-num">9</span>The electro-thermal bounce — worked rounds</h2>
+<p class="slow">Everything so far assumed we already knew the heat in. But a cell's electricity depends on its
+temperature, and its temperature depends on its electricity — the chicken-and-egg from Chapter 5. Here we work
+the loop with numbers. Take a partly-shaded cell whose dissipated heat grows a little as it warms:
+<span class="num">P<sub>elec</sub>(T) = −(8 + 0.02·(T − 50))</span> W (negative = heat in).</p>
+
+<div class="worked"><span class="lbl">Round 0 — start at 28 °C</span>
+<div class="step"><strong>Electricity at 28 °C:</strong> P<sub>elec</sub> = −(8 + 0.02·(28 − 50)) = −(8 − 0.44) = <span class="num">−7.56 W</span>.</div>
+<div class="step"><strong>Thermal solve with that heat:</strong> net in = 3.978 + 7.56 = 11.538 W → T⁴ = 11.538/k = 3.789×10¹⁰ → T = 441.2 K = <span class="num">168.0 °C</span>.</div>
+<div class="step"><strong>Damped step (ω = 0.5):</strong> don't jump all the way; move halfway. new T = 28 + 0.5·(168.0 − 28) = 28 + 70 = <span class="num">98.0 °C</span>.</div></div>
+
+<div class="worked"><span class="lbl">Round 1 — now at 98.5 °C</span>
+<div class="step"><strong>Electricity at 98.5 °C:</strong> P<sub>elec</sub> = −(8 + 0.02·(98.5 − 50)) = −(8 + 0.97) = <span class="num">−8.97 W</span>.</div>
+<div class="step"><strong>Thermal solve:</strong> net in = 3.978 + 8.97 = 12.95 W → T = 454.1 K = <span class="num">181.0 °C</span>.</div>
+<div class="step"><strong>Damped step:</strong> new T = 98.5 + 0.5·(181.0 − 98.5) = <span class="num">139.8 °C</span>.</div>
+<div class="check">Keep going and it climbs 28 → 98 → 140 → 165 → … and settles at <span class="num">198.8 °C</span> <span class="verifybadge">code ✓</span>,
+where the temperature you put in is the temperature you get out — the two models finally agree.</div></div>
+
+<figure class="fig-frame"><img src="fig_ch6_bounce.png" alt="coupling bounce">
+<figcaption>The bounce climbing to its self-consistent 198.8 °C. Teal = damped (ω = 0.5), a calm, sure climb.
+Red = full jumps (ω = 1): faster here, but bigger leaps that in stiffer cases can overshoot — which is why the
+code damps by default, trading a little speed for stability.</figcaption></figure>
+
+<div class="deep"><span class="lbl">What "damping" (ω) buys you</span> Each round we step only a fraction ω of the way to the new
+temperature. With ω = 0.5 we move halfway. It's like nudging a stiff shower tap gently instead of slamming it:
+a few more nudges, but no wild hot–cold swings. In easy cases full jumps also work; the gentle step is
+insurance for the hard ones.</div>
+
+<div class="practice"><span class="lbl">Practice 4</span> Do Round 2 of the bounce. Start from T = 139.8 °C. (a) Find P<sub>elec</sub> from the formula.
+(b) The thermal solve at that heat gives about 189 °C — take the damped half-step to get the next T.
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ============================== 10 BREAKDOWN -->
+<section class="page-break sec">
+<h2><span class="sec-num">10</span>The breakdown (melt) check</h2>
+<p class="slow">Once we have a temperature, one last easy check decides "safe" or "destroyed". Two rules; if
+<em>either</em> trips, the cell is flagged dead.</p>
+
+<div class="formula">Rule 1 (heat): &nbsp;T<sub>front</sub> ≥ T<sub>limit</sub> &nbsp;&nbsp;|&nbsp;&nbsp; Rule 2 (electrical): &nbsp;V &lt; 0 <strong>and</strong> |V·I| ≥ P<sub>rev-limit</sub>
+<div class="where">Use T<sub>limit</sub> = 150 °C and P<sub>rev-limit</sub> = 2 W for this example.</div></div>
+
+<div class="worked"><span class="lbl">Cell 1 — the idle cell (65.26 °C, V = +2.3 V, I = 0.48 A)</span>
+<div class="step">Rule 1: 65.26 ≥ 150? <strong>No.</strong></div>
+<div class="step">Rule 2: V = +2.3 is not negative, so reverse power = 0 W; 0 ≥ 2? <strong>No.</strong></div>
+<div class="step"><strong>Verdict: SURVIVES.</strong></div></div>
+
+<div class="worked"><span class="lbl">Cell 2 — the hot-spot (187.48 °C, V = −20 V, I = 0.48 A)</span>
+<div class="step">Rule 1: 187.48 ≥ 150? <strong>Yes.</strong> (already destroyed on heat alone)</div>
+<div class="step">Rule 2: V = −20 is negative; |V·I| = |−20 × 0.48| = 9.6 W; 9.6 ≥ 2? <strong>Yes.</strong></div>
+<div class="step"><strong>Verdict: DESTROYED</strong> — and both rules agree. <span class="verifybadge">code ✓</span></div></div>
+
+<div class="analogy"><span class="lbl">Why two rules, not one</span> Heat catches the slow cooking; reverse-power catches a violent
+electrical stress that could crack a cell even before it fully heats. Checking both means a failure that one
+rule misses, the other still catches.</div>
+</section>
+
+<!-- ============================== 11 FLUXES -->
+<section class="page-break sec">
+<h2><span class="sec-num">11</span>The orbit fluxes — sun, albedo, IR, tilt</h2>
+<p class="slow">In orbit the "heat in" isn't only direct sun. Three streams arrive, and the panel's angle scales
+them. All four are one-line calculations.</p>
+
+<div class="worked"><span class="lbl">Direct sun — the inverse-square law</span>
+<div class="step">At Earth (1 AU): P<sub>sun</sub> = <span class="num">1367 W/m²</span> <span class="verifybadge">code ✓</span>.</div>
+<div class="step">At Mars (1.52 AU), sunlight thins as 1/distance²: 1367 ÷ 1.52² = 1367 ÷ 2.3104 = <span class="num">591.7 W/m²</span> <span class="verifybadge">code ✓</span>.</div>
+<div class="check">Farther from the sun → weaker sun. Mars gets under half of Earth's sunlight.</div></div>
+
+<div class="worked"><span class="lbl">Albedo — sunlight bounced off the planet</span>
+<div class="step">albedo flux = (bond albedo) × (sun at planet) × (view factor) = 0.25 × 591 × 0.3.</div>
+<div class="step">= 0.25 × 591 = 147.75; × 0.3 = <span class="num">44.33 W/m²</span> <span class="verifybadge">code ✓</span>.</div></div>
+
+<div class="worked"><span class="lbl">Planetary infrared — the planet's own glow</span>
+<div class="step">IR = ε · σ · T<sub>planet</sub>⁴ · (view factor), with Earth ≈ 255 K, ε = 1, view = 0.3.</div>
+<div class="step">255⁴ = 4.228×10⁹. × 5.670367×10⁻⁸ = 239.8 W/m². × 0.3 = <span class="num">71.93 W/m²</span> <span class="verifybadge">code ✓</span>.</div>
+<div class="check">Notice this uses the same σT⁴ glow law from Section 6 — the planet is just a big warm body glowing at us.</div></div>
+
+<div class="worked"><span class="lbl">Tilt — the cosine rule</span>
+<div class="step">A panel tilted 30° from facing the sun catches cos(30°) of the beam = <span class="num">0.866</span> <span class="verifybadge">code ✓</span>.</div>
+<div class="check">Face-on (0°) → cos 0 = 1 (full). Edge-on (90°) → cos 90 = 0 (nothing). 30° keeps about 87%.</div></div>
+
+<div class="practice"><span class="lbl">Practice 5</span> (a) What is the direct sun flux at 2 AU? (b) A panel tilted 60° — what fraction of the
+beam does it catch? (cos 60° = 0.5.)
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ============================== 12 MONTE CARLO -->
+<section class="page-break sec">
+<h2><span class="sec-num">12</span>Monte-Carlo — the run-count maths</h2>
+<p class="slow">We can't test every possible failure, so we sample many random ones. Two small calculations tell us
+how trustworthy a batch of runs is, and how many we need.</p>
+
+<div class="worked"><span class="lbl">Standard error — the "wobble" of an average</span>
+<div class="step">Take two results, 0 and 2. Their average = 1.</div>
+<div class="step">Spread (sample variance) = [(0−1)² + (2−1)²] ÷ (2−1) = (1 + 1) ÷ 1 = 2. So standard deviation = √2 ≈ 1.414.</div>
+<div class="step">Standard error = std ÷ √N = 1.414 ÷ √2 = <span class="num">1.0</span> <span class="verifybadge">code ✓</span>.</div>
+<div class="check">Standard error is "how much the <em>average</em> would wobble if you reran the whole batch." More runs → smaller wobble.</div></div>
+
+<div class="worked"><span class="lbl">How many runs do we need?</span>
+<div class="step">Suppose 100 runs give a wobble of 8 °C, and we want it down to 2 °C.</div>
+<div class="step">Accuracy improves like 1/√N, so to get 4× tighter (8 → 2) we need 4² = 16× the runs.</div>
+<div class="step">16 × 100 = <span class="num">1600 runs</span> <span class="verifybadge">code ✓</span>.</div></div>
+
+<figure class="fig-frame"><img src="fig_ch6_mc.png" alt="1 over root N">
+<figcaption>The wobble shrinks like 1/√N. To halve it you need 4× the runs; to reach the 2 °C target from an
+8 °C-at-100-runs start takes N = 1600. Diminishing returns — which is why we compute the needed N instead of
+running forever.</figcaption></figure>
+
+<div class="analogy"><span class="lbl">Everyday version</span> Polling a city: ask 100 people and your estimate jitters; ask 1600 and it
+steadies. But to keep halving the jitter you must keep <em>quadrupling</em> the sample. At some point "good enough"
+beats "perfect but endless."</div>
+</section>
+
+<!-- ============================== RECAP -->
+<section class="page-break sec">
+<h2>The one equation behind all of it</h2>
+<div class="recap"><span class="lbl">Everything you worked, in one line</span>
+<p class="slow" style="margin:.4em 0">Find the temperature where <strong>heat in = heat out</strong>:
+<span class="num">Q<sub>in</sub> = k·T⁴</span>.</p>
+<p class="slow" style="margin:.4em 0">• Change Q<sub>in</sub> (sun, ± electricity, reverse-bias) → get 65, 39, 187 °C.</p>
+<p class="slow" style="margin:.4em 0">• Can't take a clean root (two faces) → <strong>Newton</strong> searches it (Section 7).</p>
+<p class="slow" style="margin:.4em 0">• Electricity and temperature each need the other → <strong>bounce</strong> until they agree (Section 9).</p>
+<p class="slow" style="margin:.4em 0">• Then a melt check, the orbit fluxes feeding Q<sub>in</sub>, and Monte-Carlo to repeat it for many failures.</p></div>
+
+<div class="keyidea"><span class="lbl">Why the hand answers were a touch off</span> The lumped one-temperature method gave 64.93 / 38.65 /
+186.38; the code's two-node solver gave 65.26 / 38.89 / 187.48. The ~1 °C gap is the small front–rear split
+(Section 8). The <em>physics and the method are identical</em> — the hand version just averages the two faces into
+one.</div>
+</section>
+
+<!-- ============================== GLOSSARY -->
+<section class="page-break sec">
+<h2>Glossary</h2>
+<div class="glossary">
+<div class="glossary-entry"><span class="gt">Absorptivity (α)</span> Fraction of incoming sunlight a surface soaks up (0–1).</div>
+<div class="glossary-entry"><span class="gt">Albedo flux</span> Sunlight reflected off the planet onto the array = albedo × sun × view-factor.</div>
+<div class="glossary-entry"><span class="gt">Conduction (C)</span> Heat seeping through the panel = conductivity ÷ thickness; here C·A = 3 W/°C.</div>
+<div class="glossary-entry"><span class="gt">Emissivity (ε)</span> How good a surface is at glowing heat away (0–1).</div>
+<div class="glossary-entry"><span class="gt">Flux</span> Energy per second per square metre arriving on a surface (W/m²).</div>
+<div class="glossary-entry"><span class="gt">Jacobian (2×2)</span> The four slopes of two equations in two unknowns — Newton's "slope" in two dimensions.</div>
+<div class="glossary-entry"><span class="gt">Kelvin (K)</span> Absolute temperature = °C + 273.15; required for the T⁴ law.</div>
+<div class="glossary-entry"><span class="gt">Lumped model</span> Treating the cell as one temperature (front+rear averaged); the hand shortcut.</div>
+<div class="glossary-entry"><span class="gt">Newton–Raphson</span> Root-finder: next T = T − f(T)/f′(T); follows the slope to where net heat = 0.</div>
+<div class="glossary-entry"><span class="gt">Q<sub>in</sub></span> Total heat into the cell per second (sun ± electrical).</div>
+<div class="glossary-entry"><span class="gt">Reverse bias</span> A failed cell driven backwards; absorbs electrical power as heat (P<sub>elec</sub> &lt; 0).</div>
+<div class="glossary-entry"><span class="gt">Standard error</span> How much a Monte-Carlo average would wobble; = std ÷ √N.</div>
+<div class="glossary-entry"><span class="gt">Stefan–Boltzmann (σ)</span> Constant in the glow law; σ = 5.670367×10⁻⁸ W/m²K⁴.</div>
+<div class="glossary-entry"><span class="gt">T⁴ law</span> Radiated heat rises with the 4th power of absolute temperature.</div>
+<div class="glossary-entry"><span class="gt">Under-relaxation (ω)</span> Stepping only a fraction ω toward each new guess so the loop settles calmly.</div>
+<div class="glossary-entry"><span class="gt">Vectorised</span> Solving all cells' equations at once with numpy instead of a per-cell loop.</div>
+</div>
+</section>
+
+<!-- ============================== SOLUTIONS -->
+<section class="solutions">
+<h2>Worked Solutions</h2>
+<div class="soln"><span class="sid">Solution 1.</span> Q<sub>in</sub> = α<sub>F</sub>·A·P<sub>sun</sub> = 0.970 × 0.003 × 1000 = 0.970 × 3.0 =
+<strong>2.91 W</strong>. (Less sun → less heat in → a cooler cell.)</div>
+
+<div class="soln"><span class="sid">Solution 2.</span> Net heat = 3.978 − 2.0 = 1.978 W. T⁴ = 1.978 ÷ 3.0450×10⁻¹⁰ = 6.496×10⁹.
+√(6.496×10⁹) = 80 599; √(80 599) = 283.9 K. 283.9 − 273.15 = <strong>10.7 °C</strong> (code exact: 10.91 °C). Extracting
+2 W cools it even more than 1.1 W did — more power leaving means less heat staying.</div>
+
+<div class="soln"><span class="sid">Solution 3.</span> next = 195.92 − (−1.163)/(−0.1257) = 195.92 − 9.25 = <strong>186.67 °C</strong> — matching the
+iteration-4 value in the table.</div>
+
+<div class="soln"><span class="sid">Solution 4.</span> (a) P<sub>elec</sub> = −(8 + 0.02·(139.8 − 50)) = −(8 + 1.796) = <strong>−9.80 W</strong>.
+(b) damped step: new T = 139.8 + 0.5·(189 − 139.8) = 139.8 + 24.6 = <strong>164.4 °C</strong> (matches the ~164.7 in the
+bounce trace). It's still climbing toward the settled 198.8 °C.</div>
+
+<div class="soln"><span class="sid">Solution 5.</span> (a) 1367 ÷ 2² = 1367 ÷ 4 = <strong>341.75 W/m²</strong>. (b) cos 60° = 0.5, so it catches
+<strong>half (50%)</strong> of the beam.</div>
+</section>
+
+</body></html>

@@ -1,0 +1,95 @@
+<!-- ===================================================================
+     SECTION 1 — Worked solutions to the practice questions
+     PowerPy study notes · solutions fragment
+     IDs match _frag_P1.html: P1-1, P1-2, P1-3
+     =================================================================== -->
+
+<div class="soln"><span class="sid">P1-1.</span>
+Cell quoted as <var>I</var><sub>sc</sub> = 0.52&nbsp;A,
+<var>V</var><sub>oc</sub> = 2.70&nbsp;V, <var>V</var><sub>mp</sub> = 2.30&nbsp;V,
+<var>I</var><sub>mp</sub> = 0.50&nbsp;A.
+<br><br>
+<strong>(a) Coordinates of the MPP.</strong> The Maximum Power Point is, by
+definition, located at (<var>V</var><sub>mp</sub>,&nbsp;<var>I</var><sub>mp</sub>).
+So the MPP is at <strong>(2.30&nbsp;V, 0.50&nbsp;A)</strong>. (Remember the MPP is a
+<em>point</em> — a voltage paired with a current — not a number of watts.)
+<br><br>
+<strong>(b) Maximum power.</strong>
+<var>P</var><sub>mp</sub> = <var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub>
+= 2.30&nbsp;V × 0.50&nbsp;A = <strong>1.15&nbsp;W</strong> (volts × amps = watts).
+<br>
+<em>Sanity check:</em> the ideal rectangle here is
+<var>V</var><sub>oc</sub>·<var>I</var><sub>sc</sub> = 2.70 × 0.52 = 1.404&nbsp;W,
+and 1.15&nbsp;W is a bit below that, as the real maximum power always must be —
+consistent.
+<br><br>
+<strong>(c) Defining conditions.</strong>
+<var>I</var><sub>sc</sub> is the current measured when the terminals are shorted
+together so the <strong>voltage is zero (V = 0)</strong>.
+<var>V</var><sub>oc</sub> is the voltage measured when nothing is connected so
+that <strong>no current flows (I = 0)</strong>. (One is "all current, no voltage";
+the other is "all voltage, no current".)
+</div>
+
+<div class="soln"><span class="sid">P1-2.</span>
+Same reference cell, but a flaw rounds the knee to a new operating point
+<var>V</var><sub>mp</sub> = 2.20&nbsp;V, <var>I</var><sub>mp</sub> = 0.45&nbsp;A,
+with <var>V</var><sub>oc</sub> = 2.67&nbsp;V and <var>I</var><sub>sc</sub> =
+0.50&nbsp;A unchanged.
+<br><br>
+<strong>(a) New maximum power.</strong>
+<var>P</var><sub>mp</sub> = <var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub>
+= 2.20&nbsp;V × 0.45&nbsp;A = <strong>0.99&nbsp;W</strong>.
+That is down from the healthy cell's 1.128&nbsp;W — the rounded knee costs about
+0.14&nbsp;W per cell.
+<br><br>
+<strong>(b) New Fill Factor.</strong> The ideal rectangle is unchanged because
+<var>V</var><sub>oc</sub> and <var>I</var><sub>sc</sub> are unchanged:
+<var>V</var><sub>oc</sub>·<var>I</var><sub>sc</sub> = 2.67 × 0.50 = 1.335&nbsp;W.
+So
+<br>
+FF = <var>P</var><sub>mp</sub> / (<var>V</var><sub>oc</sub>·<var>I</var><sub>sc</sub>)
+= 0.99&nbsp;W / 1.335&nbsp;W = <strong>0.742</strong> (≈ 0.74).
+<br>
+<em>Sanity check:</em> still between 0 and 1, unit-less, and lower than the healthy
+0.845 — exactly what a more rounded (less square) curve should give.
+<br><br>
+<strong>(c) Why a higher Fill Factor is better (one line).</strong> A higher FF
+means the cell's actual power sits closer to the ideal
+<var>V</var><sub>oc</sub>·<var>I</var><sub>sc</sub> rectangle, so you get more watts
+out of the <em>same</em> <var>V</var><sub>oc</sub> and <var>I</var><sub>sc</sub> —
+more power per cell, hence fewer/lighter cells to launch for the required power.
+</div>
+
+<div class="soln"><span class="sid">P1-3.</span>
+<span class="badge api">cell.calcQuad()</span> returned
+<code>{isc: 0.50, voc: 2.67, vmp: 2.35, imp: 0.48, pmp: 1.13}</code>.
+<br><br>
+<strong>(a) Which are the four numbers, which is derived?</strong> The
+<em>four measured numbers</em> are <code>isc</code>, <code>voc</code>,
+<code>vmp</code> and <code>imp</code> (= <var>I</var><sub>sc</sub>,
+<var>V</var><sub>oc</sub>, <var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>).
+The fifth entry, <code>pmp</code>, is <strong>derived</strong>: it is just
+<var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub> = 2.35 × 0.48 ≈ 1.13&nbsp;W,
+handed to you for convenience. (The MPP and FF are likewise derived, not measured.)
+<br><br>
+<strong>(b) Fill Factor from the bundle.</strong>
+<br>
+<var>P</var><sub>mp</sub> = 1.13&nbsp;W (given, = 2.35 × 0.48).
+<br>
+Ideal rectangle = <var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub>
+= 2.67 × 0.50 = 1.335&nbsp;W.
+<br>
+FF = 1.13 / 1.335 = <strong>0.846</strong> (≈ 0.85, matching the 0.845 we found
+from the raw values — the tiny difference is just the rounding of
+<var>P</var><sub>mp</sub> to 1.13). Unit-less and inside 0–1: good.
+<br><br>
+<strong>(c) Current at exactly V = 1.5&nbsp;V — which call?</strong> Reach for
+<span class="badge api">cell.calcIVCurve(step)</span>. <code>calcQuad()</code> only
+gives the summary landmarks (the four numbers + <var>P</var><sub>mp</sub>); it does
+<em>not</em> tell you the current at an arbitrary voltage like 1.5&nbsp;V. The IV
+<em>table</em> from <code>calcIVCurve(step)</code> lists (<var>V</var>,&nbsp;<var>I</var>)
+points all along the curve, so you can read off (or interpolate) the current at
+1.5&nbsp;V. (Choosing a smaller <code>step</code> gives points spaced more finely,
+so a value near 1.5&nbsp;V is easier to read directly.)
+</div>

@@ -1,0 +1,222 @@
+<h3><span class="sec-num">6</span> Reverse bias, hot-spots, and why a failed cell can melt the panel</h3>
+
+<p class="lede">Here is the most counter-intuitive fact in the whole study of solar arrays: when one cell in a string <em>dies</em>, the danger is not that it stops working — it is that the circuit <strong>forces it to keep carrying current it can no longer make</strong>. To do that, the dead cell turns itself into a tiny electric heater, and the energy for that heater is donated by every healthy cell around it. A single failed cell can become the hottest point on the entire panel — hot enough, unprotected, to scorch the silicon and even soften the aluminium it is glued to. This section builds that failure from first principles, shows the one component that tames it (the bypass diode), and explains why predicting "which failures melt, and which layouts survive" is precisely the job PowerPy's new failure-sweep machinery exists to do.</p>
+
+<div class="keyidea">
+<span class="lbl">Key idea</span>
+In a <strong>series</strong> string, every cell is forced to pass the <em>same</em> current (Section 5's rule). If one cell can no longer <em>generate</em> that current, it does not politely drop out — the others <em>push the current through it anyway</em>. The only way a non-generating cell can carry current is to go to <strong>negative voltage</strong>: it flips from being a battery to being a resistor-like <em>load</em>, and the electrical power it now absorbs comes out as <strong>heat</strong>. That heat is the failure we are trying to predict.</p>
+</div>
+
+<h4>6.1 Setup recap — the iron rule of a series string</h4>
+
+<p>Section 5 established the rule we lean on for the entire section, so hold it firmly in mind: <strong>in a series string the current is common to every cell</strong>. You cannot have 0.48&nbsp;A flowing in one cell of a string and 0.20&nbsp;A in its neighbour — they are wired end-to-end, so the <em>same</em> charge per second must pass through all of them, like cars on a single-lane road. Each cell is free to sit at its own <em>voltage</em>, and the string's total voltage is the sum of the cell voltages; but the <em>current</em> is shared and identical. (Forward reference: Section 5 derived this from how series connections add. We take it as given here.)</p>
+
+<p>That one rule is the seed of the entire failure mechanism. Everything below is just following it to its uncomfortable conclusion.</p>
+
+<h4>6.2 The failure, one step at a time</h4>
+
+<p>Let us walk a single cell from "healthy" to "dangerous," one link in the chain at a time. Picture a string of healthy cells with one cell in the middle that has just cracked, been shadowed, or otherwise failed.</p>
+
+<div class="worked">
+<span class="lbl">The mechanism — step by step</span>
+<div class="step"><strong>1. A cell stops generating.</strong> One cell is shadowed, micro-cracked, or simply degraded past use. It can no longer <em>photo-generate</em> the current the string is running at. On its own it would like to pass only a trickle.</div>
+<div class="step"><strong>2. But the current still has to flow through it.</strong> The other healthy cells in the string — <em>and</em> any parallel strings sharing the same bus — keep generating and keep pushing their current. Because the string is series (the rule of §6.1), that current has nowhere else to go: it must pass <em>through the bad cell</em>.</div>
+<div class="step"><strong>3. So the bad cell is driven to NEGATIVE voltage.</strong> To carry a current it cannot produce from light, the cell is forced to the only state that lets the current through: its voltage goes <em>below zero</em>. It stops acting as a generator (which would <em>push</em> current out) and starts acting as a <strong>load</strong> (which <em>absorbs</em> energy). This back-to-front operating state is called <span class="term">reverse bias</span> — the cell is said to be <em>back-biased</em>.</div>
+<div class="step"><strong>4. Pushed hard enough, it reaches reverse breakdown.</strong> A cell can only hold off so much reverse voltage. Past a certain point — its <span class="term">reverse breakdown voltage</span>, around <strong>−20&nbsp;V</strong> for these cells (the figure on the design sketch) — the junction gives way and conducts heavily in reverse.</div>
+<div class="step"><strong>5. Negative voltage × current = power turned to HEAT.</strong> Electrical power is P&nbsp;=&nbsp;V·I. When V is <em>negative</em>, the product is the power the cell <em>absorbs</em> rather than delivers — it dissipates |V|·I as <strong>heat</strong>. A small region forced to swallow the electrical output of many other cells is a <span class="term">hot-spot</span>.</div>
+<div class="step"><strong>6. The heat raises the local temperature — possibly past what the panel can survive.</strong> All that power is dumped into one ~30&nbsp;cm² patch. Its temperature climbs. If it exceeds the limit of the panel <span class="term">substrate</span> — here an <span class="term">aluminium honeycomb</span> core — it can permanently break down the cell or even <em>soften and melt the aluminium</em>. That destructive outcome is the event we want to predict and design against.</div>
+<div class="check">Read the chain as one sentence: <em>series forces equal current → the dead cell must carry it → carrying it without generating means going negative → negative voltage times current is heat → concentrated heat can melt the substrate.</em> Each arrow is forced by the one before it; nowhere did the cell "get a choice." ✓</div>
+</div>
+
+<div class="term">
+<span class="lbl">Term — reverse bias (back-biased)</span>
+<p><strong>Reverse bias</strong> means a component is operated with its voltage the "wrong way round" compared to how it normally delivers power. A solar cell normally sits at <em>positive</em> voltage and pushes current <em>out</em> (it is a source). A reverse-biased cell sits at <em>negative</em> voltage while current is pushed <em>into</em> it (it is a sink). Plainly: a back-biased cell has stopped being a battery and become a heater. The deeper the negative voltage, the more power it absorbs.</p>
+</div>
+
+<div class="term">
+<span class="lbl">Term — hot-spot <span class="badge hot">EXAM-HOT</span></span>
+<p>A <strong>hot-spot</strong> is a small region of a panel that is forced to absorb the electrical power of many other cells and dissipate it as heat, so its local temperature rises far above the rest of the array. It is created when a back-biased cell (or a small shaded patch) becomes the load for a whole string — or worse, for several parallel strings at once.</p>
+</div>
+
+<div class="term">
+<span class="lbl">Term — substrate / aluminium honeycomb core</span>
+<p>The <strong>substrate</strong> is the structural panel the cells are mounted on. On a spacecraft it is typically an <strong>aluminium honeycomb core</strong>: a lightweight sandwich of two thin aluminium (or composite) face-sheets bonded either side of a hexagonal-cell aluminium "honeycomb," like a stiff, ultra-light cardboard. It is wonderfully strong-for-its-weight but it is still <em>aluminium</em> — it has a temperature limit, and a hot-spot that exceeds it can soften or melt the core, wrecking the panel's structure as well as the cell.</p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 210" xmlns="http://www.w3.org/2000/svg" font-size="10.5">
+<style>.w{stroke:#1d2733;stroke-width:1.6;fill:none} .cell{fill:#cfe0ef;stroke:#0b3d63} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<line class="w" x1="40" y1="30" x2="430" y2="30"/><line class="w" x1="40" y1="180" x2="430" y2="180"/>
+<rect class="cell" x="70" y="60" width="50" height="36"/><line class="w" x1="95" y1="30" x2="95" y2="60"/><line class="w" x1="95" y1="96" x2="95" y2="180"/><rect class="cell" x="140" y="60" width="50" height="36"/><line class="w" x1="165" y1="30" x2="165" y2="60"/><line class="w" x1="165" y1="96" x2="165" y2="180"/><rect class="cell" x="280" y="60" width="50" height="36"/><line class="w" x1="305" y1="30" x2="305" y2="60"/><line class="w" x1="305" y1="96" x2="305" y2="180"/><rect class="cell" x="350" y="60" width="50" height="36"/><line class="w" x1="375" y1="30" x2="375" y2="60"/><line class="w" x1="375" y1="96" x2="375" y2="180"/>
+<rect x="280" y="60" width="50" height="36" fill="#fbe3df" stroke="#9a3b3b" stroke-width="2"/><text class="tx" x="305" y="82" text-anchor="middle" fill="#9a3b3b" font-size="9">FAILED</text>
+<line class="w" x1="305" y1="30" x2="305" y2="60"/><line class="w" x1="305" y1="96" x2="305" y2="180"/>
+<text class="tx" x="305" y="112" text-anchor="middle" fill="#9a3b3b" font-size="9">reverse −V → heat</text>
+<!-- bypass across failed -->
+<polygon points="356,70 356,86 344,78" fill="#fff" stroke="#1f6a6a" stroke-width="1.6"/><line stroke="#1f6a6a" stroke-width="1.6" x1="350" y1="60" x2="350" y2="70"/><line stroke="#1f6a6a" stroke-width="1.6" x1="350" y1="86" x2="350" y2="96"/><line stroke="#1f6a6a" x1="330" y1="60" x2="350" y2="60"/><line stroke="#1f6a6a" x1="330" y1="96" x2="350" y2="96"/>
+<text class="tx" x="360" y="82" fill="#1f6a6a" font-size="9">bypass clamps</text>
+<polygon points="120,22 112,18 112,26" fill="#b9851a"/><polygon points="190,22 182,18 182,26" fill="#b9851a"/><polygon points="260,22 252,18 252,26" fill="#b9851a"/><polygon points="330,22 322,18 322,26" fill="#b9851a"/>
+<text class="tx" x="40" y="200" fill="#5d6b79" font-size="9">healthy cells + parallel strings force current → through the failed cell</text>
+</svg>
+<figcaption>Figure 6.1 — A failed cell is driven into reverse bias by the surrounding cells and parallel strings; the bypass diode clamps it and carries the current around.</figcaption></figure>
+
+<h4>6.3 Where does the energy come from? (The part people miss)</h4>
+
+<p>It is tempting to think the heat in a hot-spot somehow comes from "inside" the failed cell. It does not — a dead cell has no power source of its own. <strong>The dissipated heat is supplied entirely by all the OTHER cells and strings that are forcing the current through it.</strong></p>
+
+<div class="callout">
+<span class="lbl">The donor picture</span>
+<p>Every healthy cell in the string is still a little generator. Normally each spends its energy delivering useful power to the load. When one cell goes reverse-biased, the healthy cells' energy is instead spent <em>pushing current through that one bad cell</em> — and the bad cell, sitting at negative voltage, turns that pushed-in energy into heat. Add parallel strings sharing the bus and the situation is worse still: now <em>several</em> strings' worth of current can be crammed through the single failed cell. <strong>One tiny cell is being asked to swallow the combined output of many.</strong> That asymmetry — many sources, one sink — is exactly why a <em>single</em> failure can be destructive out of all proportion to its size.</p>
+</div>
+
+<h4>6.4 The protection — the bypass diode</h4>
+
+<p>The cure was introduced in Section 5: a <span class="term">bypass diode</span> wired <em>across</em> a cell or a group of cells, oriented so it does nothing during normal operation but switches on the instant a cell tries to go strongly negative.</p>
+
+<div class="term">
+<span class="lbl">Term — bypass diode (vs blocking diode)</span>
+<p>A <strong>bypass diode</strong> is connected in parallel <em>across</em> a cell or cell-group, the "wrong" way for normal current, so it stays off while the cells generate. If a cell is driven into reverse, the diode becomes forward-biased and turns <strong>on at about −0.7&nbsp;V</strong>, offering the string current an easy detour <em>around</em> the bad cell. (Contrast the <strong>blocking diode</strong> of §6.6, which sits <em>in series</em> with a whole string to stop current flowing <em>backwards</em> into it from the bus. Bypass goes <em>around</em>; blocking sits <em>in line</em>.)</p>
+</div>
+
+<p>The bypass diode does two things at once, and the second is the one that saves the panel:</p>
+
+<ul>
+<li><strong>It carries the string current around the bad cell.</strong> The healthy cells' current flows through the diode instead of being forced through the failed cell, so the string keeps delivering (minus that one cell's contribution).</li>
+<li><strong>It CLAMPS the reverse voltage.</strong> Because the diode conducts at about 0.7&nbsp;V, the voltage across the bypassed path can never run away to −20&nbsp;V — it is pinned near <strong>−0.7&nbsp;V</strong>. The failed cell sees a small reverse voltage instead of a catastrophic one.</li>
+</ul>
+
+<div class="keyidea">
+<span class="lbl">Why the clamp is everything</span>
+<p>Heat in the failed cell is |V|·I. The bypass diode does not change the current much, but it slashes |V| from ~20&nbsp;V down to ~0.7&nbsp;V — a factor of about <strong>28×</strong>. Same current, a tiny fraction of the voltage, so a tiny fraction of the heat. <em>That</em> is how a clamp at three-quarters of a volt prevents a melt.</p>
+</div>
+
+<p><strong>But here is the subtlety that makes the whole design trade-off make sense.</strong> A bypass diode is rarely fitted across <em>every single cell</em> (that would be a lot of diodes). It is usually fitted across a <em>group</em> of K cells at once — a <em>bypass group</em>. When the diode fires, it clamps the <em>whole group</em> to about −0.7&nbsp;V. But inside that group the other (K−1) healthy cells are <em>still generating</em>, each adding its own forward voltage. Those healthy in-group voltages stack up and push the <em>failed</em> cell more negative than the −0.7&nbsp;V seen across the group as a whole:</p>
+
+<div class="formula">
+<span class="eqn">|V<sub>fail</sub>| &nbsp;≈&nbsp; 0.7&nbsp;V &nbsp;+&nbsp; (K&nbsp;−&nbsp;1)·V<sub>cell</sub></span> &nbsp;&nbsp;(capped at the reverse-breakdown voltage, ≈&nbsp;20&nbsp;V)
+<div class="where">K = cells per bypass group; V<sub>cell</sub> = a healthy cell's operating voltage (≈&nbsp;2.35&nbsp;V for the §3 cell). With K&nbsp;=&nbsp;1 (a diode per cell) the pile-on term vanishes and |V<sub>fail</sub>|&nbsp;≈&nbsp;0.7&nbsp;V — the best case. As K grows, the failed cell is driven harder, until the stack reaches the −20&nbsp;V breakdown and the protection is effectively overwhelmed.</div>
+</div>
+
+<div class="callout">
+<span class="lbl">The trade-off, stated cleanly</span>
+<p><strong>Fewer cells per bypass group (more diodes) = safer but heavier.</strong> Shrinking K reduces the (K−1)·V<sub>cell</sub> pile-on, so a failed cell sits closer to the gentle −0.7&nbsp;V clamp and dissipates less heat. The price is more diodes: more mass, more solder joints, more complexity, more things that can themselves fail. Choosing K is a genuine engineering decision — protection bought with grams — and it is exactly the kind of decision PowerPy is built to evaluate.</p>
+</div>
+
+<h4>6.5 Why PowerPy and this project care</h4>
+
+<p>Whether a given failure is a shrug or a melt depends on three design choices: <strong>how many cells share each bypass diode</strong> (the K above), <strong>where the blocking diodes sit</strong>, and <strong>the overall layout</strong> of cells, strings and buses. Change those and you change which single-cell failures stay harmless and which become destructive hot-spots. Quantifying that — <em>which failures cause a melt, and which layouts are robust</em> — is not a side-task; it is the headline job of the new tooling.</p>
+
+<div class="callout">
+<span class="lbl">How PowerPy models this</span>
+<ul>
+<li><span class="badge api">Circuit (customizable)</span> — the new <strong>Chapter&nbsp;2 customizable Circuit class</strong> lets you describe an <em>arbitrary</em> layout: how many cells per bypass group, how strings are paralleled, where blocking diodes go. The layout under test is no longer hard-coded.</li>
+<li><span class="badge api">Monte-Carlo failure sweep</span> — a <strong>Chapter&nbsp;2</strong> sweep that randomly fails cells across many trials and asks, statistically, how often a single failure drives a hot-spot past the danger line. This is how you compare "robust" against "fragile" layouts with numbers, not hand-waving.</li>
+<li><span class="badge api">DD_Shunt</span> — PowerPy already represents the cell's <strong>reverse path</strong> (the conduction route a back-biased cell takes) via its <code>DD_Shunt</code> element, so the negative-voltage behaviour at the heart of this section is in the model, not bolted on.</li>
+<li><span class="badge api">season = 0</span> — to <em>simulate</em> a failure, PowerPy can drive a cell to <code>season&nbsp;=&nbsp;0</code> (a "dead" cell that generates nothing), then watch what the surrounding circuit forces upon it. That is the on-switch for the whole failure analysis.</li>
+</ul>
+</div>
+
+<h4>6.6 A note on the blocking diode</h4>
+
+<p>One related part, so the vocabulary does not blur. A <span class="term">blocking diode</span> sits <em>in series</em> with an entire string, between the string and the shared bus. Its job is not hot-spot protection of a single cell but to stop current flowing <em>backwards into</em> a weak or shaded string from the stronger strings on the bus — which would otherwise be another way to back-bias cells. Bypass diodes go <em>around</em> cells; blocking diodes sit <em>in line</em> with strings. Both shape how bad a failure gets, which is why the customizable Circuit class lets you place both.</p>
+
+<h4>6.7 Worked examples</h4>
+
+<p>Now the numbers — the contrast that makes the whole section concrete. We use the §3 cell's max-power current, I&nbsp;=&nbsp;0.48&nbsp;A, and its ~30&nbsp;cm² area throughout.</p>
+
+<div class="worked">
+<span class="lbl">Worked 6A — PROTECTED: bypass diode clamps the reverse voltage</span>
+<p><strong>Given:</strong> a failed cell in a string carrying <var>I</var>&nbsp;=&nbsp;0.48&nbsp;A. A bypass diode (here one per cell, the best case K&nbsp;=&nbsp;1) clamps the cell's reverse voltage to <var>V</var>&nbsp;=&nbsp;−0.7&nbsp;V. Find the heat dissipated <em>in the failed cell</em>.</p>
+<div class="step"><strong>Identify the dissipation:</strong> &nbsp; power turned to heat in the cell = |V|·I.</div>
+<div class="step"><strong>Magnitude of the reverse voltage:</strong> &nbsp; |V| = |−0.7&nbsp;V| = <strong>0.7&nbsp;V</strong>.</div>
+<div class="step"><strong>Multiply by the current:</strong> &nbsp; P = 0.7&nbsp;V × 0.48&nbsp;A = <strong>0.336&nbsp;W ≈ 0.34&nbsp;W</strong>.</div>
+<div class="check"><strong>Is that a lot?</strong> No — about a third of a watt spread over ~30&nbsp;cm². That is a barely-warm patch, comparable to a small indicator LED. The cell survives, the panel survives. The clamp did its job. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 6B — UNPROTECTED: the cell is driven to reverse breakdown</span>
+<p><strong>Given:</strong> the <em>same</em> current <var>I</var>&nbsp;=&nbsp;0.48&nbsp;A, but now no effective bypass — the cell is pushed all the way to its reverse-breakdown voltage <var>V</var>&nbsp;=&nbsp;−20&nbsp;V. Find the heat, the heat <em>flux</em>, and compare to sunlight.</p>
+<div class="step"><strong>Heat dissipated:</strong> &nbsp; P = |V|·I = 20&nbsp;V × 0.48&nbsp;A = <strong>9.6&nbsp;W</strong> — concentrated in one ~30&nbsp;cm² cell.</div>
+<div class="step"><strong>Compare to the protected case:</strong> &nbsp; 9.6&nbsp;W ÷ 0.336&nbsp;W ≈ <strong>28×</strong> more power in the very same cell, for the very same current. The only thing that changed was the voltage the cell was allowed to reach.</div>
+<div class="step"><strong>Heat flux (power per unit area):</strong> &nbsp; first convert area, 30&nbsp;cm² = 30&nbsp;cm² × (1&nbsp;m / 100&nbsp;cm)² = 30&nbsp;×&nbsp;10<sup>−4</sup>&nbsp;m² = <strong>0.0030&nbsp;m²</strong>.</div>
+<div class="step"><strong>Flux:</strong> &nbsp; 9.6&nbsp;W ÷ 30&nbsp;cm² = <strong>0.32&nbsp;W/cm²</strong>; in SI, 9.6&nbsp;W ÷ 0.0030&nbsp;m² = <strong>3200&nbsp;W/m²</strong>.</div>
+<div class="step"><strong>Reference it to sunlight:</strong> &nbsp; full sunlight in space (the solar constant) is ≈&nbsp;1361&nbsp;W/m². So 3200&nbsp;W/m² is <strong>about 2×</strong> (roughly 2.3×) the intensity of full sun — but unlike sunlight, which warms the whole panel, this is dumped into one tiny spot.</div>
+<div class="check"><strong>Verdict.</strong> Concentrating <em>twice the power of full sunlight</em> into a single ~30&nbsp;cm² patch, with no clamp to relieve it, is comfortably enough to scorch the cell and threaten the aluminium core beneath it. The protected cell (Worked 6A) ran at one twenty-eighth of this. That 28× gap, bought by a 0.7&nbsp;V clamp, is the entire reason bypass diodes exist. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 6C (optional) — how the bypass GROUP size K changes the worst case</span>
+<p><strong>Setup:</strong> use <span class="eqn">|V<sub>fail</sub>| ≈ 0.7 + (K−1)·V<sub>cell</sub></span> with healthy cells at V<sub>cell</sub>&nbsp;≈&nbsp;2.35&nbsp;V (the §3 cell), still at I&nbsp;=&nbsp;0.48&nbsp;A, breakdown capped at 20&nbsp;V. Compare one big group versus halving it.</p>
+<div class="step"><strong>K = 1 (a diode per cell):</strong> &nbsp; |V<sub>fail</sub>| ≈ 0.7 + 0 = 0.7&nbsp;V → P ≈ 0.7 × 0.48 = <strong>0.34&nbsp;W</strong> (the Worked 6A bookend).</div>
+<div class="step"><strong>When does the stack hit breakdown?</strong> &nbsp; set 0.7 + (K−1)·2.35 = 20 → (K−1) = 19.3 / 2.35 ≈ 8.2 → <strong>K ≈ 9</strong>. So a group of about 9 or more cells can drive the failed cell all the way to the −20&nbsp;V breakdown (the Worked 6B bookend), P ≈ 9.6&nbsp;W.</div>
+<div class="step"><strong>Halving a large group, e.g. K = 8 → K = 4:</strong> &nbsp; at K&nbsp;=&nbsp;4, |V<sub>fail</sub>| ≈ 0.7 + 3×2.35 = 0.7 + 7.05 = <strong>7.75&nbsp;V</strong> → P ≈ 7.75 × 0.48 ≈ <strong>3.7&nbsp;W</strong>, versus K&nbsp;=&nbsp;8 giving |V<sub>fail</sub>| ≈ 0.7 + 7×2.35 = 17.15&nbsp;V → P ≈ 8.2&nbsp;W. <span class="small">(both below the 20&nbsp;V cap, so the formula applies directly)</span></div>
+<div class="check"><strong>The lesson in one line.</strong> Halving the group slides the failed cell <em>down</em> the line from the breakdown bookend toward the clamp bookend — here from ~8.2&nbsp;W to ~3.7&nbsp;W. More diodes, less heat. This is the trade-off of §6.4 made quantitative, and it is exactly the quantity the Monte-Carlo sweep estimates across a whole array. ✓</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 460 175" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="90" y="30" width="280" height="14" fill="#bfe0ff" stroke="#1d2733"/><text class="tx" x="380" y="41" font-size="10">coverglass</text>
+<rect x="90" y="44" width="280" height="18" fill="#3b6ea5" stroke="#1d2733"/><text class="tx" x="380" y="58" font-size="10" fill="#1d2733">solar cell</text>
+<rect x="90" y="62" width="280" height="9" fill="#caa" stroke="#1d2733"/><text class="tx" x="380" y="70" font-size="10">adhesive</text>
+<g stroke="#b9851a" fill="#fdf3d6"><polygon points="95,75 107,75 113,92 107,109 95,109 89,92"/><polygon points="119,75 131,75 137,92 131,109 119,109 113,92"/><polygon points="143,75 155,75 161,92 155,109 143,109 137,92"/><polygon points="167,75 179,75 185,92 179,109 167,109 161,92"/><polygon points="191,75 203,75 209,92 203,109 191,109 185,92"/><polygon points="215,75 227,75 233,92 227,109 215,109 209,92"/><polygon points="239,75 251,75 257,92 251,109 239,109 233,92"/><polygon points="263,75 275,75 281,92 275,109 263,109 257,92"/><polygon points="287,75 299,75 305,92 299,109 287,109 281,92"/><polygon points="311,75 323,75 329,92 323,109 311,109 305,92"/><polygon points="335,75 347,75 353,92 347,109 335,109 329,92"/></g>
+<text class="tx" x="380" y="96" font-size="10" fill="#b9851a">Al honeycomb</text>
+<line x1="230" y1="20" x2="230" y2="62" stroke="#9a3b3b" stroke-width="2.4"/><polygon points="230,75 224,62 236,62" fill="#9a3b3b"/><text class="tx" x="236" y="22" fill="#9a3b3b" font-size="10">hot-spot heat → core</text>
+<text class="tx" x="230" y="130" text-anchor="middle" fill="#5d6b79" font-size="9">if local T exceeds the aluminium limit → softening / melt</text>
+</svg>
+<figcaption>Figure 6.2 — The panel sandwich. A hot-spot drives heat into the aluminium honeycomb core, which can soften or melt.</figcaption></figure>
+
+<h4>6.8 Socratic ladder — why the dead cell is the hottest point</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — Why does a single failed cell get HOTTER than any healthy cell ever does, and what sets whether it melts the substrate?</div>
+
+<div class="socratic">
+<div class="q">Q1. In a series string, what is <em>forced</em> to be the same for every cell?</div>
+<div class="answer">The <strong>current</strong>. Series cells are wired end-to-end, so the same charge-per-second flows through all of them (§6.1). A cell can sit at its own voltage, but it cannot opt out of the shared current. This is the constraint everything else is forced to obey.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q2. If a cell can no longer generate that shared current, what must it <em>do</em> to let the current pass through it?</div>
+<div class="answer">It must go to <strong>negative voltage</strong> — it must reverse-bias. A generating cell sits at positive voltage and pushes current out; a cell that cannot generate but is <em>forced</em> to conduct can only do so by becoming a load, i.e. by dropping below zero volts. It has no other way to satisfy "the current must pass through me."</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q3. Once it sits at negative voltage carrying current, where does its heat energy come from?</div>
+<div class="answer">From <strong>all the other cells and strings</strong> pushing the current (§6.3). The failed cell has no source of its own; it is a sink. Power |V|·I flows <em>into</em> it, donated by the healthy generators around it, and comes out as heat. A healthy cell, by contrast, <em>delivers</em> power outward and is gently warmed only by sunlight — so it can never reach the temperature of a cell absorbing the output of many neighbours. That asymmetry (many donors, one sink) is the whole reason the failed cell is uniquely hot.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q4. So what finally decides whether that hot-spot melts the substrate?</div>
+<div class="answer">A race between two limits. On one side, <strong>how negative the voltage is allowed to get</strong>: with a bypass diode the voltage is <em>clamped</em> near −0.7&nbsp;V (small heat, Worked 6A); without one it runs to the −20&nbsp;V breakdown (≈28× the heat, Worked 6B). On the other side, <strong>the substrate's temperature limit</strong>: the aluminium-honeycomb core can only take so much before it softens. Melt happens when the dissipated heat drives the local temperature <em>past the substrate limit</em>. So the answer is: the bypass clamp sets how much heat is generated; the substrate limit sets how much heat is survivable; whichever side wins decides between "warm patch" and "melted panel." Tightening the bypass groups (smaller K) is how the designer keeps the first number safely under the second.</div>
+</div>
+</div>
+
+<h4>6.9 Pitfall</h4>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — "a dead cell just goes open-circuit" <span class="badge hot">EXAM-HOT</span></span>
+<p>The instinct is to assume a failed cell simply <em>stops contributing</em> — an open circuit, a quiet gap in the string. In a <strong>series</strong> string the opposite is the dangerous case: the surrounding cells <em>force</em> current through the failed cell, driving it into reverse bias, and it becomes the <em>hottest, most dangerous point on the panel</em> — the exact place a melt starts. "Dead" does not mean "inert." Without a bypass diode, "dead" can mean "on fire." Always ask not "did the cell stop?" but "what is the rest of the circuit now forcing upon it?"</p>
+</div>
+
+<h4>6.10 Practice</h4>
+
+<div class="practice">
+<span class="lbl">Practice 6-1 — dissipation with and without a bypass diode</span>
+<p>A failed cell in a string carries <var>I</var>&nbsp;=&nbsp;0.50&nbsp;A. &nbsp;(a) With a bypass diode clamping its reverse voltage to −0.7&nbsp;V, what power does the cell dissipate as heat? &nbsp;(b) With no effective bypass, the cell is driven to its −20&nbsp;V reverse-breakdown; what power does it dissipate now? &nbsp;(c) By what factor did the bypass diode reduce the heat, and in one sentence say why the factor is roughly the same as in the worked examples even though the current changed.</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 6-2 — reason about the worst case from the layout</span>
+<p>A string has N&nbsp;=&nbsp;24 cells, with one bypass diode fitted per K&nbsp;=&nbsp;6 cells (so 4 bypass groups). Healthy cells operate at V<sub>cell</sub>&nbsp;≈&nbsp;2.35&nbsp;V and the string current is 0.48&nbsp;A; reverse breakdown is −20&nbsp;V. &nbsp;(a) Using <span class="eqn">|V<sub>fail</sub>| ≈ 0.7 + (K−1)·V<sub>cell</sub></span>, estimate the worst-case reverse voltage on a single failed cell, and check it against the −20&nbsp;V cap. &nbsp;(b) Estimate the worst-case heat dissipation. &nbsp;(c) If the designer re-wires the same string as one bypass diode per K&nbsp;=&nbsp;2 cells, redo (a) and (b) and state in one line what the designer bought, and what it cost.</p>
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 6-3 — why parallel strings make it worse</span>
+<p>Two scenarios share an identical failed cell. In scenario&nbsp;A the failed cell's string stands alone. In scenario&nbsp;B, three more identical strings are wired in <em>parallel</em> on the same bus. Explain, in terms of §6.3's "many donors, one sink" picture, why the failed cell can be forced to dissipate <em>more</em> heat in scenario&nbsp;B — and name the component (from §6.6) whose job is to limit exactly this backward push from the bus.</p>
+<div class="answerspace lines-5"></div>
+</div>
+
+<hr class="sep">
+<p class="small">Looking ahead: §6 showed <em>how bad</em> a single failure can get and <em>what</em> tames it. Chapter&nbsp;2 turns that into a tool — the customizable Circuit class to describe a candidate layout, and the Monte-Carlo failure sweep to ask, across thousands of random failures, what fraction would drive a hot-spot past the substrate limit. Robust layout design becomes a number you can optimise, not a hope.</p>

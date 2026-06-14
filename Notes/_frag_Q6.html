@@ -1,0 +1,239 @@
+<!-- ===================================================================
+     CHAPTER 2 · SECTION 6 — The Monte-Carlo failure sweep:
+     which failures, and how bad
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     Practice IDs: Q6-1, Q6-2, Q6-3  (matched in _sol_Q6.html)
+     =================================================================== -->
+
+<h3>6 &nbsp; The Monte-Carlo failure sweep: which failures, and how bad</h3>
+
+<p>The previous sections built the machinery for analysing <em>one</em> damaged array: Section&nbsp;1 gave us a <code>Circuit</code> we can reach into and break by name, Section&nbsp;3 gave us the electro-thermal loop that finds the self-consistent temperatures and operating point, and Section&nbsp;5 gave us the breakdown criteria that decide whether any cell has been pushed past its safe limit. Each of those answers the question "given <em>this</em> fault, what happens?". This section answers the question one level up: <em>which</em> faults should we even ask about, and how do we turn thousands of individual fault answers into trustworthy statements about the whole design? That is what the Monte-Carlo failure sweep is for. It is the outermost driver — the thing that decides which failures to simulate, calls the §1+§3+§5 stack once per failure, and gathers the results into rankings and distributions.</p>
+
+<h4>6.1 &nbsp; Recap: why we sample instead of enumerate (Chapter&nbsp;1 §8)</h4>
+
+<p>Chapter&nbsp;1 §8 introduced the Monte-Carlo idea and the wall it is built to get around. Both halves matter here, so let us restate them.</p>
+
+<div class="term"><strong>Monte-Carlo method.</strong> A way to <em>estimate</em> a quantity you cannot compute exactly by running <strong>many random trials</strong> and averaging their outcomes. Instead of evaluating every possibility, you sample a manageable number of them at random and let the average of the samples stand in for the true answer. The more trials you run, the closer the estimate.</div>
+
+<div class="term"><strong>The <code>1/&radic;N</code> error law.</strong> The statistical error of a Monte-Carlo estimate shrinks in proportion to <code>1/&radic;N</code>, where <code>N</code> is the number of trials. Concretely: to <em>halve</em> the error you must <em>quadruple</em> the number of runs (because <code>&radic;(4N) = 2&radic;N</code>). This is slow but utterly reliable — it does not care how complicated each trial is. We make this precise in §6.7.</div>
+
+<div class="keyidea">
+<strong>The one idea.</strong> An array of <code>N</code> cells has <code>2<sup>N</sup></code> possible failure combinations (each cell is either alive or dead) — for even a few hundred cells that number is larger than anything we could ever simulate. So we do <em>not</em> enumerate failures; we <strong>sample</strong> them. The whole section is one driver that picks a failure pattern, runs the coupled solve, records what happened, resets, and repeats — then summarises the pile of results. Choosing <em>which</em> patterns to sample, and <em>how many</em>, is the real skill.</div>
+
+<div class="callout">
+<strong>Why <code>2<sup>N</sup></code> is hopeless, in one number.</strong> Suppose <code>N = 600</code> cells (a realistic array from §1). Then <code>2<sup>600</sup></code> is roughly <code>10<sup>180</sup></code> — vastly more than the number of atoms in the observable universe (~10<sup>80</sup>). Enumerating every failure combination is not "slow"; it is <em>physically impossible</em>. Sampling is not a shortcut we take for convenience — it is the only road that exists.</div>
+
+<h4>6.2 &nbsp; What one RUN is</h4>
+
+<p>The atom of the whole sweep is a single <strong>run</strong>: one failure pattern, simulated end to end, with its outcomes written down. Everything else is just "do many runs and look at the pile". Here is exactly what one run does.</p>
+
+<ol>
+<li><strong>Pick a failure pattern.</strong> Choose a set of cell ids to break — one cell, or <code>k</code> cells, or each cell with some probability, depending on the sampling mode (§6.4).</li>
+<li><strong>Fail those cells.</strong> For each chosen id, call <code>circuit.fail(id,"dead")</code>, which marks that cell as a dead element in the netlist (Section&nbsp;1 gave us per-cell addressability precisely so we could do this).</li>
+<li><strong>Solve the coupled model.</strong> Run the electro-thermal loop (§3): build cells at their temperatures, solve the circuit, form per-cell power, solve the thermal field, iterate to the self-consistent state.</li>
+<li><strong>Record the outcomes.</strong> From the converged state, write down four numbers (and one location):
+  <ul>
+  <li><strong>total array power</strong> — how much the whole array still delivers, in W;</li>
+  <li><strong>maximum cell temperature</strong> — the hottest cell, in °C;</li>
+  <li><strong>number of hot-spots</strong> — how many cells exceed a hot-spot threshold;</li>
+  <li><strong>breakdown tripped?</strong> — whether any cell tripped a §5 breakdown criterion, <em>and where</em> (which cell/line), so we can map vulnerability, not just count it.</li>
+  </ul></li>
+<li><strong>Reset.</strong> Un-fail the cells (restore the circuit to pristine) so the next run starts from a clean array, not an accumulating wreck.</li>
+<li><strong>Repeat.</strong> Go back to step&nbsp;1 for the next pattern.</li>
+</ol>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 640 100" xmlns="http://www.w3.org/2000/svg">
+<rect x="8" y="30" width="110" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="63.0" y="45" text-anchor="middle" font-size="9" fill="#1d2733">Circuit +</text><text font-family="Segoe UI,Arial,sans-serif" x="63.0" y="57" text-anchor="middle" font-size="9" fill="#1d2733">fail(pattern)</text>
+<rect x="140" y="30" width="118" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="199.0" y="45" text-anchor="middle" font-size="9" fill="#1d2733">electro-thermal</text><text font-family="Segoe UI,Arial,sans-serif" x="199.0" y="57" text-anchor="middle" font-size="9" fill="#1d2733">solve</text>
+<rect x="282" y="30" width="130" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="347.0" y="45" text-anchor="middle" font-size="9" fill="#1d2733">record power,</text><text font-family="Segoe UI,Arial,sans-serif" x="347.0" y="57" text-anchor="middle" font-size="9" fill="#1d2733">maxT, hot-spots</text>
+<rect x="436" y="30" width="90" height="24" rx="4" fill="#fbf4e2" stroke="#c9a227"/><text font-family="Segoe UI,Arial,sans-serif" x="481.0" y="45" text-anchor="middle" font-size="9" fill="#1d2733">repeat ×N</text>
+<rect x="548" y="30" width="84" height="36" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/><text font-family="Segoe UI,Arial,sans-serif" x="590.0" y="45" text-anchor="middle" font-size="9" fill="#1d2733">histograms</text><text font-family="Segoe UI,Arial,sans-serif" x="590.0" y="57" text-anchor="middle" font-size="9" fill="#1d2733">+ ranking</text>
+<path d="M118 46 H138" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="138,46 132,42 132,50" fill="#b9851a"/><path d="M258 46 H280" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="280,46 274,42 274,50" fill="#b9851a"/><path d="M412 46 H434" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="434,46 428,42 428,50" fill="#b9851a"/><path d="M526 46 H546" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="546,46 540,42 540,50" fill="#b9851a"/>
+<path d="M481 60 V82 H60 V58" stroke="#0b3d63" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/><polygon points="60,58 56,66 64,66" fill="#0b3d63"/>
+</svg>
+<figcaption>Figure 2.11 — One Monte-Carlo run: fail a pattern → electro-thermal solve → record outcomes → repeat N times → histograms and rankings.</figcaption></figure>
+
+<div class="pitfall">
+<strong>Pitfall — forgetting to reset.</strong> Step&nbsp;5 is easy to drop and fails silently. If you do not restore the circuit between runs, the dead cells from run&nbsp;1 are still dead in run&nbsp;2, so run&nbsp;2 is really testing <em>3</em> failures, run&nbsp;3 tests <em>6</em>, and your "single-cell failure sweep" is quietly a "cumulative catastrophe sweep". Every run must start from the same pristine array. Either reset explicitly, or rebuild a fresh <code>Circuit</code> per run.</div>
+
+<h4>6.3 &nbsp; The three sampling modes — what each one is for</h4>
+
+<p>The pattern in step&nbsp;1 is the only thing that changes between the three modes the project wants. They are not interchangeable: each one is shaped to answer a <em>different</em> question. Define each, then read the contrast table.</p>
+
+<div class="term"><strong>Mode 1 — POSITION sweep.</strong> Fail <strong>one cell at a time</strong>, each location in turn (or each line in turn), and run the solve once per location. It is <em>deterministic</em> — there is no randomness, you simply march through every position — and costs <strong>O(N) runs</strong> (one per cell, or one per line). It answers: <em>"where is the array most vulnerable?"</em> — which single position, if it fails, hurts most, and which hurts least.</div>
+
+<div class="term"><strong>Mode 2 — COUNT sweep.</strong> Fail <strong><code>k</code> cells at once</strong>, for <code>k = 1, 2, 3, …</code>, choosing the <code>k</code> cells at random and repeating several random draws at each <code>k</code>. By plotting a damage metric against <code>k</code> you see how damage <em>grows with the number of simultaneous failures</em>. It answers: <em>"how many failures can we tolerate?"</em> — at what failure count does power loss or peak temperature cross an unacceptable line.</div>
+
+<div class="term"><strong>Mode 3 — RANDOM sampling.</strong> Draw <strong>many random failure patterns</strong> — each cell fails independently with some probability <code>p</code>, or each pattern is <code>k</code> randomly chosen cells — and record the metric for every one. With enough patterns you build the full <strong>statistical distribution</strong> of power loss / max temperature / hot-spot count. It answers: <em>"what is the spread of outcomes?"</em> — not just the average damage but its variability, the tail, the worst-case-you-might-realistically-see.</div>
+
+<table>
+  <caption>The three sampling modes contrasted.</caption>
+  <thead>
+    <tr><th>Mode</th><th>Pattern per run</th><th>Random?</th><th>#runs</th><th>Answers the question</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Position</td><td>1 cell, each location in turn</td><td>no (deterministic)</td><td>O(N)</td><td>where is it most vulnerable?</td></tr>
+    <tr><td>Count</td><td><code>k</code> random cells, for <code>k</code>=1,2,3,…</td><td>yes</td><td>several per <code>k</code></td><td>how many failures can we tolerate?</td></tr>
+    <tr><td>Random</td><td>each cell fails w.p. <code>p</code> (or <code>k</code> random)</td><td>yes</td><td>many (→ distribution)</td><td>what is the spread of outcomes?</td></tr>
+  </tbody>
+</table>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 150" xmlns="http://www.w3.org/2000/svg" font-size="9">
+<text font-family="Segoe UI,Arial,sans-serif" x="78" y="14" text-anchor="middle" fill="#0b3d63">1 · position sweep</text>
+<rect x="40" y="24" width="9" height="9" fill="#cfe0ef" stroke="#fff"/><rect x="51" y="24" width="9" height="9" fill="#e0a96d" stroke="#fff"/><rect x="62" y="24" width="9" height="9" fill="#cf6a4a" stroke="#fff"/><rect x="73" y="24" width="9" height="9" fill="#e0a96d" stroke="#fff"/><rect x="40" y="35" width="9" height="9" fill="#e0a96d" stroke="#fff"/><rect x="51" y="35" width="9" height="9" fill="#cf6a4a" stroke="#fff"/><rect x="62" y="35" width="9" height="9" fill="#9a3b3b" stroke="#fff"/><rect x="73" y="35" width="9" height="9" fill="#cf6a4a" stroke="#fff"/><rect x="40" y="46" width="9" height="9" fill="#cfe0ef" stroke="#fff"/><rect x="51" y="46" width="9" height="9" fill="#e0a96d" stroke="#fff"/><rect x="62" y="46" width="9" height="9" fill="#cf6a4a" stroke="#fff"/><rect x="73" y="46" width="9" height="9" fill="#e0a96d" stroke="#fff"/><rect x="40" y="57" width="9" height="9" fill="#cfe0ef" stroke="#fff"/><rect x="51" y="57" width="9" height="9" fill="#cfe0ef" stroke="#fff"/><rect x="62" y="57" width="9" height="9" fill="#e0a96d" stroke="#fff"/><rect x="73" y="57" width="9" height="9" fill="#cfe0ef" stroke="#fff"/><text font-family="Segoe UI,Arial,sans-serif" x="78" y="142" text-anchor="middle" fill="#5d6b79">max-T by failed position</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="285" y="14" text-anchor="middle" fill="#0b3d63">2 · count sweep</text>
+<line stroke="#1d2733" x1="250" y1="118" x2="332" y2="118"/><line stroke="#1d2733" x1="250" y1="118" x2="250" y2="26"/><polyline points="250.0,105.5 263.3,97.1 276.7,91.4 290.0,87.7 303.3,85.1 316.7,83.4 330.0,82.3" fill="none" stroke="#9a3b3b" stroke-width="2"/><text font-family="Segoe UI,Arial,sans-serif" x="291" y="142" text-anchor="middle" fill="#5d6b79">damage vs #failed</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="410" y="14" text-anchor="middle" fill="#0b3d63">3 · random</text>
+<rect x="372" y="108" width="9" height="10" fill="#1f6a6a"/><rect x="383" y="92" width="9" height="26" fill="#1f6a6a"/><rect x="394" y="72" width="9" height="46" fill="#1f6a6a"/><rect x="405" y="58" width="9" height="60" fill="#1f6a6a"/><rect x="416" y="78" width="9" height="40" fill="#1f6a6a"/><rect x="427" y="96" width="9" height="22" fill="#1f6a6a"/><rect x="438" y="106" width="9" height="12" fill="#1f6a6a"/>
+<line stroke="#1d2733" x1="368" y1="118" x2="452" y2="118"/><text font-family="Segoe UI,Arial,sans-serif" x="410" y="142" text-anchor="middle" fill="#5d6b79">outcome histogram</text>
+</svg>
+<figcaption>Figure 2.12 — The three sampling modes: position sweep (worst location), count sweep (damage vs number of failures), and random sampling (outcome distribution).</figcaption></figure>
+
+<div class="keyidea">
+<strong>Deterministic vs random, in one sentence.</strong> The position sweep is <em>exhaustive over single faults</em> — it asks every single-cell question and misses none of them, but only single-cell questions. The count and random sweeps are <em>statistical</em> — they cannot ask every question (there are too many), so they sample, and in exchange they can speak about combinations and spreads the position sweep can never reach. You pick the mode by matching it to the question you actually have.</div>
+
+<h4>6.4 &nbsp; Outputs and analysis: ranking, histograms, robustness</h4>
+
+<p>A sweep produces a pile of recorded outcomes; the analysis turns that pile into decisions. Three things come out of it.</p>
+
+<ul>
+<li><strong>Ranking — most vs least damaging.</strong> Sort the positions (mode&nbsp;1) or patterns (modes&nbsp;2/3) by a damage metric — say power loss, or peak temperature. The top of the list is the array's weak spot (the cell or line you most want to protect or add redundancy around); the bottom is where a failure barely matters. A position sweep naturally produces a <em>map</em> of vulnerability by location.</li>
+<li><strong>Histograms.</strong> For the random sweep, draw a <em>histogram</em> of each recorded metric — power loss, max temperature, hot-spot count. A histogram is a bar chart of how often each outcome range occurs; it shows the whole shape of the result, including the average, the spread, and the dangerous tail, rather than collapsing everything to one number.</li>
+<li><strong>Robustness comparison between layouts.</strong> Run the <em>same sweep</em> on <em>two different</em> <code>Circuit</code> configurations — say a 1-line-per-module layout versus a 2-lines-per-module (redundant) layout — and compare their rankings and histograms. The layout whose distribution sits at lower power loss / lower peak temperature for the same failures is the more <strong>robust</strong> design. This is how the sweep stops being a description of one array and becomes a tool for <em>choosing between</em> designs.</li>
+</ul>
+
+<div class="callout">
+<strong>Comparing layouts is the whole point.</strong> A single histogram tells you how one design behaves under failure. Two histograms, from the <em>same</em> sweep run on two designs, tell you which design to <em>build</em>. Keep this in mind through §6.5 and §6.8 — almost every reproducibility rule below exists so that a layout-vs-layout comparison is honest.</div>
+
+<h4>6.5 &nbsp; Reproducibility: fix the seed</h4>
+
+<p>The count and random modes use a pseudo-random generator to choose which cells fail. A "pseudo-random" generator is not truly random — it is a deterministic recipe that produces a stream of numbers that <em>look</em> random. That recipe has a starting value, and controlling it is how we make a "random" experiment repeat exactly.</p>
+
+<div class="term"><strong>Seed.</strong> The <em>starting value</em> of a pseudo-random generator. The generator turns the seed into a long sequence of pseudo-random numbers; the same seed always produces the <em>same</em> sequence. So fixing the seed makes a Monte-Carlo run <strong>reproducible</strong>: re-run it and you get bit-for-bit the same failure patterns, the same results, the same histogram.</div>
+
+<div class="keyidea">
+<strong>Why fixing the seed is essential — two reasons.</strong> (1) <em>Fair comparison.</em> To compare two layouts honestly you must hit them with the <em>identical</em> set of failure patterns. Same seed → same patterns → any difference in the results is a difference in the <em>designs</em>, not in the dice. (2) <em>Debugging.</em> When a run does something strange, a fixed seed lets you reproduce the exact failing pattern and inspect it, instead of chasing a bug that vanishes on the next run.</div>
+
+<h4>6.6 &nbsp; How many runs? Convergence and the standard error</h4>
+
+<p>For the random sweep we must decide <em>when to stop</em>. Run too few patterns and the estimated mean (say, mean power loss) is noisy and might mislead; run too many and we waste compute. The §8 <code>1/&radic;N</code> law, made precise, tells us exactly how many we need.</p>
+
+<div class="term"><strong>Sample standard deviation <code>s</code>.</strong> A measure of how <em>spread out</em> the individual run outcomes are around their average. If every run gives nearly the same power loss, <code>s</code> is small; if outcomes scatter widely, <code>s</code> is large. It describes the spread of <em>one</em> run's result.</div>
+
+<div class="term"><strong>Standard error (of the mean), <code>SE</code>.</strong> How uncertain the <em>estimated average</em> is — i.e. how far the mean of your <code>N</code> runs is likely to be from the true mean. It is <em>not</em> the spread of individual runs; it is the spread of the <em>average</em>, and it shrinks as you add runs: <code>SE = s/&radic;N</code>. This is the <code>1/&radic;N</code> law of §8 written out — the error of the estimated mean falls like <code>1/&radic;N</code>.</div>
+
+<div class="formula">
+SE = s / &radic;N
+<div class="where">
+where<br>
+&bull; <code>SE</code> = standard error of the estimated mean (same units as the metric, e.g. W)<br>
+&bull; <code>s</code> = sample standard deviation of the per-run outcomes (e.g. W)<br>
+&bull; <code>N</code> = number of runs.<br>
+Rearranged to solve for the runs needed to reach a <em>target</em> standard error <code>SE<sub>target</sub></code>:
+<br><code>N = (s / SE<sub>target</sub>)<sup>2</sup></code>. &nbsp;Equivalently, scaling from a known run: <code>N<sub>new</sub> = N<sub>old</sub> &middot; (SE<sub>old</sub> / SE<sub>target</sub>)<sup>2</sup></code>.
+</div>
+</div>
+
+<div class="worked">
+<strong>Worked example A — runs needed for a target standard error. <span class="badge hot">EXAM-HOT</span></strong> We have run 100 random patterns and the estimated mean power loss has a standard error of 8&nbsp;W. We want to tighten that to 2&nbsp;W. How many runs do we need in total?
+
+<div class="step"><strong>Step 1 — identify what we know, with units.</strong> <code>N<sub>old</sub> = 100</code> runs; <code>SE<sub>old</sub> = 8&nbsp;W</code>; <code>SE<sub>target</sub> = 2&nbsp;W</code>.</div>
+
+<div class="step"><strong>Step 2 — use the scaling form.</strong> Because <code>SE = s/&radic;N</code> and <code>s</code> does not change as we add runs, the runs scale as the <em>inverse square</em> of the error:
+<div class="formula">
+N = N<sub>old</sub> &middot; (SE<sub>old</sub> / SE<sub>target</sub>)<sup>2</sup> = 100 &middot; (8&nbsp;W / 2&nbsp;W)<sup>2</sup>
+</div></div>
+
+<div class="step"><strong>Step 3 — arithmetic.</strong> <code>8 / 2 = 4</code>; <code>4<sup>2</sup> = 16</code>; <code>100 &middot; 16 = </code><strong>1600 runs</strong>.</div>
+
+<div class="check"><strong>Sanity check.</strong> We cut the error by a factor of 4 (from 8&nbsp;W to 2&nbsp;W). The <code>1/&radic;N</code> law says error falls like <code>1/&radic;N</code>, so cutting error 4× needs 4<sup>2</sup> = 16× the runs: <code>16 &times; 100 = 1600</code>. ✓ The units cancel inside the ratio (W/W), leaving a pure count, as a number of runs must be. ✓</div>
+</div>
+
+<p>In practice you do not even need <code>s</code> up front: <strong>watch the running estimate</strong>. Plot the estimated mean (and a band of ±SE around it) as runs accumulate. Early on it lurches; as <code>N</code> grows it settles into a narrowing band. When the band is tighter than the precision you need — and the estimate has stopped drifting — you have run enough. That stabilising curve is the convergence you are looking for.</p>
+
+<h4>6.7 &nbsp; Cost and parallelism: why a big sweep is affordable</h4>
+
+<p>A sweep of thousands of runs sounds expensive. Two facts make it cheap. The first is about <em>structure</em>; the second is about <em>where the time goes</em>.</p>
+
+<div class="term"><strong>Embarrassingly parallel.</strong> A workload made of pieces that are completely <em>independent</em> — no piece needs any result from another, and they share no state. Such a workload splits across processors with almost no coordination overhead, giving a near-linear speed-up (8 cores ≈ 8× faster). The name is not an insult; it means the parallelism is so obvious it is "embarrassing" how little cleverness it takes.</div>
+
+<div class="keyidea">
+<strong>Each run is independent → the sweep is embarrassingly parallel.</strong> One run fails some cells, solves, records, and resets — it touches nothing any other run needs. So you can hand different runs to different CPU cores and they never have to talk. A library such as <code>joblib</code> farms the runs across cores for you, and the wall-clock time drops by roughly the number of cores.</div>
+
+<div class="callout">
+<strong>The cost driver, and why §2 matters.</strong> Each run is one (or a few) circuit solves plus the thermal solves of the §3 loop. The thermal solves are the <em>vectorised</em> Newton solves from Section&nbsp;2 — they update every cell at once and are cheap. So the per-run cost is dominated by the circuit solve, and the thermal side stays light no matter how many runs you do. That vectorisation from §2 is precisely what makes a thousand-run sweep affordable rather than ruinous: a slow per-cell thermal solve multiplied by thousands of runs would sink the whole exercise.</div>
+
+<div class="worked">
+<strong>Worked example B — sizing a position sweep and its wall-clock. <span class="badge hot">EXAM-HOT</span></strong> An array has 600 cells. We want a full position sweep: fail every single cell, one at a time, and solve. (a) How many runs? (b) If one run takes 0.5&nbsp;s, what is the wall-clock on 1 core versus 8 cores?
+
+<div class="step"><strong>Step 1 — number of runs.</strong> A position sweep fails one cell at a time, every location in turn → one run per cell → <strong>600 runs</strong>. (This is the O(N) cost from §6.3 with <code>N = 600</code>.)</div>
+
+<div class="step"><strong>Step 2 — wall-clock on 1 core.</strong> Runs are done one after another: <code>600 runs &times; 0.5&nbsp;s/run = </code><strong>300&nbsp;s</strong> (= 5 minutes).</div>
+
+<div class="step"><strong>Step 3 — wall-clock on 8 cores.</strong> The runs are independent (embarrassingly parallel), so 8 cores share the work: <code>300&nbsp;s / 8 = </code><strong>37.5&nbsp;s &asymp; 38&nbsp;s</strong>.</div>
+
+<div class="check"><strong>Sanity check.</strong> <code>600 &times; 0.5 = 300</code> ✓. <code>300 / 8 = 37.5</code> ✓. Note 37.5&nbsp;s is the <em>ideal</em> linear speed-up; real parallelism carries a little overhead (spawning workers, gathering results), so expect <em>about</em> 38&nbsp;s or a touch more — near-linear, not perfectly linear. That gap between "37.5" and "~38" is exactly the coordination cost the word <em>embarrassingly</em> promises will be small. ✓</div>
+</div>
+
+<h4>6.8 &nbsp; Variance reduction: the same accuracy with fewer runs</h4>
+
+<p>The <code>1/&radic;N</code> law is harsh — quadrupling runs to halve the error. Two standard techniques get the same accuracy from <em>fewer</em> runs by sampling more cleverly than "uniformly at random".</p>
+
+<div class="term"><strong>Stratified sampling.</strong> Divide the space of failure patterns into regions (strata) — e.g. by failure count, or by array region — and deliberately spend a planned share of runs in <em>each</em> stratum, instead of leaving coverage to chance. This guarantees every region is represented and removes the luck of random under-sampling, shrinking the variance of the estimate.</div>
+
+<div class="term"><strong>Importance sampling.</strong> Spend <em>more</em> runs where the outcome matters most — here, where damage is likely or severe — and fewer where little happens, then re-weight the results to stay unbiased. By concentrating effort on the patterns that drive the answer, you reach the same accuracy with fewer total runs than uniform sampling.</div>
+
+<h4>6.9 &nbsp; Socratic ladder — choosing which failures to trust</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). We have three sampling modes. In one line each, what question does each mode answer?</div>
+<div class="answer">Position sweep → <em>"where is the array most vulnerable?"</em> (which single location hurts most/least). Count sweep → <em>"how many simultaneous failures can we tolerate?"</em> (how damage grows with the number of dead cells). Random sampling → <em>"what is the spread of outcomes?"</em> (the full distribution of power loss / max-T / hot-spot count, not just the average).</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (build up). When is a deterministic <em>position</em> sweep on its own enough — and when is it not?</div>
+<div class="answer">It is enough when your real risk is a <em>single</em> cell or line failing in isolation, and you want a complete, no-luck-involved map of which single failure is worst. It is exhaustive over single faults and deterministic, so it can never miss one and never needs a seed. It is <em>not</em> enough when failures come in combinations (two, three, many at once) or when you need to know the <em>spread</em> of outcomes — a position sweep asks only single-fault questions and is silent about everything else.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (why). Once we admit multiple simultaneous failures, why must we turn to <em>random</em> sampling rather than just enumerating them?</div>
+<div class="answer">Because the number of multi-cell failure combinations explodes: there are <code>2<sup>N</sup></code> patterns in all (≈10<sup>180</sup> for 600 cells), far beyond any enumeration. We cannot ask every combination, so we sample random patterns and let their distribution estimate the truth. Random sampling is the only way to say anything about the <em>spread</em> of multi-failure outcomes within a finite compute budget.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (build up). Having chosen random sampling, how do we know we have run <em>enough</em> patterns?</div>
+<div class="answer">Track the <strong>standard error</strong> of the estimated mean, <code>SE = s/&radic;N</code>, and watch the running estimate. Keep adding runs until <code>SE</code> is below the precision you need <em>and</em> the running mean has stopped drifting (it settles into a narrowing band). If you need error <code>SE<sub>target</sub></code> and a pilot of <code>N<sub>old</sub></code> runs gave <code>SE<sub>old</sub></code>, you need <code>N = N<sub>old</sub>(SE<sub>old</sub>/SE<sub>target</sub>)<sup>2</sup></code> runs — e.g. 100 runs at 8&nbsp;W → 1600 runs for 2&nbsp;W.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;e (deep — the target). Given we can't simulate all <code>2<sup>N</sup></code> failures, how do we choose <em>which</em> failures to simulate so the answer is trustworthy?</div>
+<div class="answer">We <em>match the sampling to the question</em>, then <em>run enough and pin the randomness</em>. (1) Pick the mode by the question: a position sweep when single-fault vulnerability is the concern (deterministic, O(N), exhaustive over single faults); a count sweep to chart damage against the number of simultaneous failures; random sampling to get the distribution of outcomes. (2) For the random modes, run until the <strong>standard error</strong> is below your needed precision and the running estimate has stabilised — not a fixed guess, but a convergence you watch. (3) <strong>Fix the seed</strong> so the chosen patterns are reproducible: the experiment repeats exactly, two layouts are hit with identical patterns (so any difference is the design, not the dice), and any oddity is debuggable. (4) If runs are scarce, use <strong>stratified</strong> or <strong>importance</strong> sampling to cover regions deliberately or concentrate effort where damage lives, buying the same accuracy from fewer runs. Trustworthiness comes from choosing the right question-shaped mode, running until the error is provably small, and making the randomness controlled and repeatable — not from blindly throwing random faults and hoping.</div>
+</div>
+</div>
+
+<h4>6.10 &nbsp; Two traps that fake a result</h4>
+
+<div class="pitfall">
+<strong>Pitfall — comparing two layouts with <em>different</em> seeds.</strong> If layout&nbsp;A is swept with seed 1 and layout&nbsp;B with seed 2, the two designs face <em>different</em> random failure patterns. Now any difference in their histograms mixes two causes — the design difference you care about and the random-pattern difference you don't — and you cannot tell them apart. The conclusion "B is more robust" might just be "B got an easier set of failures". <strong>Always use the same seed</strong> for both layouts so they meet the identical patterns and the only variable left is the design.</div>
+
+<div class="pitfall">
+<strong>Pitfall — reporting a single worst case from too few random runs.</strong> Run only a handful of random patterns and the worst one you happen to see is dominated by luck — run again with a different seed and the "worst case" changes. A worst case from too few runs is an anecdote, not a result. Either run enough patterns that the worst-case region is well sampled (watch the tail of the histogram settle), or — better for true worst-single-faults — use the <em>deterministic</em> position sweep, which finds the actual worst single location with no luck involved.</div>
+
+<h4>6.11 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice Q6-1.</strong> A random sweep of 50 patterns estimates the mean <em>maximum cell temperature</em> with a standard error of 6&nbsp;°C. You need the standard error down to 1.5&nbsp;°C. (a) How many runs in total are needed? (b) State the rule of thumb you used in one line. Show the arithmetic with units.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q6-2.</strong> For each question below, name which of the three modes (position / count / random) is the right tool, and say in one line why. (i) "Which single cell, if it dies, costs us the most power?" (ii) "If cells fail with probability 2% each, what is the distribution of array power we should expect?" (iii) "How many simultaneous dead cells before peak temperature crosses the breakdown limit?"
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q6-3.</strong> An array has 800 cells and one run takes 0.4&nbsp;s. (a) How many runs does a full position sweep need, and what is its wall-clock on 1 core? (b) On 4 cores, what is the ideal wall-clock, and why will the real time be slightly longer? Use the term <em>embarrassingly parallel</em> in your answer. Show the arithmetic with units.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> We cannot enumerate the <code>2<sup>N</sup></code> failure combinations, so we <em>sample</em> them (Monte-Carlo, error <code>~1/&radic;N</code>). One <strong>run</strong> = pick a pattern → <code>circuit.fail(id,"dead")</code> → solve the coupled electro-thermal model (§1+§3+§5) → record {total power, max-T, #hot-spots, breakdown tripped + where} → reset → repeat. Three modes answer three questions: <strong>position</strong> (deterministic, O(N)) → where is it most vulnerable; <strong>count</strong> (random, k=1,2,3,…) → how many failures we tolerate; <strong>random</strong> (many patterns) → the distribution of outcomes. Analyse by ranking most-vs-least damaging, drawing histograms, and comparing two layouts' robustness. <strong>Fix the seed</strong> for reproducibility (same seed → same patterns) so layout comparisons are fair and bugs are repeatable. Decide run count from the <strong>standard error</strong> <code>SE = s/&radic;N</code> (100 runs at 8&nbsp;W → 1600 runs for 2&nbsp;W) and watch the running estimate stabilise. Each run is independent → <strong>embarrassingly parallel</strong> (joblib, near-linear speed-up); the cost driver is the circuit solve, with the §2 vectorised thermal solves keeping a big sweep affordable. <strong>Stratified</strong> and <strong>importance</strong> sampling buy the same accuracy with fewer runs. Two traps: different seeds across layouts (you can't separate design from noise) and a worst case from too few runs (it may be luck).</div>

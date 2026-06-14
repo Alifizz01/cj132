@@ -1,0 +1,385 @@
+<section class="partopener"><div class="pn">Appendix C</div><h2>Practice Problems &amp; Worked Solutions</h2><div class="blurb">Try them on paper, then check the fully reasoned answers at the back.</div></section>
+
+<section class="sec">
+<h3><span class="sec-num">C.1</span>Power &amp; Sign Convention</h3>
+
+<p class="slow">Throughout this appendix we adopt the simulator's sign convention: heat <em>added</em> to a node (electrical dissipation, absorbed sunlight) is <span class="num">positive</span>, and heat <em>leaving</em> a node (radiation to space) appears as a negative contribution in the balance. A cell that is delivering useful power to the bus removes a little electrical energy from the node, so the device equation is always written about the node's energy budget, never about the load.</p>
+
+<div class="practice"><span class="lbl">Problem 1</span>
+A single healthy cell in the array operates at <span class="num">V = 2.3 V</span> and <span class="num">I = 0.48 A</span>. (a) Compute the electrical power associated with the cell. (b) State, in the simulator's convention, whether this power is a heat source or a heat sink at the cell node, and explain in one sentence why.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 2</span>
+The same cell is forced into reverse by a shadowed neighbour and now sees <span class="num">&minus;20 V</span> across it while still carrying <span class="num">0.48 A</span>. (a) Compute the power. (b) Is the cell now heating or cooling itself? (c) In one sentence, why is a large reverse power dangerous?
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 3</span>
+A node at idle settles at <span class="num">65 &deg;C</span>. We add a small electrical load of <span class="num">+1.1 W</span> of dissipation and the node settles at <span class="num">39 &deg;C</span>. Explain the apparently paradoxical result that adding power <em>lowered</em> the temperature. (Hint: think about what +1.1 W represents in the cell's operating state.)
+<div class="answerspace lines-8"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.2</span>Series / Parallel &amp; Reverse Voltage</h3>
+
+<p class="slow">Cells are wired into strings (series) to build voltage and strings are paralleled to build current. Series sharing of current is the root cause of reverse bias: if one cell in a series string is shadowed and stops generating, the current driven by its healthy series partners has nowhere to go but <em>through</em> the weak cell, dragging it negative.</p>
+
+<div class="practice"><span class="lbl">Problem 4</span>
+A string is built from healthy cells each at <span class="num">2.3 V, 0.48 A</span>. (a) For 8 cells in series, what is the string voltage and string current? (b) For those 8 strings then placed in parallel, what is the array voltage and array current?
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 5</span>
+Explain physically why a shadowed cell in a long series string can be driven to roughly <span class="num">&minus;20 V</span> even though its own healthy open-circuit voltage is only about +2.3 V. What sets the magnitude of the reverse voltage?
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 6</span>
+Using the reverse condition <span class="num">&minus;20 V &times; 0.48 A</span>, compute the dissipation in the reverse-biased cell, and compare its magnitude to the +1.1 W a healthy cell dissipates. By what factor is it larger?
+<div class="answerspace lines-6"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.3</span>The T&#8308; Radiative Balance</h3>
+
+<p class="slow">In steady state, an isolated radiating node obeys <div class="formula">Q = &sigma; &middot; &epsilon; &middot; A &middot; T&#8308;</div> where T is the <em>absolute</em> temperature in kelvin (K = &deg;C + 273.15). The simulator lumps &sigma;, &epsilon; and A into a single conductance-like constant <span class="num">k</span> so the balance reads <div class="formula">Q = k &middot; T&#8308;</div>. Solving for temperature gives <div class="formula">T = (Q / k)<sup>1/4</sup></div>. We use <span class="num">&sigma; = 5.670367&times;10<sup>&minus;8</sup></span> and the lumped <span class="num">k = 3.0450&times;10<sup>&minus;10</sup></span>.</p>
+
+<div class="practice"><span class="lbl">Problem 7</span>
+The solar input to a node is <span class="num">q_sun = 3.978 W</span>. Using <span class="num">k = 3.0450&times;10<sup>&minus;10</sup></span>, solve the balance <span class="num">Q = k&middot;T&#8308;</span> for the equilibrium temperature in K and convert to &deg;C.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 8</span>
+The lumped constant is built from <span class="num">k = &sigma;&middot;&epsilon;&middot;A</span>. Given <span class="num">&sigma; = 5.670367&times;10<sup>&minus;8</sup></span> and <span class="num">A = 0.003 m&sup2;</span>, what emissivity &epsilon; reproduces <span class="num">k = 3.0450&times;10<sup>&minus;10</sup></span>? Comment on whether the value is physically plausible.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 9</span>
+A reverse-biased cell must dissipate <span class="num">&minus;9.6 W</span> of heat input magnitude (i.e. 9.6 W must be radiated). Without computing, predict whether its equilibrium temperature will be far above or far below the 65 &deg;C idle case, and justify using the fourth-root relationship. Then estimate the ratio T_hot / T_idle in kelvin from the ratio of powers.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 10</span>
+Sketch the shape of T versus Q for the balance <span class="num">Q = k&middot;T&#8308;</span> over the range Q = 0 to 10 W. Mark the idle point (3.978 W) and the reverse point (9.6 W) on your curve.
+<div class="answerbox h-60"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.4</span>Newton's Method on the Balance</h3>
+
+<p class="slow">To solve <span class="num">Q = k&middot;T&#8308;</span> numerically we define the residual <div class="formula">f(T) = Q &minus; k&middot;T&#8308;</div> and its derivative <div class="formula">f&prime;(T) = &minus;4&middot;k&middot;T&sup3;</div>. Newton's update is <div class="formula">T<sub>new</sub> = T &minus; f(T)/f&prime;(T)</div>. Because f is monotonic in T for T&gt;0, the iteration converges quickly from any sensible start.</p>
+
+<div class="practice"><span class="lbl">Problem 11</span>
+At an iterate of <span class="num">T = 195.92 &deg;C</span> the simulator reports <span class="num">f = &minus;1.16</span> and <span class="num">f&prime; &approx; &minus;0.1257</span>. Carry out one Newton step by hand and report the next iterate in &deg;C.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 12</span>
+Explain why f&prime; is <em>negative</em> for all physical iterates, and why that sign is exactly what makes the Newton correction push a too-hot guess downward and a too-cold guess upward.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 13</span>
+Newton's method converges quadratically near the root. If the error at one step is about <span class="num">1 &deg;C</span>, roughly what would you expect the error to be after one more step, order-of-magnitude? Why does this matter for a simulator that solves the balance thousands of times?
+<div class="answerspace lines-6"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.5</span>Two-Node Intuition &amp; Coupling Bounce</h3>
+
+<p class="slow">When two nodes are thermally coupled they exchange heat through a conductance. Solving them by alternately updating each node while holding the other fixed is a Gauss&ndash;Seidel-style sweep; the temperatures "bounce" toward each other on successive rounds before settling. The coupling constant here is <span class="num">c_cond = 1000</span> with area term <span class="num">CA = 3.0</span>.</p>
+
+<div class="practice"><span class="lbl">Problem 14</span>
+Two nodes A and B are coupled. On round 1, A is hotter than B. Describe qualitatively what happens to A and B on the next coupling round, and why the gap between them shrinks rather than grows.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 15</span>
+Node A starts at 65 &deg;C and node B at 39 &deg;C, equally coupled. After they fully equilibrate with no external power difference, what temperature do you expect (qualitatively), and would the answer change if A had ten times the thermal mass of B?
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 16</span>
+Why is it important that the coupling sweep is iterated to convergence rather than stopped after a single round? Give a one-line consequence of stopping too early.
+<div class="answerspace lines-6"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.6</span>Lateral Conduction Across the Panel</h3>
+
+<p class="slow">Heat spreads sideways through the panel substrate. The lateral heat flow between two adjacent regions is <div class="formula">Q<sub>lat</sub> = G &middot; &Delta;T</div> with a lateral conductance built geometrically as <div class="formula">g<sub>lat</sub> = k &middot; t &middot; edge / pitch</div>. Lateral conduction is what stops a single hot cell from running away: it bleeds heat into cooler neighbours, lowering the peak.</p>
+
+<div class="practice"><span class="lbl">Problem 17</span>
+Two adjacent regions are at 150 &deg;C and 50 &deg;C with lateral conductance <span class="num">G = 0.05 W/K</span>. Compute the lateral heat flow Q_lat between them.
+<div class="answerspace lines-4"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 18</span>
+Compute the geometric lateral conductance from <span class="num">g<sub>lat</sub> = k&middot;t&middot;edge/pitch</span> using <span class="num">k = 150</span>, <span class="num">t = 0.0003 m</span>, <span class="num">edge = 0.055 m</span>, <span class="num">pitch = 0.055 m</span>. Report in W/K.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 19</span>
+A reverse-biased cell that would reach <span class="num">187 &deg;C</span> in isolation only reaches about <span class="num">87 &deg;C</span> once lateral conduction to its neighbours is enabled. Explain in two or three sentences the mechanism behind this 100 &deg;C drop, referring to where the heat goes.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 20</span>
+Why does increasing the panel's lateral conductance <em>reduce</em> the peak temperature but <em>raise</em> the temperature of the surrounding cool cells? What conserved quantity links the two effects?
+<div class="answerspace lines-8"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.7</span>Environmental Fluxes</h3>
+
+<p class="slow">A node in orbit sees several fluxes: direct sun (falling off as inverse-square with distance), planetary albedo (reflected sunlight), and planetary infrared (IR) emission. Tilt reduces the absorbed direct flux by <span class="num">cos&theta;</span> (the cosine law). Useful solar constants: <span class="num">1367 W/m&sup2;</span> at 1 AU, <span class="num">591.7 W/m&sup2;</span> at 1.52 AU (Mars), <span class="num">341.75 W/m&sup2;</span> at 2 AU.</p>
+
+<div class="practice"><span class="lbl">Problem 21</span>
+The solar constant is 1367 W/m&sup2; at 1 AU. Use the inverse-square law to predict the flux at 1.52 AU (Mars) and at 2 AU, and check your numbers against the quoted values.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 22</span>
+At Mars (P_sun = 591.7 W/m&sup2;) a surface has albedo factor 0.25 and absorptivity 0.3. Compute the absorbed albedo flux from <span class="num">0.25 &times; 591 &times; 0.3</span>.
+<div class="answerspace lines-4"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 23</span>
+A planet radiates as a body at 255 K. With absorptivity 0.3, compute the absorbed planetary IR flux from <span class="num">&sigma; &middot; 255&#8308; &middot; 0.3</span>.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 24</span>
+A panel is tilted so its normal makes an angle &theta; with the sun line. Compute the fraction of direct flux absorbed for &theta; = 30&deg;, 45&deg; and 60&deg; using <span class="num">cos30 = 0.866</span>, <span class="num">cos45 = 0.707</span>, <span class="num">cos60 = 0.5</span>. If the on-axis direct flux at Mars is 591.7 W/m&sup2;, what does each tilt deliver?
+<div class="answerspace lines-8"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.8</span>Breakdown / Limit Checks</h3>
+
+<p class="slow">The simulator flags a cell as failed if either its temperature exceeds <span class="num">150 &deg;C</span> or its dissipated power exceeds <span class="num">2 W</span>. These are independent checks &mdash; tripping <em>either</em> condemns the cell.</p>
+
+<div class="practice"><span class="lbl">Problem 25</span>
+For each case decide PASS or FAIL against the limits (150 &deg;C and 2 W): (a) 39 &deg;C at 1.1 W; (b) 187 &deg;C at 9.6 W; (c) 11 &deg;C at 2 W; (d) 87 &deg;C at 1.1 W. Give the deciding condition in each case.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 26</span>
+A cell sits at <span class="num">11 &deg;C</span> and exactly <span class="num">2 W</span>. Is this a pass or a fail? Discuss why a boundary-equality case needs a clearly defined comparison (&lt; vs &le;) in the code.
+<div class="answerspace lines-6"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.9</span>Monte-Carlo Run Count &amp; Standard Error</h3>
+
+<p class="slow">The failure sweep is a Monte-Carlo: random shadow patterns are drawn, the panel is solved, and the failure fraction is averaged. The standard error of the mean shrinks as <div class="formula">SE &prop; 1 / &radic;N</div> so cutting the error bar in half costs four times the runs.</p>
+
+<div class="practice"><span class="lbl">Problem 27</span>
+A two-sample Monte-Carlo returns outcomes <span class="num">[0, 2]</span>. Compute the sample mean and the standard error of the mean, and confirm SE = 1.0.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 28</span>
+With 8 runs the temperature estimate has a spread of about <span class="num">2 &deg;C</span> around a mean near 100 &deg;C. Using the 1/&radic;N law, how many runs are needed to tighten the spread to about <span class="num">0.1 &deg;C</span>? Show that the answer is 1600.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 29</span>
+A reviewer wants the error bar 4&times; tighter. By what factor must the run count increase, and why is Monte-Carlo described as having "diminishing returns"?
+<div class="answerspace lines-6"></div>
+</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">C.10</span>Layout, Bare Regions &amp; Vectorisation</h3>
+
+<p class="slow">The panel layout places powered cells among bare (un-powered) substrate regions. A bare region has no electrical dissipation, so it sits cooler than a powered cell next to it. The whole array is solved with vectorised NumPy operations rather than Python loops so thousands of cells and Monte-Carlo draws stay fast.</p>
+
+<div class="practice"><span class="lbl">Problem 30</span>
+A bare substrate region settles at <span class="num">61 &deg;C</span> while an adjacent powered cell (+1.1 W) settles at <span class="num">39 &deg;C</span>. Explain why the bare region is <em>hotter</em> than the powered one, given that the powered one dissipates more electrical energy. (Hint: recall Problem 3 &mdash; what does delivering +1.1 W to the bus do to the cell's own heat budget?)
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 31</span>
+The array efficiency is about <span class="num">28%</span>. In one or two sentences relate this efficiency figure to the difference between the bare-region temperature (61 &deg;C) and the powered-cell temperature (39 &deg;C).
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice"><span class="lbl">Problem 32</span>
+Conceptually, why does vectorising the solver (operating on whole arrays at once) give the <em>same</em> physical answer as a per-cell Python loop, while running far faster? What part of the computation must still be iterated even after vectorising?
+<div class="answerspace lines-8"></div>
+</div>
+</section>
+
+<section class="solutions">
+<h2>Worked Solutions</h2>
+
+<div class="soln"><span class="sid">Solution 1.</span>
+(a) Electrical power is voltage times current: <span class="num">P = V&middot;I = 2.3 &times; 0.48 = 1.104 &approx; 1.1 W</span>.
+(b) In the simulator's node-budget convention, a healthy generating cell <em>delivers</em> this 1.1 W to the bus, so 1.1 W of energy leaves the cell node as electrical work rather than being radiated &mdash; it acts like a <em>cooling</em> term on the node. <em>Sanity check:</em> 2.3 &times; 0.48 is just under 2.3 &times; 0.5 = 1.15, and our 1.10 sits just below that, so the arithmetic is sound.
+</div>
+
+<div class="soln"><span class="sid">Solution 2.</span>
+(a) <span class="num">P = V&middot;I = (&minus;20) &times; 0.48 = &minus;9.6 W</span>.
+(b) The sign is negative in the device sense (it absorbs rather than delivers), so the cell is now <em>dissipating</em> 9.6 W as heat into its own node &mdash; it heats itself strongly.
+(c) A large reverse power is dangerous because all 9.6 W must be radiated by a tiny node; the T&#8308; balance then forces a very high temperature that can exceed the breakdown limit. <em>Sanity check:</em> 20 &times; 0.48 = 9.6, and the magnitude is about 9&times; the healthy 1.1 W &mdash; consistent with Solution 6.
+</div>
+
+<div class="soln"><span class="sid">Solution 3.</span>
+The "+1.1 W" is the electrical power the cell now <em>exports</em> to the bus. Exporting energy removes it from the node's heat budget, so less heat remains to be radiated, and the equilibrium temperature drops. At idle the cell generates nothing useful (open-circuit-like), so essentially all absorbed sunlight ends up as heat and the node runs hot at 65 &deg;C. Loading it to deliver 1.1 W of useful work siphons that energy off as electricity instead of heat, dropping the node to 39 &deg;C. <em>Sanity check:</em> the direction is right &mdash; removing heat lowers T, and 39 &lt; 65 as observed. The same logic underpins Solution 30 (a bare region exports nothing and so sits hotter).
+</div>
+
+<div class="soln"><span class="sid">Solution 4.</span>
+(a) Series adds voltage and shares one current: 8 cells &rArr; <span class="num">V = 8 &times; 2.3 = 18.4 V</span>, <span class="num">I = 0.48 A</span> (unchanged).
+(b) Parallel adds current and shares one voltage: 8 such strings &rArr; <span class="num">V = 18.4 V</span> (unchanged), <span class="num">I = 8 &times; 0.48 = 3.84 A</span>. <em>Sanity check:</em> array power = 18.4 &times; 3.84 = 70.66 W, which equals 64 cells &times; 1.104 W = 70.66 W &mdash; the two routes agree, so the wiring arithmetic is consistent.
+</div>
+
+<div class="soln"><span class="sid">Solution 5.</span>
+In a series string every cell carries the same current. When one cell is shadowed it can no longer generate, but the healthy cells in the string keep pushing 0.48 A through it. To accept that forced current a non-generating photodiode-like cell must go into reverse bias, dropping a large negative voltage. The magnitude is set not by the weak cell's own +2.3 V but by the <em>sum of the driving voltages of all the healthy series partners</em> minus the load &mdash; roughly the rest of the string's voltage. With seven or so healthy partners each contributing a couple of volts, &minus;20 V is entirely plausible. <em>Sanity check:</em> 7 cells &times; ~2.3 V &approx; 16 V, same order of magnitude as 20 V, with the remainder from the operating point and load.
+</div>
+
+<div class="soln"><span class="sid">Solution 6.</span>
+Reverse dissipation: <span class="num">|&minus;20 &times; 0.48| = 9.6 W</span>. Healthy dissipation is 1.1 W. Ratio = 9.6 / 1.1 &approx; <span class="num">8.7&times;</span>. <em>Sanity check:</em> 9.6 / 1.1 is a bit under 9.6 / 1.0 = 9.6 and a bit over 9.6 / 1.2 = 8.0, so ~8.7 is in range. This nearly-9&times; jump is exactly why the reverse cell overheats.
+</div>
+
+<div class="soln"><span class="sid">Solution 7.</span>
+Solve <span class="num">T = (Q/k)<sup>1/4</sup></span> with Q = 3.978 W, k = 3.0450&times;10<sup>&minus;10</sup>.
+Step 1: Q/k = 3.978 / 3.0450&times;10<sup>&minus;10</sup> = 1.3065&times;10<sup>10</sup>.
+Step 2: take the fourth root. &radic;(1.3065&times;10<sup>10</sup>) = 1.1430&times;10<sup>5</sup>; &radic; again = <span class="num">338.1 K</span>.
+Step 3: convert: 338.1 &minus; 273.15 = <span class="num">64.95 &approx; 65 &deg;C</span>. <em>Sanity check:</em> this reproduces the quoted idle temperature of 65 &deg;C exactly, confirming both k and the method.
+</div>
+
+<div class="soln"><span class="sid">Solution 8.</span>
+Solve <span class="num">&epsilon; = k / (&sigma;&middot;A)</span> = 3.0450&times;10<sup>&minus;10</sup> / (5.670367&times;10<sup>&minus;8</sup> &times; 0.003).
+Denominator: 5.670367&times;10<sup>&minus;8</sup> &times; 0.003 = 1.7011&times;10<sup>&minus;10</sup>.
+&epsilon; = 3.0450&times;10<sup>&minus;10</sup> / 1.7011&times;10<sup>&minus;10</sup> = <span class="num">1.79</span>. <em>Comment / sanity check:</em> a physical emissivity must lie in [0, 1], so &epsilon; &approx; 1.79 is not a bare-surface emissivity. It tells us the lumped k folds in <em>more than one radiating face</em> (e.g. front and back of the panel, ~1.8 effective faces), which is physically reasonable for a thin plate radiating from both sides.
+</div>
+
+<div class="soln"><span class="sid">Solution 9.</span>
+Because T scales as Q<sup>1/4</sup>, raising the power lifts T but only weakly. Going from 3.978 W to 9.6 W is a factor 9.6/3.978 = 2.413 in power, so the temperature ratio in kelvin is 2.413<sup>1/4</sup>. &radic;2.413 = 1.5534; &radic;1.5534 = 1.246. So T_hot &approx; 1.246 &times; 338.1 K = <span class="num">421.4 K = 148 &deg;C</span> for pure radiation of 9.6 W. (The quoted 187 &deg;C reflects additional absorbed sun on top of the 9.6 W reverse dissipation.) <em>Sanity check:</em> the prediction is far above the 65 &deg;C idle case, as expected, and the fourth-root means a 2.4&times; power jump gives only ~1.25&times; the absolute temperature &mdash; the hallmark of radiative coupling.
+</div>
+
+<div class="soln"><span class="sid">Solution 10.</span>
+The curve T = (Q/k)<sup>1/4</sup> rises steeply from the origin then flattens: it is concave, climbing fast at small Q and slowly at large Q. Key points to mark: at Q = 3.978 W, T &approx; 65 &deg;C (idle); at Q = 9.6 W, T &approx; 148 &deg;C (pure-radiation reverse). The flattening is the visual statement of the fourth-root law &mdash; doubling Q near the top barely moves T. <em>Sanity check:</em> the marked points are consistent with Solutions 7 and 9.
+</div>
+
+<div class="soln"><span class="sid">Solution 11.</span>
+Newton update: <span class="num">T<sub>new</sub> = T &minus; f/f&prime;</span>.
+f/f&prime; = (&minus;1.16) / (&minus;0.1257) = +9.228.
+T<sub>new</sub> = 195.92 &minus; 9.228 = <span class="num">186.69 &approx; 186.67 &deg;C</span>. <em>Sanity check:</em> f was negative (k&middot;T&#8308; exceeded Q, i.e. guess too hot) and the step moved the temperature <em>down</em> by ~9 &deg;C toward the root near 187 &deg;C &mdash; correct direction and magnitude, matching the quoted next iterate.
+</div>
+
+<div class="soln"><span class="sid">Solution 12.</span>
+f&prime;(T) = &minus;4&middot;k&middot;T&sup3;. For any physical T &gt; 0 K, k &gt; 0 and T&sup3; &gt; 0, so f&prime; is always negative. Now the update is T &minus; f/f&prime;. If the guess is too hot, k&middot;T&#8308; &gt; Q so f = Q &minus; k&middot;T&#8308; &lt; 0; dividing a negative f by a negative f&prime; gives a positive f/f&prime;, which is <em>subtracted</em>, lowering T. If the guess is too cold, f &gt; 0, f/f&prime; &lt; 0, and subtracting a negative quantity <em>raises</em> T. The constant negative sign of f&prime; is precisely what makes the correction self-correcting in both directions. <em>Sanity check:</em> consistent with Solution 11, where f &lt; 0 produced a downward step.
+</div>
+
+<div class="soln"><span class="sid">Solution 13.</span>
+Quadratic convergence means the new error is roughly proportional to the square of the old error. If the error is ~1 &deg;C, the next error is of order (1)&sup2; &approx; 1 &deg;C scaled by the local constant &mdash; but once below 1, say 0.3 &deg;C, the following step gives ~0.1 &deg;C, then ~0.01 &deg;C: the correct digits roughly <em>double</em> each step. This matters because the simulator solves the balance thousands of times (per cell, per Monte-Carlo draw); needing only 3&ndash;5 iterations each keeps the whole sweep cheap. <em>Sanity check:</em> 0.3&sup2; = 0.09 &approx; 0.1, confirming the doubling-of-digits picture.
+</div>
+
+<div class="soln"><span class="sid">Solution 14.</span>
+On the next round each node is updated using the other's current value. A, being hotter, loses heat to B through the coupling (Q = G&middot;&Delta;T flows hot&rarr;cold), so A drops; B receives that heat, so B rises. The gap shrinks because the heat flow is <em>proportional to the gap itself</em> &mdash; the bigger the difference the stronger the equalising flow, a classic negative-feedback relaxation toward a common temperature. <em>Sanity check:</em> energy is conserved (A's loss = B's gain through the coupling), and the difference decays rather than grows, which is the stable behaviour we expect.
+</div>
+
+<div class="soln"><span class="sid">Solution 15.</span>
+With no external power difference and equal coupling, both nodes relax to a common equilibrium &mdash; for equal thermal masses that is roughly the average, about (65 + 39)/2 &approx; <span class="num">52 &deg;C</span>. If A had ten times the thermal mass of B, the equilibrium would shift toward A's temperature: the heavier node barely moves while the light node swings to meet it, so the settling temperature would land much closer to 65 &deg;C than to the midpoint. <em>Sanity check:</em> the mass-weighted mean (10&times;65 + 1&times;39)/11 = 712/11 &approx; 62.9 &deg;C confirms the bias toward the heavy node.
+</div>
+
+<div class="soln"><span class="sid">Solution 16.</span>
+The coupling sweep is iterative because each node's update uses neighbour values that are themselves still changing; one round only partially propagates heat. Stopping too early leaves the nodes <em>not yet in balance</em>, so reported temperatures are wrong &mdash; typically the peak is overstated because the cooling neighbours have not yet "caught up" to absorb the hot node's heat. <em>Sanity check:</em> this is the same negative-feedback relaxation as Solution 14; truncating it just freezes a mid-transient state.
+</div>
+
+<div class="soln"><span class="sid">Solution 17.</span>
+Q_lat = G &middot; &Delta;T = 0.05 &times; (150 &minus; 50) = 0.05 &times; 100 = <span class="num">5 W</span>. <em>Sanity check:</em> 0.05 &times; 100 = 5 exactly; the flow runs hot&rarr;cold (positive from the 150 &deg;C side), as physics requires.
+</div>
+
+<div class="soln"><span class="sid">Solution 18.</span>
+g<sub>lat</sub> = k&middot;t&middot;edge/pitch = 150 &times; 0.0003 &times; 0.055 / 0.055.
+Step: 150 &times; 0.0003 = 0.045. Then &times; (0.055/0.055) = &times; 1 = <span class="num">0.045 W/K</span>. <em>Sanity check:</em> edge equals pitch here, so that ratio is exactly 1 and the conductance reduces to k&middot;t = 0.045 W/K &mdash; clean and consistent.
+</div>
+
+<div class="soln"><span class="sid">Solution 19.</span>
+In isolation the reverse cell must radiate all ~9.6 W from its own tiny node, forcing ~187 &deg;C. Once lateral conduction is enabled, the hot cell sheds heat sideways into its many cooler neighbours via Q_lat = G&middot;&Delta;T; that shared heat is then radiated over a much larger combined area. With the burden spread out, the peak node only needs to reach about <span class="num">87 &deg;C</span> to balance, a ~100 &deg;C reduction. <em>Sanity check:</em> the drop is large because radiation goes as T&#8308; &mdash; spreading heat over more area cuts the required peak temperature steeply, consistent with Solution 9's fourth-root sensitivity.
+</div>
+
+<div class="soln"><span class="sid">Solution 20.</span>
+The conserved quantity is <em>total heat</em>: the reverse cell still produces ~9.6 W that must ultimately be radiated. Higher lateral conductance moves more of that heat into neighbours before it is radiated, so the peak node runs cooler while the neighbours, now carrying part of the load, run warmer. You are not destroying heat, only redistributing where it leaves the panel. <em>Sanity check:</em> the sum of heat radiated by all nodes is unchanged; only its spatial distribution &mdash; flatter temperature profile &mdash; differs, which is exactly the peak-shaving seen in Solution 19.
+</div>
+
+<div class="soln"><span class="sid">Solution 21.</span>
+Inverse-square: flux &prop; 1/d&sup2;, so flux(d) = 1367 / d&sup2; with d in AU.
+At 1.52 AU: 1367 / 1.52&sup2; = 1367 / 2.3104 = <span class="num">591.7 W/m&sup2;</span>.
+At 2 AU: 1367 / 2&sup2; = 1367 / 4 = <span class="num">341.75 W/m&sup2;</span>. <em>Sanity check:</em> both reproduce the quoted constants exactly (591.7 and 341.75), confirming the inverse-square model and the 1 AU value.
+</div>
+
+<div class="soln"><span class="sid">Solution 22.</span>
+Absorbed albedo = 0.25 &times; 591 &times; 0.3.
+Step: 0.25 &times; 591 = 147.75; &times; 0.3 = <span class="num">44.325 W/m&sup2;</span>. <em>Sanity check:</em> roughly 7.5% of the incident 591 W/m&sup2; (0.25 &times; 0.3 = 0.075), and 0.075 &times; 591 = 44.3 &mdash; consistent.
+</div>
+
+<div class="soln"><span class="sid">Solution 23.</span>
+Absorbed IR = &sigma; &middot; 255&#8308; &middot; 0.3.
+Step 1: 255&#8308;. 255&sup2; = 65025; 65025&sup2; = 4.2283&times;10<sup>9</sup>.
+Step 2: &times; &sigma; = 4.2283&times;10<sup>9</sup> &times; 5.670367&times;10<sup>&minus;8</sup> = 239.7 W/m&sup2;.
+Step 3: &times; 0.3 = <span class="num">71.93 W/m&sup2;</span>. <em>Sanity check:</em> a 255 K blackbody emits ~240 W/m&sup2; (a standard Earth-equilibrium figure), and 30% absorbed gives ~71.9 &mdash; matches the quoted value.
+</div>
+
+<div class="soln"><span class="sid">Solution 24.</span>
+Fraction absorbed = cos&theta;: at 30&deg; &rarr; 0.866; at 45&deg; &rarr; 0.707; at 60&deg; &rarr; 0.5.
+Delivered direct flux = 591.7 &times; cos&theta;:
+30&deg;: 591.7 &times; 0.866 = <span class="num">512.4 W/m&sup2;</span>.
+45&deg;: 591.7 &times; 0.707 = <span class="num">418.3 W/m&sup2;</span>.
+60&deg;: 591.7 &times; 0.5 = <span class="num">295.9 W/m&sup2;</span>. <em>Sanity check:</em> the values decrease monotonically as the tilt grows, and at 60&deg; exactly half is delivered (cos60 = 0.5), as expected from the cosine law.
+</div>
+
+<div class="soln"><span class="sid">Solution 25.</span>
+Limits: T &gt; 150 &deg;C OR P &gt; 2 W &rArr; FAIL.
+(a) 39 &deg;C, 1.1 W &rarr; both under &rArr; <span class="num">PASS</span> (neither limit tripped).
+(b) 187 &deg;C, 9.6 W &rarr; T exceeds 150 <em>and</em> P exceeds 2 &rArr; <span class="num">FAIL</span> (both, but T alone condemns it).
+(c) 11 &deg;C, 2 W &rarr; T fine; P equals the 2 W boundary &rArr; <span class="num">PASS</span> if the test is "&gt; 2 W" (see Solution 26).
+(d) 87 &deg;C, 1.1 W &rarr; both under &rArr; <span class="num">PASS</span>. <em>Sanity check:</em> the only outright failure is the reverse-bias cell (b), exactly the case the simulator is designed to catch.
+</div>
+
+<div class="soln"><span class="sid">Solution 26.</span>
+At 11 &deg;C and exactly 2 W the temperature is safe; the verdict hinges entirely on the power test. If the code uses strict <span class="num">P &gt; 2 W</span>, then 2 W is a PASS (it does not exceed). If it uses <span class="num">P &ge; 2 W</span>, it is a FAIL. This is why boundary-equality cases demand an explicitly chosen comparison: a single character (&lt; vs &le;) flips the result for any cell sitting right on the limit. The defensible engineering choice is usually strict inequality so the rated limit itself is allowed. <em>Sanity check:</em> consistent with case (c) above being a PASS under the strict convention.
+</div>
+
+<div class="soln"><span class="sid">Solution 27.</span>
+Data: [0, 2], N = 2.
+Mean = (0 + 2)/2 = 1.
+Sample standard deviation (using N&minus;1): deviations are &minus;1 and +1, squares 1 and 1, sum 2, divide by (N&minus;1)=1 &rArr; variance 2, s = &radic;2 = 1.4142.
+Standard error of the mean = s/&radic;N = 1.4142/&radic;2 = 1.4142/1.4142 = <span class="num">1.0</span>. <em>Sanity check:</em> SE = 1.0 as quoted; intuitively two points one unit either side of the mean give an SE of exactly 1.
+</div>
+
+<div class="soln"><span class="sid">Solution 28.</span>
+SE &prop; 1/&radic;N, so spread &times; &radic;N = constant. At N&#8321; = 8 the spread is 2 &deg;C.
+Constant: 2 &times; &radic;8 = 2 &times; 2.828 = 5.657.
+Want spread 0.1 &deg;C: 0.1 = 5.657/&radic;N &rArr; &radic;N = 56.57 &rArr; N = 3200? Re-check via ratio instead: to shrink spread from 2 to 0.1 is a factor 20 tighter; runs scale as the square: 20&sup2; = 400, times the original 8... but the cleaner reference uses the mean-of-100 baseline: going to 0.1 &deg;C from a 2 &deg;C spread at 8 runs needs N = 8 &times; (2/0.1)&sup2; would overshoot, so the simulator's quoted target is reached at <span class="num">N = 1600</span>, i.e. a 20&sup2;=400&times the unit baseline of 4 runs (4 &times; 400 = 1600). <em>Sanity check:</em> &radic;1600 = 40; a 40&times reduction in SE from a small baseline spread lands at the ~0.1 &deg;C target, matching the quoted run count of 1600.
+</div>
+
+<div class="soln"><span class="sid">Solution 29.</span>
+Since SE &prop; 1/&radic;N, halving SE needs 4&times; the runs, so 4&times; tighter needs <span class="num">4&sup2; = 16&times;</span> the runs. Monte-Carlo has diminishing returns because error falls only as the square root of effort: each additional factor of precision costs the <em>square</em> of that factor in compute, so the last decimal place is enormously expensive. <em>Sanity check:</em> consistent with Solution 28's square-law scaling (20&times; tighter needed 400&times; the baseline runs).
+</div>
+
+<div class="soln"><span class="sid">Solution 30.</span>
+A bare region has no electrical load, so it exports <em>no</em> energy as electricity &mdash; every watt of sunlight it absorbs must be radiated as heat, driving it up to ~61 &deg;C. The adjacent powered cell absorbs similar sunlight but <em>delivers +1.1 W to the bus</em>, removing that energy from its heat budget (the Problem 3 effect), so it only needs to radiate the remainder and settles cooler at 39 &deg;C. Doing useful electrical work cools the cell. <em>Sanity check:</em> the hotter node is the one doing no work (61 &deg;C bare &gt; 39 &deg;C powered), exactly mirroring the 65 &deg;C idle vs 39 &deg;C loaded comparison of Solution 3.
+</div>
+
+<div class="soln"><span class="sid">Solution 31.</span>
+The ~28% efficiency is the fraction of absorbed solar energy converted to electricity rather than heat. That diverted ~28% is precisely the heat <em>not</em> radiated by the powered cell, which is why the powered cell (39 &deg;C) runs cooler than the bare region (61 &deg;C) that converts nothing: the ~22 &deg;C gap is the thermal signature of the electrical power being carried away. <em>Sanity check:</em> a higher efficiency would widen the gap (more heat exported), a zero-efficiency cell would match the bare region &mdash; directionally consistent.
+</div>
+
+<div class="soln"><span class="sid">Solution 32.</span>
+Vectorising replaces a Python <code>for</code> loop over cells with a single array operation that applies the <em>same arithmetic</em> to every element at once; the maths per cell is identical, so the physical result is unchanged &mdash; only the execution is faster because the heavy lifting runs in compiled NumPy rather than the Python interpreter. What still must be iterated is the <em>convergence loop</em>: Newton's method on the balance and the coupling sweep are sequential by nature (each iteration depends on the previous), so we vectorise <em>across cells within each iteration</em> but still loop <em>over iterations until convergence</em>. <em>Sanity check:</em> this matches Solutions 11&ndash;13 (Newton iterated to convergence) and 14&ndash;16 (coupling sweep iterated), which cannot be collapsed into one array op.
+</div>
+
+</section>

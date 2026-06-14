@@ -1,0 +1,132 @@
+<!-- ===================================================================
+     SECTION 2 — Worked solutions to the practice questions
+     PowerPy study notes · solutions fragment
+     IDs match _frag_Q2.html: Q2-1, Q2-2, Q2-3
+     =================================================================== -->
+
+<div class="soln"><span class="sid">Q2-1.</span>
+Single cell, same substrate/constants as worked example 2.1
+(<var>C</var><var>A</var>&nbsp;=&nbsp;3&nbsp;W/K,
+ε<sub>F</sub><var>A</var>σ&nbsp;=&nbsp;1.531×10<sup>&minus;10</sup>,
+ε<sub>R</sub><var>A</var>σ&nbsp;=&nbsp;1.514×10<sup>&minus;10</sup>,
+<var>A</var>&nbsp;=&nbsp;0.003&nbsp;m²), but <em>shaded</em>: front absorbed flux
+α<sub>F</sub>·<var>A</var>·<var>P</var><sub>Sun</sub>·tilt&nbsp;=&nbsp;2.000&nbsp;W,
+<var>P</var><sub>elec</sub>&nbsp;=&nbsp;0, rear fluxes&nbsp;=&nbsp;0, start
+<var>T</var><sub>1</sub>&nbsp;=&nbsp;<var>T</var><sub>2</sub>&nbsp;=&nbsp;300&nbsp;K.
+<br><br>
+
+<strong>(a) Front residual, and its value at 300&nbsp;K.</strong> With the rear
+fluxes zero and at the start <var>T</var><sub>1</sub>&nbsp;=&nbsp;<var>T</var><sub>2</sub>
+(so the conduction term
+<var>C</var><var>A</var>(<var>T</var><sub>2</sub>&minus;<var>T</var><sub>1</sub>)&nbsp;=&nbsp;0),
+the front residual is
+<br>
+<var>f</var><sub>1</sub>
+= α<sub>F</sub><var>A</var><var>P</var><sub>Sun</sub>·tilt
+&minus; ε<sub>F</sub><var>A</var>σ(<var>T</var><sub>1</sub><sup>4</sup> &minus; <var>T</var><sub>sp</sub><sup>4</sup>)
+&minus; <var>P</var><sub>elec</sub>
++ <var>C</var><var>A</var>(<var>T</var><sub>2</sub> &minus; <var>T</var><sub>1</sub>).
+<br>
+Evaluate at 300&nbsp;K (the
+<var>T</var><sub>sp</sub><sup>4</sup>=2.7⁴ piece is negligible):
+<br>
+<var>f</var><sub>1</sub> = 2.000 &minus; (1.531×10<sup>&minus;10</sup>)(300)<sup>4</sup>
+= 2.000 &minus; 1.240 = <strong>+0.760&nbsp;W</strong>.
+<br>
+<em>(Net heat in is only 0.76&nbsp;W now — much less than the 2.74&nbsp;W of the
+fully-lit cell, because the cell absorbs less but still radiates the same 1.24&nbsp;W
+at 300&nbsp;K.)</em>
+<br><br>
+
+<strong>(b) Rear residual at 300&nbsp;K.</strong> The rear face absorbs nothing
+(<var>P</var><sub>Albedo</sub>&nbsp;=&nbsp;<var>P</var><sub>IR</sub>&nbsp;=&nbsp;0)
+and the conduction term is again zero at the start, so
+<br>
+<var>f</var><sub>2</sub> = 0 &minus; (1.514×10<sup>&minus;10</sup>)(300)<sup>4</sup>
+= 0 &minus; 1.226 = <strong>&minus;1.2263&nbsp;W</strong>
+<br>
+— identical to worked example 2.1, since the rear side is unchanged by shading the
+front.
+<br><br>
+
+<strong>(c) One Newton step.</strong> The Jacobian does <em>not</em> depend on the
+fluxes, only on the temperatures, so at 300&nbsp;K it is exactly the one from
+example 2.1:
+<br>
+<var>a</var>&nbsp;=&nbsp;&minus;3.0165, &nbsp;<var>b</var>&nbsp;=&nbsp;<var>c</var>&nbsp;=&nbsp;3.0,
+&nbsp;<var>d</var>&nbsp;=&nbsp;&minus;3.0164, &nbsp;and
+det&nbsp;=&nbsp;<var>a</var><var>d</var>&minus;<var>b</var><var>c</var>&nbsp;=&nbsp;9.0989&minus;9&nbsp;=&nbsp;0.0989.
+<br>
+Apply the closed-form update with the <em>new</em> residuals
+(<var>f</var><sub>1</sub>&nbsp;=&nbsp;0.760, <var>f</var><sub>2</sub>&nbsp;=&nbsp;&minus;1.2263):
+<br>
+Δ<var>T</var><sub>1</sub>
+= &minus;(<var>d</var><var>f</var><sub>1</sub> &minus; <var>b</var><var>f</var><sub>2</sub>)/det
+= &minus;[(&minus;3.0164)(0.760) &minus; (3.0)(&minus;1.2263)]/0.0989
+= &minus;[&minus;2.292 + 3.679]/0.0989
+= &minus;(1.387)/0.0989 = <strong>&minus;14.02&nbsp;K</strong>.
+<br>
+Δ<var>T</var><sub>2</sub>
+= &minus;(&minus;<var>c</var><var>f</var><sub>1</sub> + <var>a</var><var>f</var><sub>2</sub>)/det
+= &minus;[(&minus;3.0)(0.760) + (&minus;3.0165)(&minus;1.2263)]/0.0989
+= &minus;[&minus;2.280 + 3.699]/0.0989
+= &minus;(1.420)/0.0989 = <strong>&minus;14.35&nbsp;K</strong>.
+<br>
+New temperatures after one step:
+<br>
+<var>T</var><sub>1</sub> = 300 &minus; 14.02 = 285.98&nbsp;K = <strong>12.83&nbsp;°C</strong>;
+&nbsp;
+<var>T</var><sub>2</sub> = 300 &minus; 14.35 = 285.65&nbsp;K = <strong>12.50&nbsp;°C</strong>.
+<br>
+<em>Sanity check:</em> the corrections are <strong>negative</strong> this time — the
+cell must <em>cool</em> from 300&nbsp;K, because at 300&nbsp;K it is already
+radiating more (1.24&nbsp;+&nbsp;1.23&nbsp;=&nbsp;2.47&nbsp;W total) than the
+2.000&nbsp;W it now absorbs, so net it is losing heat. That is the opposite sign to
+the fully-lit example 2.1 (where the cell warmed), and exactly what shading should
+do. Iterating to convergence lands the cell near
+<strong>13&nbsp;°C front / 10&nbsp;°C rear</strong> — a cold, lightly-lit cell, as
+expected.
+</div>
+
+<div class="soln"><span class="sid">Q2-2.</span>
+<strong>Why one vectorised Newton beats N <code>fsolve</code> calls.</strong>
+Calling <code>scipy.fsolve</code> once per cell inside a Python <code>for</code>
+loop pays two avoidable costs on every cell: <strong>(1) Python interpreter
+loop overhead</strong> — each iteration of a Python loop is far slower than the
+same arithmetic in compiled code, and you pay it N&nbsp;×&nbsp;(Monte-Carlo trials)
+times; and <strong>(2) a full general-solver spin-up per cell</strong> —
+<code>fsolve</code> is a black box that does not know our equations, so each call
+re-initialises, probes the function, and typically estimates derivatives
+numerically, repeating that setup work from scratch for every cell even though all
+cells obey the <em>same</em> two equations. The vectorised Newton avoids both: it
+exploits the known analytic Jacobian and closed-form 2×2 inverse, and it updates
+<em>all</em> N cells with a handful of numpy array operations that run in compiled
+C — so the only remaining loop is over ~5–8 iterations, not over cells. (It is
+also more solver work that is shared rather than duplicated: one residual/Jacobian
+evaluation covers the whole array.)
+</div>
+
+<div class="soln"><span class="sid">Q2-3.</span>
+<strong>What lateral conduction does to the Jacobian.</strong>
+<br>
+<strong>(i) Structure.</strong> If each cell also conducts heat sideways to its
+nearest neighbours, then each cell's residuals now depend on its neighbours'
+temperatures, so partial derivatives linking one cell to another become non-zero.
+The global Jacobian is therefore <em>no longer block-diagonal</em>: the off-block
+positions that were all zero now carry the lateral-conduction coupling terms. With
+nearest-neighbour coupling the non-zeros sit just outside the diagonal blocks, so
+the matrix becomes <strong>banded</strong> (a sparse, coupled structure) rather
+than a clean set of independent 2×2 blocks.
+<br><br>
+<strong>(ii) Validity of the elementwise update.</strong> The simple
+closed-form 2×2-inverse update is <em>no longer valid</em>, because it assumes each
+cell's 2×2 block can be inverted in isolation — which is only true when the blocks
+are uncoupled. Once the blocks are coupled you cannot solve each cell separately;
+you must solve the <em>whole</em> linear system <var>J</var>Δ<strong>x</strong>&nbsp;=&nbsp;&minus;<strong>f</strong>
+together at each Newton step. In practice you would use a <strong>banded or sparse
+linear solver</strong> (e.g. a banded LU factorisation, or
+<code>scipy.sparse.linalg</code>) that exploits the banded structure so it is still
+efficient, rather than the per-cell elementwise inverse. In short: drop the
+"no sideways heat flow" assumption and you lose the vectorisation trick, trading it
+for a (still tractable) banded solve.
+</div>

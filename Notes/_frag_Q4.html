@@ -1,0 +1,423 @@
+<h3>4 &nbsp;Orbit-driven environment with hapsira: real sun, eclipse, albedo and IR</h3>
+
+<p>Up to now (§3) we fed the electro-thermal loop a <em>single</em> set of numbers: one sun
+value, one tilt, one temperature. That is fine for a quick sizing sum, but it quietly assumes
+the spacecraft sits motionless in eternal sunlight. A real satellite does no such thing. It
+<strong>orbits</strong>. As it sweeps around its planet the sunlight it sees, the warmth glowing
+up from the planet below, and the light bouncing off the cloud-tops all rise and fall — and for
+part of every orbit the planet's own bulk slides between the satellite and the Sun, plunging the
+array into darkness and cold. This section teaches how PowerPy builds the <em>time-varying</em>
+environment from the actual orbit, so that temperature and power come out as curves over time,
+not as single frozen numbers.</p>
+
+<div class="keyidea">
+The fluxes that drive the thermal solve — <code>P_Sun</code> (direct sunlight),
+<code>P_Albedo</code> (reflected sunlight) and <code>P_IR</code> (the planet's own heat) — together
+with the array <em>tilt</em>, all <strong>change continuously around the orbit</strong>. Therefore
+the array temperature <span class="term">T(t)</span> and the electrical power <span class="term">P(t)</span>
+are <strong>time series</strong>, not single values. We obtain them by computing the orbit, then
+evaluating the fluxes at every moment along it.
+</div>
+
+<h4>4.1 &nbsp;Why a single sun value is not enough</h4>
+
+<p>Imagine standing on a merry-go-round at dusk with a single lamp at the edge of the playground.
+As the ride turns you face the lamp (bright), then turn away (your own body in shadow), then the
+climbing-frame passes between you and the lamp (fully dark). The light on your face is a
+<em>cycle</em>, not a number. A satellite around a planet lives exactly this cycle once per orbit,
+and several quantities ride along with it:</p>
+
+<ul>
+<li><strong>Direct sun</strong> — present for the sunlit part of the orbit, then cut to zero during
+<em>eclipse</em> (when the planet blocks the Sun).</li>
+<li><strong>Albedo</strong> — sunlight reflected off the planet onto the array. Strongest when the
+satellite is high over the bright, sunlit face of the planet; nearly absent over the night side.</li>
+<li><strong>Planetary infrared (IR)</strong> — the planet's own thermal glow. Present everywhere
+(the planet is warm all the way round), but stronger when more of the planet fills the array's view.</li>
+<li><strong>Tilt</strong> — the angle between the array's normal and the Sun line changes as the
+satellite re-points and moves, so even in full sun the captured flux varies.</li>
+</ul>
+
+<div class="callout">
+<span class="badge hot">Consequence</span> Because every one of these varies, the <em>worst case</em>
+for the array is not "high noon". It is often the moment <strong>just after eclipse exit</strong>:
+the array has been sitting cold in shadow, then is suddenly slammed with full sunlight and asked to
+deliver power — a thermal and electrical shock. You cannot find that moment with a single sun value;
+you have to walk the whole orbit. This section's output is exactly that walk, and it sets up a later
+<em>transient</em> study as a forward hook.
+</div>
+
+<h4>4.2 &nbsp;The tool: hapsira</h4>
+
+<p>To know <em>where</em> the satellite is at every instant we need orbital mechanics. PowerPy uses
+<span class="term">hapsira</span> for this.</p>
+
+<dl>
+<dt><span class="term">hapsira</span></dt>
+<dd>An open-source Python astrodynamics library: the actively <strong>maintained fork</strong> of the
+older <span class="term">poliastro</span> library. (A "fork" is a copy of a project taken over and kept
+alive by new maintainers after the original slowed down.) The version installed for PowerPy is
+<strong>hapsira 0.18</strong>.</dd>
+
+<dt><span class="term">astrodynamics</span></dt>
+<dd>The mathematics of orbits — how a body moves under gravity: where it is, how fast, and where it
+will be later. (Related word: <em>celestial mechanics</em>.)</dd>
+
+<dt><span class="term">ephemeris</span> &nbsp;/&nbsp; <span class="term">propagation</span></dt>
+<dd>An <em>ephemeris</em> is a table of an object's position (and velocity) versus time.
+<em>Propagation</em> is the act of <strong>predicting a future position from the current state and the
+laws of gravity</strong> — i.e. computing that table by stepping the motion forward in time. "Propagate
+the orbit" means "roll the satellite's position forward and record where it goes."</dd>
+</dl>
+
+<div class="callout">
+<span class="badge api">Why not the old code?</span> The <em>legacy</em> PowerPy used a module
+<code>eclipse.py</code> built on <span class="term">poliastro</span> and <span class="term">astropy</span>
+(astropy is a foundational astronomy toolkit — units, time, coordinates). Its <em>albedo</em> function
+was flagged as <strong>broken</strong>. The new implementation moves to the maintained
+<code>hapsira</code> for the orbital geometry and recomputes the albedo flux ourselves with a clean
+view-factor model (§4.5), so the numbers can be trusted.
+</div>
+
+<h4>4.3 &nbsp;Step 1 — Define the orbit</h4>
+
+<p>We first describe the orbit to hapsira as an <code>Orbit</code> object around a
+<strong>central body</strong> (the planet we orbit — for example <strong>Mars</strong>, as in an
+<em>MSRO-type</em> mission, i.e. a Mars orbiter). There are two equivalent ways to specify it:</p>
+
+<ol>
+<li>From <strong>classical orbital elements</strong> — six numbers that pin down the size, shape,
+orientation and current position of the orbit; or</li>
+<li>From a <strong>state vector</strong> — the satellite's position <span class="term">r</span> and
+velocity <span class="term">v</span> at one instant (3 numbers each).</li>
+</ol>
+
+<p>The six classical elements, one line each:</p>
+
+<ul>
+<li><span class="term">Semi-major axis (a)</span> — half the long axis of the elliptical orbit; sets
+the orbit's <em>size</em> (and hence its period).</li>
+<li><span class="term">Eccentricity (e)</span> — how stretched the ellipse is: <code>e = 0</code> is a
+perfect circle, <code>0 &lt; e &lt; 1</code> an ellipse; sets the orbit's <em>shape</em>.</li>
+<li><span class="term">Inclination (i)</span> — the tilt of the orbit plane relative to the planet's
+equator, in degrees.</li>
+<li><span class="term">Right ascension of the ascending node (RAAN, &Omega;)</span> — the swivel of the
+orbit plane about the planet's axis: where the orbit crosses the equator going north.</li>
+<li><span class="term">Argument of periapsis (&omega;)</span> — the rotation of the ellipse <em>within</em>
+its plane: the angle from the ascending node to the closest point (periapsis).</li>
+<li><span class="term">True anomaly (&nu;)</span> — <em>where the satellite is right now</em> along the
+ellipse, measured as an angle from periapsis.</li>
+</ul>
+
+<div class="callout">
+<span class="badge api">Jargon decoder</span> <em>Periapsis</em> = the point of closest approach to the
+planet; <em>apoapsis</em> = the farthest point. "Asc<em>ending</em> node" = the spot where the orbit
+crosses the planet's equatorial plane heading north. The first two elements (<code>a</code>,
+<code>e</code>) fix the <em>shape and size</em>; the next three (<code>i</code>, &Omega;, &omega;)
+fix the orbit's <em>orientation in space</em>; the last (&nu;) fixes the <em>satellite's place on it</em>.
+</div>
+
+<h4>4.4 &nbsp;Step 2 — Propagate</h4>
+
+<p>Given the starting <code>Orbit</code>, we ask hapsira to <strong>propagate</strong> it: step the
+satellite's position and velocity forward over one or more <em>orbital periods</em> at a chosen
+<strong>time step</strong> (say every 30 or 60 seconds). The result is a list of positions versus
+time — the ephemeris we will hang all the flux calculations on.</p>
+
+<div class="formula">
+<strong>Orbital period</strong> (time for one lap) of an orbit of semi-major axis <code>a</code>:
+<pre>T = 2&pi; &middot; sqrt( a&sup3; / &mu; )</pre>
+<div class="where">where <code>a</code> = semi-major axis [m]; &mu; (mu) = the central body's <em>gravitational
+parameter</em> [m&sup3;/s&sup2;], a fixed property of the planet (Mars: &mu; &asymp; 4.28&times;10&sup1;&sup3; m&sup3;/s&sup2;).
+We propagate for at least one full <code>T</code> so the time series covers a complete sunlit-plus-eclipse cycle.</div>
+</div>
+
+<div class="keyidea">
+<strong>Why propagate at all?</strong> Because the very things the thermal solve needs —
+how much sun, whether we are in shadow, how much of the planet we can see — depend on <em>where</em>
+the satellite is. No position, no fluxes. Propagation turns "an orbit" into "a sequence of positions",
+and each position becomes one environment snapshot.
+</div>
+
+<h4>4.5 &nbsp;Step 3 — Per time step, compute the fluxes</h4>
+
+<p>At each propagated position (each time step) we evaluate four things: the direct solar flux, the
+eclipse test, the albedo flux, the IR flux, and the tilt. Take them in turn.</p>
+
+<h5>P_Sun — direct solar irradiance (inverse-square law)</h5>
+
+<p>The Sun pours out a fixed total power (its <em>luminosity</em>). That power spreads over an
+ever-larger sphere as you move away, so the <strong>irradiance</strong> (power per unit area) falls
+with the square of the distance — the <span class="term">inverse-square law</span>.</p>
+
+<div class="formula">
+<pre>E = L_sun / (4&pi; d&sup2;)</pre>
+<div class="where">where <code>E</code> = solar irradiance [W/m&sup2;]; <code>L_sun</code> = the Sun's luminosity
+(total radiated power) [W]; <code>d</code> = distance from the Sun [m]; <code>4&pi;d&sup2;</code> = the
+surface area of a sphere of radius <code>d</code>. <span class="term">AU</span> = astronomical unit,
+the mean Earth&ndash;Sun distance (&asymp; 1.496&times;10&sup1;&sup1; m).</div>
+</div>
+
+<p>In practice we rarely plug in <code>L_sun</code>. We anchor to a known point: at 1 AU the irradiance
+is the solar constant <span class="term">AM0</span> = <strong>1367 W/m&sup2;</strong>
+(<em>AM0</em> = "Air Mass Zero": the sunlight above the atmosphere, with zero air in the way). Because
+<code>E &prop; 1/d&sup2;</code>, scaling AM0 by distance in AU gives the handy working form:</p>
+
+<div class="formula">
+<pre>E(d) = 1367 / d&sup2;        [d in AU, E in W/m&sup2;]</pre>
+<div class="where">This is the same physics as <code>E = L_sun/(4&pi;d&sup2;)</code>, just normalised so that
+<code>d = 1 AU</code> returns 1367 W/m&sup2;. Farther out (larger <code>d</code>) means less sun.</div>
+</div>
+
+<div class="callout">
+<span class="badge hot">Critical</span> During <strong>eclipse</strong>, set <code>P_Sun = 0</code>.
+The Sun is geometrically blocked, so no direct sunlight reaches the array — full stop.
+</div>
+
+<h5>The eclipse test — umbra and penumbra</h5>
+
+<p>Is the satellite in the planet's shadow? The shadow a planet casts is a cone trailing away from the
+Sun, and it has two zones:</p>
+
+<dl>
+<dt><span class="term">Umbra</span></dt>
+<dd>The <strong>full shadow</strong> — the Sun's disc is <em>completely</em> hidden by the planet. No
+direct sunlight at all.</dd>
+<dt><span class="term">Penumbra</span></dt>
+<dd>The <strong>partial shadow</strong> — the planet covers only <em>part</em> of the Sun's disc, so
+the satellite gets a dimmed, fractional sun (a brief "partial eclipse" at the edges).</dd>
+</dl>
+
+<p>hapsira supplies the <strong>geometry</strong> — given the satellite, planet and Sun positions it tells
+us whether (and how deeply) the satellite sits in the shadow cone. Conceptually, the satellite is
+eclipsed when the planet lies <strong>between it and the Sun</strong> <em>and</em> it falls inside that
+shadow cone. When fully in the umbra we zero <code>P_Sun</code>; in the penumbra it can be scaled down
+in proportion to the visible fraction of the Sun.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 220" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<circle cx="34" cy="95" r="20" fill="#c9a227"/><text class="tx" x="18" y="130" fill="#b9851a">Sun</text>
+<circle cx="220" cy="95" r="36" fill="#6b8fb5" stroke="#0b3d63"/><text class="tx" x="220" y="99" text-anchor="middle" fill="#fff">planet</text>
+<polygon points="220,60 220,130 440,112 440,78" fill="#33415577"/><text class="tx" x="330" y="98" font-size="9">umbra</text>
+<ellipse cx="220" cy="95" rx="92" ry="74" fill="none" stroke="#5d6b79" stroke-dasharray="4 3"/>
+<circle cx="140" cy="60" r="6" fill="#1f6a6a"/>
+<line stroke="#b9851a" stroke-width="1.6" x1="56" y1="86" x2="134" y2="62"/><text class="tx" x="60" y="50" font-size="8" fill="#b9851a">direct sun</text>
+<line stroke="#0b3d63" stroke-width="1.2" x1="190" y1="74" x2="146" y2="62"/><text class="tx" x="150" y="44" font-size="8" fill="#0b3d63">albedo</text>
+<line stroke="#9a3b3b" stroke-width="1.2" x1="196" y1="84" x2="148" y2="64"/><text class="tx" x="186" y="58" font-size="8" fill="#9a3b3b">IR</text>
+<rect x="300" y="150" width="150" height="56" fill="#fff" stroke="#cfd7df"/>
+<polyline points="305,200 330,160 380,160 392,200 420,160 445,160" fill="none" stroke="#0b3d63" stroke-width="1.6"/>
+<rect x="380" y="160" width="12" height="40" fill="#33415522"/><text class="tx" x="375" y="214" font-size="8" fill="#5d6b79">irradiance vs phase (0 in eclipse)</text>
+</svg>
+<figcaption>Figure 2.7 — Around the orbit the array sees direct sun, planet albedo and planetary IR, and passes through the umbra (eclipse) where solar input drops to zero.</figcaption></figure>
+
+<h5>P_Albedo — reflected sunlight</h5>
+
+<p>Some of the sunlight that strikes the planet bounces back off and a fraction of <em>that</em> lands on
+the array. Three factors set how much:</p>
+
+<dl>
+<dt><span class="term">Bond albedo (A)</span></dt>
+<dd>The fraction of <em>all</em> incoming sunlight a planet reflects across all directions and wavelengths
+(dimensionless, 0&ndash;1). Mars &asymp; 0.25; Earth &asymp; 0.3; cloud-covered Venus &asymp; 0.75. "Albedo"
+just means reflectivity.</dd>
+<dt><span class="term">Incident solar at the planet</span></dt>
+<dd>The direct irradiance hitting the planet, i.e. <code>E(d)</code> from the inverse-square law above.</dd>
+<dt><span class="term">View factor (F)</span></dt>
+<dd>The <strong>fraction of one surface's hemisphere that another surface fills</strong> — here, how much
+of the planet the array "sees" (dimensionless, 0&ndash;1). It <em>falls off with altitude</em> (the higher
+you are, the smaller the planet looks) and with the <em>angle between the sub-solar point and the
+satellite</em> (over the night side you see little lit surface, so the reflected contribution shrinks).
+The <em>sub-solar point</em> is the spot on the planet directly beneath the Sun — local noon.</dd>
+</dl>
+
+<div class="formula">
+<pre>P_Albedo = A &middot; E(d) &middot; F</pre>
+<div class="where">where <code>A</code> = bond albedo [&ndash;]; <code>E(d)</code> = incident solar irradiance at the
+planet [W/m&sup2;]; <code>F</code> = view factor [&ndash;]. All the position-dependence lives in <code>F</code>:
+it shrinks with altitude and as the satellite drifts over the dark side.</div>
+</div>
+
+<h5>P_IR — the planet's own thermal infrared</h5>
+
+<p>The planet is warm, so like any warm body it glows in the <span class="term">infrared (IR)</span>
+(heat radiation, just below visible red). This glow reaches the array from below. We model the planet as
+an equivalent <em>blackbody</em> at temperature <code>T_planet</code> (a blackbody being an ideal perfect
+emitter), whose emitted flux follows the Stefan&ndash;Boltzmann law, then scale by the same view factor:</p>
+
+<div class="formula">
+<pre>P_IR = ( &sigma; &middot; T_planet&#8308; ) &middot; F</pre>
+<div class="where">where &sigma; (sigma) = the <strong>Stefan&ndash;Boltzmann constant</strong>
+= 5.67&times;10&#8315;&#8312; W&middot;m&#8315;&sup2;&middot;K&#8315;&#8308;; <code>T_planet</code> = the planet's equivalent
+blackbody temperature [K] (note the <strong>fourth power</strong> — hotter planets glow far more strongly);
+<code>F</code> = view factor [&ndash;]. Unlike sun and albedo, <code>P_IR</code> does <em>not</em> vanish in
+eclipse — the planet stays warm on its night side.</div>
+</div>
+
+<p>This IR is absorbed via the array's <strong>rear</strong> surface, governed by its rear infrared
+emittance/absorptance <span class="term">&epsilon;</span> (epsilon) — the property describing how readily
+that surface emits and soaks up thermal radiation (linked into the thermal balance of §3).</p>
+
+<h5>tilt — the cosine factor</h5>
+
+<p>Finally, <strong>tilt</strong> is the cosine of the angle between the array's <em>normal</em> (the
+direction it faces) and the <em>Sun line</em> (the direction to the Sun) at that instant. A flat-on array
+(angle 0&deg;, <code>cos 0&deg; = 1</code>) catches the full beam; edge-on (90&deg;, <code>cos 90&deg; = 0</code>)
+catches none. This is Lambert's cosine law, and it modulates the <em>useful</em> solar flux moment by moment.</p>
+
+<h4>4.6 &nbsp;Step 4 — Emit a time series of Environment objects</h4>
+
+<p>Each time step produces one snapshot of the surroundings: the four fluxes plus tilt plus the resulting
+temperature. We package each snapshot into PowerPy's existing <code>Environment</code> dataclass — the same
+structure §3 already understands, which carries <em>albedo</em>, <em>season/irradiance</em>, <em>angles</em> and
+<em>temperature</em>. Walking the orbit therefore yields a <strong>time series of <code>Environment</code>
+objects</strong>, one per step.</p>
+
+<p>We then feed each <code>Environment</code> into the electro-thermal loop of §3. Out comes a
+<strong>time-resolved profile</strong>: the array temperature <code>T(t)</code> and the electrical power
+<code>P(t)</code> right around the orbit — and, by scanning that profile, the <strong>worst-case hot-spot</strong>
+over the orbit (e.g. just after eclipse exit, when the array is cold and is then suddenly loaded — the
+forward hook to a transient study).</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 640 90" xmlns="http://www.w3.org/2000/svg">
+<rect x="8" y="28" width="86" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="51.0" y="43" text-anchor="middle" font-size="9" fill="#1d2733">Orbit</text><text font-family="Segoe UI,Arial,sans-serif" x="51.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">(elements)</text>
+<rect x="118" y="28" width="80" height="24" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="158.0" y="43" text-anchor="middle" font-size="9" fill="#1d2733">propagate</text>
+<rect x="222" y="28" width="118" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="281.0" y="43" text-anchor="middle" font-size="9" fill="#1d2733">per-step fluxes</text><text font-family="Segoe UI,Arial,sans-serif" x="281.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">Psun/ecl, alb, IR, tilt</text>
+<rect x="364" y="28" width="104" height="36" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="416.0" y="43" text-anchor="middle" font-size="9" fill="#1d2733">Environment</text><text font-family="Segoe UI,Arial,sans-serif" x="416.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">time series</text>
+<rect x="492" y="28" width="96" height="36" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/><text font-family="Segoe UI,Arial,sans-serif" x="540.0" y="43" text-anchor="middle" font-size="9" fill="#1d2733">electro-</text><text font-family="Segoe UI,Arial,sans-serif" x="540.0" y="55" text-anchor="middle" font-size="9" fill="#1d2733">thermal loop</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="320" y="80" text-anchor="middle" font-size="9" fill="#5d6b79">→ T(t), P(t) around the orbit; worst-case hot-spot</text>
+<path d="M94 44 H116" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="116,44 110,40 110,48" fill="#b9851a"/><path d="M198 44 H220" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="220,44 214,40 214,48" fill="#b9851a"/><path d="M340 44 H362" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="362,44 356,40 356,48" fill="#b9851a"/><path d="M468 44 H490" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="490,44 484,40 484,48" fill="#b9851a"/>
+</svg>
+<figcaption>Figure 2.8 — The hapsira flux pipeline: orbit → propagate → per-step fluxes → Environment time series → the electro-thermal loop.</figcaption></figure>
+
+<div class="keyidea">
+<strong>The whole pipeline in one breath:</strong> <code>Orbit</code> (elements) &rarr;
+<em>propagate</em> (positions vs time) &rarr; <em>per-step fluxes</em> (P_Sun with eclipse, P_Albedo, P_IR,
+tilt) &rarr; <code>Environment</code> time series &rarr; electro-thermal loop (§3) &rarr; <code>T(t)</code>,
+<code>P(t)</code> and the worst case.
+</div>
+
+<h4>4.7 &nbsp;Worked example — solar irradiance at Mars (with units)</h4>
+
+<div class="worked">
+<p><strong>Goal:</strong> Find the direct solar irradiance at Mars, then the albedo flux on the array,
+using the inverse-square law and a given view factor.</p>
+
+<div class="step"><strong>Step 1 — Get the distance.</strong> Mars orbits at about
+<code>d = 1.52 AU</code> from the Sun. (AU = astronomical unit, the Earth&ndash;Sun distance.)</div>
+
+<div class="step"><strong>Step 2 — Square the distance.</strong>
+<code>d&sup2; = 1.52&sup2; = 2.31</code> (AU&sup2;, a pure ratio here).</div>
+
+<div class="step"><strong>Step 3 — Scale AM0 by inverse-square.</strong> Anchor at 1 AU where
+<code>E = 1367 W/m&sup2;</code>, then divide by <code>d&sup2;</code>:
+<pre>E_Mars = 1367 / 1.52&sup2; = 1367 / 2.31 &asymp; 591 W/m&sup2;</pre></div>
+
+<div class="check"><strong>Sanity check:</strong> Mars should get markedly <em>less</em> sun than Earth.
+<code>591 / 1367 &asymp; 0.43</code> &rarr; Mars receives roughly <strong>43% of Earth's sunlight</strong>.
+Plausible for a planet half-again as far out. Units: <code>W/m&sup2;</code> divided by a dimensionless
+ratio stays <code>W/m&sup2;</code>. &#10003;</div>
+
+<div class="step"><strong>Step 4 — Albedo flux.</strong> Take Mars bond albedo <code>A = 0.25</code> and a
+view factor <code>F = 0.3</code> at this point in the orbit. Then
+<pre>P_Albedo = A &middot; E_Mars &middot; F = 0.25 &times; 591 &times; 0.3 &asymp; 44 W/m&sup2;</pre></div>
+
+<div class="check"><strong>Sanity check:</strong> 44 W/m&sup2; is a small fraction of the 591 W/m&sup2; direct
+beam — reflected light should indeed be a modest top-up, not a rival to direct sun. Units:
+[&ndash;] &times; [W/m&sup2;] &times; [&ndash;] = [W/m&sup2;]. &#10003;</div>
+</div>
+
+<h4>4.8 &nbsp;Socratic ladder — why propagate the orbit at all?</h4>
+
+<div class="ladder">
+<p class="goal"><strong>Target question:</strong> Why must we propagate the orbit, instead of using one
+fixed sun value for the whole mission?</p>
+
+<div class="socratic">
+<p class="q"><strong>Q1.</strong> As the satellite travels once around its planet, name at least two things
+about its surroundings that change.</p>
+<p class="answer"><strong>A.</strong> The direct sunlight (full sun on the day side, blocked during
+eclipse), the reflected sunlight (albedo, strong over the lit side, weak over the dark side), the
+planet's IR glow reaching it, and the tilt of the array to the Sun. None of these is constant.</p>
+</div>
+
+<div class="socratic">
+<p class="q"><strong>Q2.</strong> What is an <em>eclipse</em>, and what does it do to the array's power and
+temperature?</p>
+<p class="answer"><strong>A.</strong> An eclipse is the stretch of orbit where the planet blocks the Sun,
+so the satellite is in the planet's shadow. Direct sun &rarr; 0, so the array produces <strong>no
+power</strong> and, with the Sun gone, it <strong>cools</strong>. (The planet's IR continues, slightly
+slowing the cooling.)</p>
+</div>
+
+<div class="socratic">
+<p class="q"><strong>Q3.</strong> What is a <em>view factor</em>, and why does it matter for albedo and IR?</p>
+<p class="answer"><strong>A.</strong> The view factor is the fraction of the array's hemisphere that the
+planet fills — how much of the planet the array can "see". Albedo and IR both reach the array <em>from
+the planet</em>, so both scale with the view factor: see more planet &rarr; receive more reflected and
+emitted flux.</p>
+</div>
+
+<div class="socratic">
+<p class="q"><strong>Q4.</strong> Why do albedo and IR depend on <em>where</em> the satellite is over the
+planet?</p>
+<p class="answer"><strong>A.</strong> The view factor falls with altitude (higher up, the planet looks
+smaller) and albedo also depends on the angle to the sub-solar point (over the night side there is little
+lit surface to reflect). So position changes both how much planet is in view and how much of it is sunlit
+— hence both fluxes vary along the orbit.</p>
+</div>
+
+<div class="socratic">
+<p class="q"><strong>Q5 (the target).</strong> So why propagate, rather than use one fixed sun value?</p>
+<p class="answer"><strong>A.</strong> Because every flux that drives temperature and power depends on the
+satellite's position, and the position changes continuously — including a full sunlight-to-eclipse swing
+each orbit. A single sun value would miss the eclipse entirely (predicting power and warmth that do not
+exist) and miss the worst-case moment after eclipse exit. Propagating gives the position at every instant,
+so we can evaluate the true, time-varying environment and get honest <code>T(t)</code> and <code>P(t)</code>.</p>
+</div>
+</div>
+
+<h4>4.9 &nbsp;Pitfalls</h4>
+
+<div class="pitfall">
+<strong>Forgetting to zero <code>P_Sun</code> during eclipse.</strong> If you leave the direct solar flux
+on while the satellite is in the planet's shadow, the model will happily predict an
+<strong>impossibly warm, fully powered array sitting in the dark</strong> — physically nonsense, and it
+hides the real cold-soak that makes eclipse exit the worst case. Always gate <code>P_Sun</code> on the
+eclipse test: in umbra, <code>P_Sun = 0</code>.
+</div>
+
+<div class="pitfall">
+<strong>Confusing irradiance with the season multiplier.</strong> The <em>irradiance</em> <code>E(d)</code>
+is a physical flux in <strong>W/m&sup2;</strong> (e.g. 591 W/m&sup2; at Mars). The "<em>season</em>"
+multiplier the <code>Environment</code> dataclass carries is a <strong>dimensionless</strong> scale factor
+(roughly <code>1/d&sup2;_AU</code>) that says how strong the sun is <em>relative</em> to 1 AU. They encode the
+same inverse-square physics, but one has units and the other does not. Multiply AM0 (W/m&sup2;) by the
+dimensionless multiplier to recover the irradiance; never treat the bare multiplier as if it were W/m&sup2;.
+</div>
+
+<h4>4.10 &nbsp;Practice</h4>
+
+<div class="practice">
+<p><strong>Q4-1.</strong> Use the inverse-square scaling <code>E(d) = 1367 / d&sup2;</code> (d in AU) to
+compute the direct solar irradiance at <strong>Venus</strong>, which orbits at about <code>d = 0.72 AU</code>.
+Show the squaring step and give the answer in W/m&sup2;. Comment on whether it is larger or smaller than
+Earth's, and why.</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<p><strong>Q4-2.</strong> At a certain point over Earth, an array sees a bond albedo <code>A = 0.30</code>,
+an incident solar irradiance <code>E = 1367 W/m&sup2;</code>, and a view factor <code>F = 0.20</code>.
+Compute the albedo flux <code>P_Albedo</code> in W/m&sup2;, and carry the units through each factor to confirm
+the result is in W/m&sup2;.</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<p><strong>Q4-3.</strong> In words, explain what happens to the array temperature as the satellite
+<em>enters</em> eclipse and then <em>leaves</em> it. Mention what each of <code>P_Sun</code>, <code>P_IR</code>
+and the electrical power does, and identify which moment is likely the worst-case hot-spot and why.</p>
+<div class="answerspace lines-8"></div>
+</div>

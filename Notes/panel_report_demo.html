@@ -1,0 +1,45 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Panel Thermal Report</title>
+<style>
+@page{size:A4;margin:16mm}
+*{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:"Segoe UI",Helvetica,Arial,sans-serif;color:#16222e;max-width:900px;margin:0 auto;padding:20px;background:#fff}
+h1{color:#0b3d63;font-size:22px;margin:0 0 2px}
+.sub{color:#5d6b79;font-style:italic;margin:0 0 18px}
+.verdict{display:inline-block;font-weight:700;color:#fff;background:#1f7a44;padding:4px 14px;border-radius:6px;font-size:15px}
+table.panel{border-collapse:collapse;margin:14px 0}
+table.panel td{width:54px;height:54px;text-align:center;vertical-align:middle;font-size:11px;line-height:1.15}
+table.panel .k{font-weight:700;font-size:12px;opacity:.85}
+table.panel .t{font-variant-numeric:tabular-nums}
+table.stats{border-collapse:collapse;font-size:13px;margin:10px 0}
+table.stats td,table.stats th{border:1px solid #d6dde4;padding:5px 12px;text-align:left}
+table.stats th{background:#eef3f8;color:#0b3d63}
+.legend{list-style:none;padding:0;font-size:12.5px;color:#33485c;columns:2}
+.legend li{margin:.2em 0}
+.bar{height:14px;width:240px;border:1px solid #ccc;border-radius:3px;
+ background:linear-gradient(90deg,rgb(40,90,230),rgb(170,150,80),rgb(255,90,30))}
+.small{font-size:11px;color:#5d6b79}
+</style></head><body>
+<h1>Panel Thermal Analysis &mdash; Example asymmetric panel (notch + bare edges)</h1>
+<p class="sub">6&times;8 tiles &middot; pitch 55.0&nbsp;mm &middot; lateral conductance g_lat = 0.04 W/K</p>
+<p><span class="verdict">PASS</span> &nbsp;<span class="small">melt limit 150.0&nbsp;&deg;C</span></p>
+
+<h3>Panel temperature map (front face)</h3>
+<table class='panel'><tr><td style='background:rgb(40,90,230);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>42&deg;</div></td><td style='background:rgb(44,95,225);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>43&deg;</div></td><td style='background:rgb(54,105,216);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>45&deg;</div></td><td style='background:rgb(66,119,205);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>48&deg;</div></td><td style='background:rgb(79,133,193);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>50&deg;</div></td><td style='background:rgb(82,137,190);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>51&deg;</div></td><td style='background:rgb(101,159,172);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>55&deg;</div></td><td style='background:rgb(107,165,167);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>56&deg;</div></td></tr><tr><td style='background:rgb(43,93,226);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>43&deg;</div></td><td style='background:rgb(50,101,220);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>44&deg;</div></td><td style='background:rgb(65,118,206);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>48&deg;</div></td><td style='background:rgb(87,143,185);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>52&deg;</div></td><td style='background:rgb(116,175,159);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>58&deg;</div></td><td style='background:rgb(94,151,179);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>54&deg;</div></td><td style='background:rgb(99,156,174);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>55&deg;</div></td><td style='background:rgb(100,157,174);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>55&deg;</div></td></tr><tr><td style='background:rgb(49,100,220);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>44&deg;</div></td><td style='background:rgb(59,111,211);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>46&deg;</div></td><td style='background:rgb(92,148,181);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>53&deg;</div></td><td style='background:rgb(134,195,142);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>62&deg;</div></td><td style='background:rgb(255,90,30);border:1px solid #00000022;color:#fff'><div class='k'>A</div><div class='t'>87&deg;</div></td><td style='background:rgb(116,175,158);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>58&deg;</div></td><td style='background:rgb(83,138,189);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>51&deg;</div></td><td style='background:rgb(76,130,196);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>50&deg;</div></td></tr><tr><td style='background:rgb(59,111,212);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>46&deg;</div></td><td style='background:rgb(63,116,207);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>47&deg;</div></td><td style='background:rgb(88,143,185);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>52&deg;</div></td><td style='background:rgb(105,163,168);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>56&deg;</div></td><td style='background:rgb(116,175,158);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>58&deg;</div></td><td style='background:rgb(85,141,187);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>52&deg;</div></td><td style='background:rgb(72,125,200);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>49&deg;</div></td><td style='background:rgb(70,124,201);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>49&deg;</div></td></tr><tr><td style='background:rgb(81,136,191);border:1px solid #00000022;color:#10222e'><div class='k'>D</div><div class='t'>51&deg;</div></td><td style='background:rgb(68,121,203);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>48&deg;</div></td><td style='background:rgb(67,120,204);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>48&deg;</div></td><td style='background:rgb(70,123,201);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>49&deg;</div></td><td style='background:rgb(72,126,199);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>49&deg;</div></td><td style='background:rgb(68,121,203);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>48&deg;</div></td><td style='background:rgb(72,125,200);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>49&deg;</div></td><td style='background:rgb(86,142,186);border:1px solid #00000022;color:#10222e'><div class='k'>D</div><div class='t'>52&deg;</div></td></tr><tr><td style='background:rgb(92,149,180);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>53&deg;</div></td><td style='background:rgb(83,138,189);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>51&deg;</div></td><td style='background:rgb(63,115,208);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>47&deg;</div></td><td style='background:rgb(58,110,212);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>46&deg;</div></td><td style='background:rgb(59,111,211);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>46&deg;</div></td><td style='background:rgb(64,117,207);border:1px solid #00000022;color:#10222e'><div class='k'>A</div><div class='t'>47&deg;</div></td><td style='background:rgb(85,140,187);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>52&deg;</div></td><td style='background:rgb(95,152,178);border:1px solid #00000022;color:#10222e'><div class='k'>.</div><div class='t'>54&deg;</div></td></tr></table>
+<div class="bar"></div>
+<p class="small">cold 42&deg;C &rarr; hot 87&deg;C &middot; tiles outlined in red exceed the melt limit</p>
+
+<h3>Summary</h3>
+<table class="stats">
+<tr><th>Peak temperature</th><td>86.59 &deg;C at tile (2, 4)</td></tr>
+<tr><th>Mean temperature</th><td>51.11 &deg;C</td></tr>
+<tr><th>Margin to melt limit</th><td>63.41 &deg;C</td></tr>
+<tr><th>Tiles over limit</th><td>0 of 48</td></tr>
+<tr><th>Cells / total tiles</th><td>34 cells, 48 tiles</td></tr>
+<tr><th>Solver converged</th><td>True</td></tr>
+</table>
+
+<h3>Layout key</h3>
+<ul class='legend'><li><b>A</b> &mdash; Cell type A (cell)</li><li><b>.</b> &mdash; Bare substrate (bare substrate)</li><li><b>D</b> &mdash; Bypass diode (diode)</li></ul>
+<p class="small">Generated by PowerPy report.py &middot; reproducible data in the companion .json</p>
+</body></html>

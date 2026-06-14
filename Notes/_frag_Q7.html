@@ -1,0 +1,230 @@
+<!-- ===================================================================
+     CHAPTER 2 · SECTION 7 — Representing the results:
+     storing and presenting a Monte-Carlo sweep
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     Practice IDs: Q7-1, Q7-2, Q7-3  (matched in _sol_Q7.html)
+     =================================================================== -->
+
+<h3>7 &nbsp; Representing the results: storing and presenting a Monte-Carlo sweep</h3>
+
+<p>Section&nbsp;6 built the sweep: it picks a failure pattern, runs the coupled electro-thermal solve, records what happened, resets, and repeats — thousands of times. But it ends with an awkward, very practical question, and it is the exact question the colleague raised on the project: <em>where do all those numbers go, and how do we look at them?</em> A finished sweep is not one answer — it is a mountain of answers, one little bundle of numbers for <em>every cell</em> in <em>every run</em>. This section is about the shape of that mountain (how the data is laid out), where it should live (the storage format), and what the engineer actually looks at to make a decision (the figures and tables). The punchline, argued carefully below, is: keep the raw results in a compact binary table as the single source of truth, and treat Excel as a generated human-facing summary <em>on top</em> — never as the place the real data lives.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> A sweep of <code>R</code> runs over <code>N</code> cells produces a result for <em>every</em> (run, cell) pair — that is <code>R&times;N</code> rows, e.g. 1000&nbsp;runs &times; 600&nbsp;cells = <strong>600,000 rows</strong>. Store that as a <strong>tidy/long table</strong> (one row per run&times;cell) in a <strong>compressed columnar binary format</strong> (Parquet or HDF5) — this is the <em>source of truth</em>. From it, <em>generate</em> the things humans read: a heat-map of where failure hurts most, histograms of the outcome distributions, ranking tables, and an <strong>Excel summary workbook</strong>. Excel is the <em>export</em>, not the database. The raw tensor is too big and too query-heavy for a spreadsheet, and a spreadsheet is the wrong tool for it.
+</div>
+
+<h4>7.1 &nbsp; The data shape: how big is the mountain?</h4>
+
+<p>Start by being honest about the size, because the size is what kills the naive "just put it in Excel" answer. Each run does not produce <em>one</em> number — it produces a small record for <em>each cell</em>: that cell's voltage, current, electrical power, front and rear temperature, and a few flags (was it reverse-biased? a hot-spot? did a §5 criterion trip?). So one run with 600 cells already produces 600 little records. Do that for 1000 runs and you have 1000&times;600 = 600,000 records. The result of a sweep is a <em>big table</em>, and the first design decision is how to lay that table out.</p>
+
+<div class="callout">
+<strong>Two numbers fix the scale.</strong> The number of rows is <code>R&times;N</code> (runs times cells). The width is the number of variables you record per row — here <strong>12</strong> columns (listed in §7.2). So the raw sweep is an <code>(R&times;N)&nbsp;&times;&nbsp;12</code> table. With 1000 runs and 600 cells that is 600,000&nbsp;&times;&nbsp;12 &asymp; 7.2&nbsp;million individual numbers. That is not "a big spreadsheet" — it is a small database. Treat it like one.</div>
+
+<h4>7.2 &nbsp; Tidy / long format — one row per (run, cell)</h4>
+
+<p>There are two ways to arrange a per-cell-per-run result, and choosing the right one makes every later step (filtering, grouping, plotting) either trivial or painful.</p>
+
+<div class="term"><strong>Tidy / long format.</strong> A table arranged so that <em>each row is one observation</em> and <em>each column is one variable</em>. For our sweep an "observation" is one cell in one run, so there is <strong>one row per (run, cell)</strong>. The columns hold the identifying keys (which run, which cell) and the measured variables for that cell. The table is "long" because it is tall and narrow: many rows, few columns.</div>
+
+<p>Concretely, the long table for the sweep has exactly these <strong>12 columns</strong> — memorise this list, because the worked example sizes it and the practice asks you to reproduce it:</p>
+
+<table>
+  <caption>The 12 columns of the long (tidy) results table — one row per (run, cell).</caption>
+  <thead>
+    <tr><th>Column</th><th>What it holds</th><th>Role</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>run_id</code></td><td>which run this row belongs to (0,1,2,…)</td><td>key (run)</td></tr>
+    <tr><td><code>mode</code></td><td>sampling mode that produced the run (position / count / random)</td><td>key (run-level)</td></tr>
+    <tr><td><code>failed_ids</code></td><td>which cells were failed in this run (the pattern)</td><td>key (run-level)</td></tr>
+    <tr><td><code>cell_id</code></td><td>which cell this row describes (0…N&minus;1)</td><td>key (cell)</td></tr>
+    <tr><td><code>V</code></td><td>cell voltage, V</td><td>measured</td></tr>
+    <tr><td><code>I</code></td><td>cell current, A</td><td>measured</td></tr>
+    <tr><td><code>P_elec</code></td><td>cell electrical power, W (negative = absorbing in reverse)</td><td>measured</td></tr>
+    <tr><td><code>T_front</code></td><td>converged front-face temperature, °C</td><td>measured</td></tr>
+    <tr><td><code>T_rear</code></td><td>converged rear-face temperature, °C</td><td>measured</td></tr>
+    <tr><td><code>reverse_flag</code></td><td>was this cell reverse-biased? (true/false)</td><td>flag</td></tr>
+    <tr><td><code>hotspot_flag</code></td><td>did this cell exceed the hot-spot threshold? (true/false)</td><td>flag</td></tr>
+    <tr><td><code>criterion_tripped</code></td><td>which §5 breakdown criterion tripped here, if any</td><td>flag</td></tr>
+  </tbody>
+</table>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 180" xmlns="http://www.w3.org/2000/svg" font-size="9">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="20" y="20" width="220" height="120" fill="#fff" stroke="#cfd7df"/>
+<rect x="20" y="20" width="220" height="20" fill="#e9ecf1"/>
+<text class="tx" x="28" y="34" font-size="7.5" fill="#0b3d63">run</text><text class="tx" x="64" y="34" font-size="7.5" fill="#0b3d63">cell</text><text class="tx" x="100" y="34" font-size="7.5" fill="#0b3d63">V</text><text class="tx" x="136" y="34" font-size="7.5" fill="#0b3d63">I</text><text class="tx" x="172" y="34" font-size="7.5" fill="#0b3d63">P_el</text><text class="tx" x="208" y="34" font-size="7.5" fill="#0b3d63">Tf</text><text class="tx" x="244" y="34" font-size="7.5" fill="#0b3d63">hot</text>
+<line x1="20" y1="40" x2="240" y2="40" stroke="#cfd7df"/><text class="tx" x="28" y="54" font-size="7">7</text><text class="tx" x="64" y="54" font-size="7">0</text><text class="tx" x="100" y="54" font-size="7">2.3</text><text class="tx" x="136" y="54" font-size="7">0.48</text><text class="tx" x="172" y="54" font-size="7">1.1</text><text class="tx" x="208" y="54" font-size="7">39</text><text class="tx" x="244" y="54" font-size="7">0</text><line x1="20" y1="60" x2="240" y2="60" stroke="#cfd7df"/><text class="tx" x="28" y="74" font-size="7">7</text><text class="tx" x="64" y="74" font-size="7">1</text><text class="tx" x="100" y="74" font-size="7">2.3</text><text class="tx" x="136" y="74" font-size="7">0.48</text><text class="tx" x="172" y="74" font-size="7">1.1</text><text class="tx" x="208" y="74" font-size="7">39</text><text class="tx" x="244" y="74" font-size="7">0</text><line x1="20" y1="80" x2="240" y2="80" stroke="#cfd7df"/><text class="tx" x="28" y="94" font-size="7">7</text><text class="tx" x="64" y="94" font-size="7">42</text><text class="tx" x="100" y="94" font-size="7">-0.7</text><text class="tx" x="136" y="94" font-size="7">0.48</text><text class="tx" x="172" y="94" font-size="7">-9.6</text><text class="tx" x="208" y="94" font-size="7">187</text><text class="tx" x="244" y="94" font-size="7">1</text><line x1="20" y1="100" x2="240" y2="100" stroke="#cfd7df"/><text class="tx" x="28" y="114" font-size="7">7</text><text class="tx" x="64" y="114" font-size="7">3</text><text class="tx" x="100" y="114" font-size="7">2.3</text><text class="tx" x="136" y="114" font-size="7">0.48</text><text class="tx" x="172" y="114" font-size="7">1.1</text><text class="tx" x="208" y="114" font-size="7">39</text><text class="tx" x="244" y="114" font-size="7">0</text><line x1="20" y1="120" x2="240" y2="120" stroke="#cfd7df"/><text class="tx" x="28" y="134" font-size="7">7</text><text class="tx" x="64" y="134" font-size="7">4</text><text class="tx" x="100" y="134" font-size="7">2.3</text><text class="tx" x="136" y="134" font-size="7">0.48</text><text class="tx" x="172" y="134" font-size="7">1.1</text><text class="tx" x="208" y="134" font-size="7">39</text><text class="tx" x="244" y="134" font-size="7">0</text>
+<text class="tx" x="130" y="156" text-anchor="middle" fill="#5d6b79">long format: one row per (run, cell)</text>
+<path d="M244 60 H300" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="300,60 294,56 294,64" fill="#b9851a"/>
+<path d="M244 100 H300" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="300,100 294,96 294,104" fill="#b9851a"/>
+<path d="M306 44 a30 16 0 1 0 60 0 a30 16 0 1 0 -60 0" fill="#eaf2f0" stroke="#1f6a6a"/><rect x="306" y="44" width="60" height="32" fill="#eaf2f0" stroke="none"/><path d="M306 76 a30 16 0 0 0 60 0" fill="#eaf2f0" stroke="#1f6a6a"/><line x1="306" y1="44" x2="306" y2="76" stroke="#1f6a6a"/><line x1="366" y1="44" x2="366" y2="76" stroke="#1f6a6a"/><text class="tx" x="336" y="64" text-anchor="middle" font-size="8" fill="#1f6a6a">Parquet</text><text class="tx" x="336" y="92" text-anchor="middle" font-size="7.5" fill="#5d6b79">source of truth</text>
+<rect x="306" y="90" width="60" height="40" fill="#fff" stroke="#107c41"/><rect x="306" y="90" width="60" height="10" fill="#107c41"/><text class="tx" x="336" y="98" text-anchor="middle" font-size="7" fill="#fff">Excel</text><text class="tx" x="336" y="116" text-anchor="middle" font-size="7" fill="#5d6b79">summary</text>
+<text class="tx" x="410" y="64" font-size="8" fill="#5d6b79">compact,</text><text class="tx" x="410" y="76" font-size="8" fill="#5d6b79">columnar</text>
+</svg>
+<figcaption>Figure 2.13 — Results are stored long-format (one row per run×cell) in Parquet/HDF5 as the source of truth; Excel is a generated summary on top.</figcaption></figure>
+
+<div class="term"><strong>Wide format (the contrast).</strong> A table with <strong>one row per run</strong> and a separate <em>column for every cell&times;variable</em> — e.g. <code>V_cell0, V_cell1, …, V_cell599, T_front_cell0, …</code>. With 600 cells and the per-cell variables, that is hundreds of columns per run. The same data, but laid out short-and-fat instead of tall-and-thin.</div>
+
+<p>The two formats carry the <em>same</em> information, so why prefer long? Because long format matches the three operations you do constantly — <strong>filter, group, aggregate</strong> — and wide format fights them.</p>
+
+<ul>
+<li><strong>Filter by cell.</strong> "Give me every hot-spot across the whole sweep." In long format that is one condition on one column: <code>hotspot_flag == true</code>. In wide format the hot-spot information is smeared across 600 differently-named columns (<code>hotspot_cell0 … hotspot_cell599</code>), so the same question needs you to name or scan all of them.</li>
+<li><strong>Group.</strong> "For each cell_id, what is its average <code>T_front</code> over all runs?" In long format you group by the single <code>cell_id</code> column. In wide format "cell" is not a column at all — it is encoded in column <em>names</em> — so you cannot group by it without first reshaping the table.</li>
+<li><strong>Aggregate.</strong> "Worst <code>P_elec</code> per run." In long format you group by <code>run_id</code> and take the min. In wide format you would reduce across hundreds of named columns by hand.</li>
+</ul>
+
+<div class="keyidea">
+<strong>Why long wins, in one sentence.</strong> In long format the things you want to slice by — <em>which run</em>, <em>which cell</em> — are <strong>values in columns</strong>, so filtering and grouping are one-liners; in wide format those same things are hidden in <strong>column names</strong>, so every slice needs a reshape first. Make the thing you query a column, not a name.</div>
+
+<div class="callout">
+<strong>"But long format repeats the metadata — isn't that wasteful?"</strong> Yes, the run-level keys <code>run_id</code>, <code>mode</code>, <code>failed_ids</code> are <em>identical</em> on all 600 rows of a given run, so long format looks like it stores them 600&times; over. Hold that thought — §7.3 shows the columnar binary store crushes those repeated values to almost nothing, so the "waste" is only apparent. This is exactly why we do not store long format as raw CSV/Excel, but in a format built for repetition.</div>
+
+<h4>7.3 &nbsp; Storage: a columnar binary store as the source of truth</h4>
+
+<p>Now the central recommendation. The raw long table lives in a <strong>compressed columnar binary format</strong>; Excel is only a derived export. Two formats are the standard choices.</p>
+
+<div class="term"><strong>Parquet.</strong> A <strong>compressed, columnar on-disk table format</strong>. "Columnar" means it stores each column's values together (rather than row-by-row), which lets it (1) read only the columns you ask for — read just <code>T_front</code> without touching the other 11 — and (2) compress each column hard, because values within a column are similar. The result is a file that is a small fraction of the size of the equivalent CSV or Excel and is fast to read selectively.</div>
+
+<div class="term"><strong>HDF5.</strong> A <strong>hierarchical binary container</strong> for large numerical arrays and tables. Think of it as a file system inside one file: you can store many named datasets (arrays, tables) in a tree, with metadata attached, all in an efficient binary layout. Like Parquet it is built for large numerical data and is far more compact and faster than text. Either Parquet or HDF5 is a fine <em>primary</em> store for the sweep.</div>
+
+<div class="keyidea">
+<strong>Columnar encoding is what makes long format cheap.</strong> Recall the worry from §7.2 — long format repeats <code>run_id</code>/<code>mode</code>/<code>failed_ids</code> on every cell row. A columnar store keeps each column contiguous, so a column that reads <code>0,0,0,…(600&times;),1,1,1,…</code> is stored once with a repeat count (run-length / dictionary encoding), not 600 times. The apparent redundancy of long format collapses to near-zero on disk. So the format that is <em>easiest to query</em> (long) is also, once columnar-compressed, <em>cheap to store</em> — you do not have to trade one for the other.</div>
+
+<div class="term"><strong>pandas <code>DataFrame</code>.</strong> The in-memory table PowerPy works with. A <code>DataFrame</code> is a labelled 2-D table (named columns, indexed rows) that <strong>reads and writes Parquet and HDF5 directly</strong> (<code>df.to_parquet(...)</code> / <code>pd.read_parquet(...)</code>, and the HDF5 equivalents) and does the <code>groupby</code>/aggregate operations from §7.2 efficiently. The workflow is: sweep → build a <code>DataFrame</code> → write it to Parquet/HDF5 → later, read back (all of it, or just the columns/rows you need) to make figures.</div>
+
+<p>Now the case <em>against</em> Excel as the primary store — three concrete reasons:</p>
+
+<table>
+  <caption>Why Excel is not the source of truth (but is a fine summary).</caption>
+  <thead>
+    <tr><th>Concern</th><th>Excel as raw store</th><th>Parquet / HDF5 as raw store</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Row capacity</td><td>hard cap of <strong>1,048,576 rows</strong> per sheet (= 2<sup>20</sup>); a per-run tensor reaches it fast</td><td>effectively unlimited rows</td></tr>
+    <tr><td>Speed &amp; size</td><td>slow to open, large on disk, sluggish to filter millions of rows</td><td>compact (a few MB), fast columnar reads</td></tr>
+    <tr><td>Purpose</td><td>a spreadsheet — for human viewing and light editing, <em>not</em> a database</td><td>built as a data store / query target</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+<strong>So what <em>is</em> Excel good for here?</strong> A generated <strong>summary workbook</strong>: produce it <em>from</em> the Parquet/HDF5, with a small, human-readable number of rows. A natural layout is <strong>one sheet per sweep</strong> (the per-run summary metrics — total power, max-T, hot-spot count, breakdown count) plus a <strong>ranking sheet</strong> (positions/patterns sorted most- to least-damaging). That is dozens to a few thousand rows — exactly what a spreadsheet is for. The key word is <em>generated</em>: the workbook is a derived view that you can throw away and regenerate from the store at any time.</div>
+
+<h4>7.4 &nbsp; Aggregations and presentation — what the engineer actually looks at</h4>
+
+<p>Nobody reads 600,000 rows. The store exists so that a handful of <em>summaries</em> can be computed from it. Three kinds of figure/table do the real communicating, and the first two come straight from the analyses named in §6.</p>
+
+<div class="term"><strong>Heat-map.</strong> A 2-D grid in which each cell is <strong>coloured by the value of a number</strong> — colour stands in for magnitude (e.g. a blue→red scale, red = hot/large). It lets the eye find extremes and patterns in a whole field at a glance, without reading individual numbers.</div>
+
+<p>For the sweep, the most useful heat-map maps <strong>failure position → resulting maximum temperature</strong>: lay the array out as a grid, and colour each position by the peak temperature that results <em>when that position fails</em> (from the position sweep, §6). The hot-red squares are the positions where a failure is most damaging — the array's weak spots — visible instantly.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 320 180" xmlns="http://www.w3.org/2000/svg" font-size="9">
+<rect x="20" y="16" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="16" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="16" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="16" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="16" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="130" y="16" width="20" height="13" fill="rgb(65,107,146)" stroke="#fff"/><rect x="152" y="16" width="20" height="13" fill="rgb(74,104,140)" stroke="#fff"/><rect x="174" y="16" width="20" height="13" fill="rgb(77,103,138)" stroke="#fff"/><rect x="196" y="16" width="20" height="13" fill="rgb(90,98,129)" stroke="#fff"/><rect x="218" y="16" width="20" height="13" fill="rgb(75,104,139)" stroke="#fff"/><rect x="240" y="16" width="20" height="13" fill="rgb(70,105,142)" stroke="#fff"/><rect x="262" y="16" width="20" height="13" fill="rgb(64,108,146)" stroke="#fff"/><rect x="20" y="31" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="31" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="31" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="31" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="31" width="20" height="13" fill="rgb(61,109,149)" stroke="#fff"/><rect x="130" y="31" width="20" height="13" fill="rgb(68,106,144)" stroke="#fff"/><rect x="152" y="31" width="20" height="13" fill="rgb(76,103,138)" stroke="#fff"/><rect x="174" y="31" width="20" height="13" fill="rgb(90,98,129)" stroke="#fff"/><rect x="196" y="31" width="20" height="13" fill="rgb(90,98,129)" stroke="#fff"/><rect x="218" y="31" width="20" height="13" fill="rgb(88,98,131)" stroke="#fff"/><rect x="240" y="31" width="20" height="13" fill="rgb(82,101,135)" stroke="#fff"/><rect x="262" y="31" width="20" height="13" fill="rgb(69,106,143)" stroke="#fff"/><rect x="20" y="46" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="46" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="46" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="46" width="20" height="13" fill="rgb(69,106,143)" stroke="#fff"/><rect x="108" y="46" width="20" height="13" fill="rgb(69,106,143)" stroke="#fff"/><rect x="130" y="46" width="20" height="13" fill="rgb(83,100,134)" stroke="#fff"/><rect x="152" y="46" width="20" height="13" fill="rgb(89,98,130)" stroke="#fff"/><rect x="174" y="46" width="20" height="13" fill="rgb(96,95,125)" stroke="#fff"/><rect x="196" y="46" width="20" height="13" fill="rgb(240,40,30)" stroke="#fff"/><rect x="218" y="46" width="20" height="13" fill="rgb(89,98,130)" stroke="#fff"/><rect x="240" y="46" width="20" height="13" fill="rgb(86,99,132)" stroke="#fff"/><rect x="262" y="46" width="20" height="13" fill="rgb(81,101,135)" stroke="#fff"/><rect x="20" y="61" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="61" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="61" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="61" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="61" width="20" height="13" fill="rgb(61,109,149)" stroke="#fff"/><rect x="130" y="61" width="20" height="13" fill="rgb(76,103,138)" stroke="#fff"/><rect x="152" y="61" width="20" height="13" fill="rgb(80,102,136)" stroke="#fff"/><rect x="174" y="61" width="20" height="13" fill="rgb(90,98,129)" stroke="#fff"/><rect x="196" y="61" width="20" height="13" fill="rgb(91,97,128)" stroke="#fff"/><rect x="218" y="61" width="20" height="13" fill="rgb(84,100,133)" stroke="#fff"/><rect x="240" y="61" width="20" height="13" fill="rgb(83,100,134)" stroke="#fff"/><rect x="262" y="61" width="20" height="13" fill="rgb(69,106,143)" stroke="#fff"/><rect x="20" y="76" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="76" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="76" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="76" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="76" width="20" height="13" fill="rgb(61,109,149)" stroke="#fff"/><rect x="130" y="76" width="20" height="13" fill="rgb(63,108,147)" stroke="#fff"/><rect x="152" y="76" width="20" height="13" fill="rgb(69,106,143)" stroke="#fff"/><rect x="174" y="76" width="20" height="13" fill="rgb(80,102,136)" stroke="#fff"/><rect x="196" y="76" width="20" height="13" fill="rgb(90,98,129)" stroke="#fff"/><rect x="218" y="76" width="20" height="13" fill="rgb(83,100,134)" stroke="#fff"/><rect x="240" y="76" width="20" height="13" fill="rgb(75,104,139)" stroke="#fff"/><rect x="262" y="76" width="20" height="13" fill="rgb(63,108,147)" stroke="#fff"/><rect x="20" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="130" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="152" y="91" width="20" height="13" fill="rgb(65,107,146)" stroke="#fff"/><rect x="174" y="91" width="20" height="13" fill="rgb(70,105,142)" stroke="#fff"/><rect x="196" y="91" width="20" height="13" fill="rgb(78,102,137)" stroke="#fff"/><rect x="218" y="91" width="20" height="13" fill="rgb(76,103,138)" stroke="#fff"/><rect x="240" y="91" width="20" height="13" fill="rgb(62,109,148)" stroke="#fff"/><rect x="262" y="91" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="20" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="130" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="152" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="174" y="106" width="20" height="13" fill="rgb(63,108,147)" stroke="#fff"/><rect x="196" y="106" width="20" height="13" fill="rgb(74,104,140)" stroke="#fff"/><rect x="218" y="106" width="20" height="13" fill="rgb(65,107,146)" stroke="#fff"/><rect x="240" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="262" y="106" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="20" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="42" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="64" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="86" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="108" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="130" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="152" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="174" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="196" y="121" width="20" height="13" fill="rgb(65,107,146)" stroke="#fff"/><rect x="218" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="240" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/><rect x="262" y="121" width="20" height="13" fill="rgb(60,110,150)" stroke="#fff"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="180" y="150" font-size="8" fill="#5d6b79">each square = a cell; colour = max T if that cell fails</text>
+<rect x="20" y="158" width="80" height="10" fill="url(#g)"/>
+<defs><linearGradient id="g"><stop offset="0" stop-color="rgb(60,110,150)"/><stop offset="1" stop-color="rgb(240,40,30)"/></linearGradient></defs>
+<text font-family="Segoe UI,Arial,sans-serif" x="20" y="176" font-size="7" fill="#5d6b79">cool</text><text font-family="Segoe UI,Arial,sans-serif" x="84" y="176" font-size="7" fill="#9a3b3b">melt</text>
+</svg>
+<figcaption>Figure 2.14 — A failure-position heat-map: each square is a cell, coloured by the maximum temperature reached if that cell fails — the hot reds are the dangerous positions.</figcaption></figure>
+
+<ul>
+<li><strong>Histograms</strong> of the random-sweep outcomes — one each for <strong>total power loss</strong>, <strong>maximum temperature</strong>, and <strong>hot-spot count</strong> across runs. These are exactly the <em>distributions</em> from §6: a histogram is a bar chart of how often each outcome range occurs, so it shows the whole shape — the average, the spread, and the dangerous tail — rather than collapsing the sweep to a single number.</li>
+<li><strong>Ranking tables.</strong> (1) <em>Most- and least-damaging</em> failure positions/patterns: sort by a damage metric (power loss, peak temperature) so the top of the list is what to protect and the bottom is what barely matters. (2) <em>Per-layout robustness comparison</em>: run the same sweep on two <code>Circuit</code> layouts and tabulate their metrics side by side — the layout with lower power loss / lower peak temperature for the same failures is the more robust design.</li>
+</ul>
+
+<div class="callout">
+<strong>Every figure is computed, not stored.</strong> The heat-map, the three histograms, and the ranking tables are all <code>groupby</code>/aggregate operations on the long table — group by <code>cell_id</code> for the position heat-map, take per-run maxima for the histograms, sort for the rankings. You store the <em>raw long table once</em> and derive every figure from it; you never store the figures' underlying numbers separately, because then they could drift out of sync with the raw data.</div>
+
+<h4>7.5 &nbsp; Reproducibility metadata — store it WITH the results</h4>
+
+<p>A results table is only trustworthy if you can <em>regenerate</em> any figure from it months later. That needs more than the numbers — it needs the recipe that produced them. Store, alongside the raw table, the four things that pin the experiment down:</p>
+
+<ul>
+<li><strong>the random seed</strong> — so the exact failure patterns of the random/count modes can be reproduced bit-for-bit (§6.5);</li>
+<li><strong>the <code>Circuit</code> parameters</strong> — the layout and component values that define <em>which array</em> was swept;</li>
+<li><strong>the substrate</strong> — the thermal backing (materials/geometry) the §3 loop used;</li>
+<li><strong>the orbit</strong> — the illumination/eclipse conditions that set the inputs.</li>
+</ul>
+
+<div class="keyidea">
+<strong>Seed + Circuit + substrate + orbit = a regenerable experiment.</strong> With those four stored next to the results (HDF5 makes this natural — attach them as metadata in the same container; with Parquet keep a small sidecar config), any figure can be rebuilt from scratch and any number re-checked. Without them, the table is a pile of numbers no one can defend: "where did this histogram come from?" has no answer. Reproducibility metadata is cheap to store and the whole reason the results can be trusted.</div>
+
+<h4>7.6 &nbsp; Worked example — sizing the raw table, and the Excel verdict</h4>
+
+<div class="worked">
+<strong>Worked example — how big is a sweep, and does it fit in Excel? <span class="badge hot">EXAM-HOT</span></strong> A sweep runs <code>R = 1000</code> runs over an array of <code>N = 600</code> cells, recording the <strong>12</strong> columns of §7.2. (a) How many rows? (b) Roughly how much memory, at ~8 bytes per number? (c) Does it fit in a single Excel sheet — and what does that tell us about where to store it?
+
+<div class="step"><strong>Step 1 — rows = runs &times; cells.</strong> One row per (run, cell), so
+<div class="formula">
+rows = R &times; N = 1000 &times; 600 = <strong>600,000 rows</strong>.
+</div></div>
+
+<div class="step"><strong>Step 2 — memory ≈ rows &times; columns &times; bytes-per-number.</strong> Each row has 12 columns; take ~8 bytes per number (a standard 64-bit float):
+<div class="formula">
+bytes &asymp; 600,000 &times; 12 &times; 8 = 57,600,000 &asymp; <strong>58 MB</strong> in memory.
+</div>
+Written out as compressed Parquet this shrinks to just <strong>a few MB</strong> — the columnar encoding (§7.3) squeezes the repeated keys and similar values hard.</div>
+
+<div class="step"><strong>Step 3 — compare against Excel's row limit.</strong> Excel caps a sheet at <strong>1,048,576 rows</strong> (= 2<sup>20</sup>). Our table has 600,000 rows, and <code>600,000 &lt; 1,048,576</code>, so it <em>does</em> fit — <strong>numerically</strong>. But that is the wrong test. 600,000 rows is slow to open and filter, and a spreadsheet is not a database (§7.3). And the headroom is thin: push to <code>R = 2000</code> runs and
+<div class="formula">
+rows = 2000 &times; 600 = 1,200,000 &gt; 1,048,576 &rArr; <strong>overflows Excel</strong>.
+</div>
+(The crossover is at about 1748 runs for 600 cells.)</div>
+
+<div class="check"><strong>Sanity check and conclusion.</strong> <code>1000&times;600 = 600,000</code> ✓; <code>600,000&times;12&times;8 = 57.6&nbsp;M</code> bytes ≈ 58&nbsp;MB ✓; <code>2000&times;600 = 1.2&nbsp;M &gt; 1.05&nbsp;M</code> ✓. The honest chain: at 1000 runs the table <em>fits</em> in Excel but Excel is still the wrong store (slow, not a database); double the runs and it <em>does not even fit</em>. Either way the answer is the same — <strong>store the raw table in Parquet/HDF5, and make Excel only a summary export</strong>. The size argument does not depend on overflow; overflow just makes it unanswerable to pretend otherwise.</div>
+</div>
+
+<h4>7.7 &nbsp; Socratic ladder — why Parquet/HDF5 for raw, Excel for export</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). What is the difference between <em>long</em> and <em>wide</em> format for a sweep's results?</div>
+<div class="answer"><strong>Long (tidy):</strong> one row per (run, cell), one column per variable — tall and narrow; "which run" and "which cell" are <em>values in columns</em> (<code>run_id</code>, <code>cell_id</code>). <strong>Wide:</strong> one row per run, with a separate column for every cell&times;variable (hundreds of columns) — short and fat; "which cell" is hidden in column <em>names</em>. Same information, opposite layout.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (build up). How big does the raw table get, and why is that the heart of the problem?</div>
+<div class="answer"><code>R&times;N</code> rows — e.g. 1000 runs &times; 600 cells = 600,000 rows, &times;12 columns &asymp; 7.2&nbsp;million numbers (~58&nbsp;MB in memory). It is the heart of the problem because the size is what rules out a spreadsheet as the store: this is a small database, not a worksheet.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (why). What exactly is Excel's row limit, and does the sweep hit it?</div>
+<div class="answer">Excel allows <strong>1,048,576 rows</strong> per sheet (2<sup>20</sup>). A 1000&times;600 sweep (600,000 rows) <em>fits</em> — but it is close, and a 2000&times;600 sweep (1,200,000 rows) <em>exceeds</em> it. Even when it fits, 600k rows is slow and a spreadsheet is not built to be queried like a database.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (build up). What does a columnar binary format (Parquet/HDF5) buy you that CSV/Excel does not?</div>
+<div class="answer">Three things. (1) <strong>Selective reads</strong> — pull just the columns you need (e.g. only <code>T_front</code>) without touching the other 11. (2) <strong>Hard compression</strong> — storing each column contiguously lets repeated keys and similar values compress to a tiny fraction (run-length/dictionary encoding), so long format's repeated <code>run_id</code>/<code>mode</code> costs almost nothing; the file is a few MB vs tens of MB. (3) <strong>Scale and speed</strong> — effectively unlimited rows, fast reads, built to be a data store. It makes the easy-to-query long format also cheap to store.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;e (deep — the target). So why store the raw results in Parquet/HDF5 and treat Excel as only an export?</div>
+<div class="answer">Because the two have <em>different jobs</em>, and matching each to its job keeps the data correct. The raw results are a large, query-heavy long table (600k+ rows, 12 columns) that you will filter, group and aggregate repeatedly to make heat-maps, histograms and rankings — that is precisely what a <strong>columnar binary store</strong> is for: unlimited rows, selective fast reads, compression that crushes long format's repeated keys, and a natural home for the reproducibility metadata (seed, Circuit, substrate, orbit). Excel cannot do that job — it caps near a million rows, is slow on that scale, and is not a database. But Excel <em>is</em> the right tool for the <em>human-facing summary</em>: a generated workbook with one sheet per sweep plus a ranking sheet, dozens to a few thousand rows, produced <em>from</em> the store. So the store is the single <strong>source of truth</strong> (everything derives from it and nothing drifts), and Excel is a disposable, regenerable <strong>view</strong> on top. Raw in Parquet/HDF5, summary in Excel — the right tool for each, with one authoritative copy of the data.</div>
+</div>
+</div>
+
+<h4>7.8 &nbsp; Two traps that corrupt the results</h4>
+
+<div class="pitfall">
+<strong>Pitfall — editing the Excel summary and treating it as the source of truth.</strong> The summary workbook is a <em>derived view</em>, generated from the Parquet/HDF5 store. If you open it, hand-edit a number (fix a typo, tweak a ranking, annotate a cell) and then treat that edited workbook as the real data, you have forked the truth: the store and the spreadsheet now disagree, and the next time anyone regenerates the workbook your edits vanish — or worse, are silently kept and contradict the raw data. <strong>Never edit the summary as if it were the data.</strong> Fix the inputs or the analysis and <em>regenerate</em> the workbook from the store. The store is authoritative; the workbook is throwaway.</div>
+
+<div class="pitfall">
+<strong>Pitfall — storing wide format, then struggling to filter by cell.</strong> Wide format (one row per run, a column per cell&times;variable) looks tidy at first — one row per run feels natural. But the moment you ask a per-cell question — "every hot-spot in the sweep", "average <code>T_front</code> for cell&nbsp;317", "worst <code>P_elec</code> per cell" — you discover "cell" is not a column you can filter or group by; it is smeared across hundreds of column <em>names</em>. Every such query then needs a reshape (melt) back to long first. <strong>Store long from the start.</strong> Make <code>run_id</code> and <code>cell_id</code> real columns so the queries you will actually run are one-liners.</div>
+
+<h4>7.9 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice Q7-1.</strong> A sweep runs <code>R = 2500</code> runs over an array of <code>N = 600</code> cells, recording the 12 columns of the long table. (a) How many rows does the raw long table have? (b) Roughly how much memory does it take at ~8 bytes per number? (c) Does it fit in a single Excel sheet (limit 1,048,576 rows)? Show the arithmetic with units and state the storage conclusion in one line.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q7-2.</strong> For each need below, say which artifact you would use — the <strong>Parquet/HDF5 store</strong> or the <strong>Excel summary workbook</strong> — and why in one line. (i) The reviewer wants a printable one-page table of the ten most-damaging failure positions to put in a report. (ii) You need to recompute the max-temperature histogram after changing the hot-spot threshold, over all 700,000 rows. (iii) A colleague wants to filter every row where <code>criterion_tripped</code> is set, across the whole sweep, to investigate breakdowns.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q7-3.</strong> Write out the <strong>12 columns</strong> of the long (tidy) results table for the sweep, and for each one say in a few words what it holds. Then state, for a single run of an <code>N</code>-cell array, how many rows that one run contributes to the table and why.
+<div class="answerspace lines-10"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> A sweep produces a result for <em>every</em> (run, cell): <code>R&times;N</code> rows (1000&times;600 = 600,000), each with <strong>12</strong> columns — <code>run_id, mode, failed_ids, cell_id, V, I, P_elec, T_front, T_rear, reverse_flag, hotspot_flag, criterion_tripped</code>. Store it in <strong>long/tidy</strong> format (one row per run&times;cell) because "which run/which cell" are then <em>columns</em>, so filter/group/aggregate are one-liners — unlike <strong>wide</strong> format, where cell is hidden in column names. Keep the raw table in a <strong>compressed columnar binary store</strong> — <strong>Parquet</strong> (columnar, selective reads, tiny vs CSV) or <strong>HDF5</strong> (hierarchical binary container) — as the single <strong>source of truth</strong>, read/written via a pandas <strong>DataFrame</strong>; columnar encoding crushes long format's repeated keys so it stays a few MB. <strong>Excel is only a generated summary</strong> (one sheet per sweep + a ranking sheet, produced <em>from</em> the store): it caps at <strong>1,048,576 rows</strong>, is slow, and is not a database — a 1000&times;600 table fits but a 2000&times;600 (1.2&nbsp;M rows) overflows. Present with a <strong>heat-map</strong> of failure-position → max temperature, <strong>histograms</strong> of power loss / max-T / hot-spot count (the §6 distributions), and <strong>ranking</strong> tables (most/least damaging + per-layout robustness). Store <strong>reproducibility metadata</strong> — seed, Circuit parameters, substrate, orbit — with the results so any figure can be regenerated. Two traps: editing the Excel summary as if it were the data (it is a regenerable view — fix inputs and regenerate), and storing wide then being unable to filter by cell (store long from the start).</div>

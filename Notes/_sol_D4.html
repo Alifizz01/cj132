@@ -1,0 +1,40 @@
+<div class="soln"><span class="sid">D4-1.</span>
+<strong>Which loops vectorise, and why.</strong>
+<ul>
+<li><strong>(i) <em>vectorises.</em></strong> Each output element <code>out[k]</code> depends only on <em>its own</em> input <code>v[k]</code> and a constant <code>offset</code> — there is <strong>no dependency between elements</strong>, so every element can be computed independently and therefore all at once. The one-line numpy replacement:
+<pre>
+out = v * 2.0 + offset      # whole array, one compiled operation
+</pre>
+This pays the interpreter's per-element overhead once for the entire array instead of <code>n</code> times.</li>
+<li><strong>(ii) does <em>not</em> vectorise (as written).</strong> It is a running cumulative sum: <code>total[k] = total[k-1] + x[k]</code>, so element <code>k</code> <strong>requires the result of element <code>k−1</code></strong>. The blocking property is a <strong>genuine per-element sequential dependency</strong> — you cannot compute all elements "at once" because each one's input does not exist until the previous one is done. A plain <code>out = ...</code> array add cannot express it. (You <em>can</em> still avoid the Python loop with a purpose-built primitive: <code>total = numpy.cumsum(x)</code>, which performs the prefix-sum in compiled code — but that is a special cumulative operation, not ordinary element-wise vectorisation.)</li>
+</ul>
+<strong>The lesson.</strong> Vectorisation works exactly when the per-element computations are <em>independent</em>; a true dependence on a neighbouring element blocks ordinary vectorisation and needs either a loop or a dedicated sequential primitive.
+</div>
+
+<div class="soln"><span class="sid">D4-2.</span>
+<strong>(a) Legacy thermal time for the whole study.</strong> One <code>fsolve</code> per cell, 800 cells, 500 runs:
+<pre>
+legacy per run = 800 cells × 1.5 ms/cell = 1200 ms = 1.2 s/run
+legacy total   = 500 runs × 1.2 s/run    = 600 s   (= 10 minutes)
+</pre>
+<strong>(b) Vectorised total and speed-up.</strong> 3 ms per run for the whole array, 500 runs:
+<pre>
+vectorised total = 500 runs × 3 ms/run = 1500 ms = 1.5 s
+speed-up         = 600 s / 1.5 s       ≈ 400×
+</pre>
+<strong>Answer.</strong> The legacy approach costs <strong>≈600 s</strong> of thermal work across the study; vectorising drops it to <strong>≈1.5 s</strong>, a <strong>≈400×</strong> speed-up (equivalently, per run: 1.2 s ÷ 3 ms ≈ 400×). The saving is ≈598.5 s, just under ten minutes. As in the notes, treat these as order-of-magnitude figures — the per-call costs are illustrative stand-ins — but the structural point holds for any reasonable inputs: vectorising removes the factor of <code>N</code> (here 800) from the per-run cost, and that factor multiplies across all 500 runs.
+</div>
+
+<div class="soln"><span class="sid">D4-3.</span>
+<strong>Choose processes, not threads.</strong> The work is <em>CPU-bound</em> (heavy numpy/ngspice computation, no I/O waiting), and CPython's <strong>GIL (Global Interpreter Lock)</strong> permits only <em>one thread to execute Python bytecode at a time</em>. So Python threads doing computation cannot run truly in parallel — they take turns holding the lock — and you would get little or no speed-up from threads on this workload; they would essentially run one-at-a-time plus overhead. <strong>Processes</strong> each have their <em>own</em> interpreter and their <em>own</em> GIL, so they genuinely run simultaneously on separate cores. The 2000 runs are <em>embarrassingly parallel</em> (each is independent), so processes across the 8 cores give near-linear scaling. Use <code>joblib</code> or <code>multiprocessing</code> (both default to processes).
+<br><strong>Best-case wall-clock.</strong>
+<pre>
+single-core total = 2000 runs × 0.4 s/run = 800 s
+on 8 cores (ideal) ≈ 800 s / 8           = 100 s
+</pre>
+So roughly <strong>100 s</strong> in the ideal near-linear case — treat it as a floor; real time is a little higher because of process start-up and gathering results. (Threads, by contrast, would stay near the 800 s single-core figure for this CPU-bound work.)
+</div>
+
+<div class="soln"><span class="sid">D4-4.</span>
+<strong>Critique.</strong> This is textbook <strong>premature optimisation</strong>: the colleague added complexity (12 tidy lines → 40 lines of bit-twiddling) to a function the <em>profiler proves is only 0.4%</em> of runtime, so even making it infinitely fast would cut total runtime by at most 0.4% — an unmeasurable gain bought at a permanent cost in readability. They optimised on a hunch instead of the measurement, and so sped up the wrong thing. <strong>What should have been optimised:</strong> the Monte-Carlo thermal solve, which the profiler shows is <strong>86%</strong> of runtime — that is the hot spot, and the place where vectorising the per-cell <code>fsolve</code> loop or parallelising the independent runs would actually move the total. The rule (§4.1, §4.8): <em>profile first, optimise only the proven hot spot, and leave clear code clear.</em>
+</div>

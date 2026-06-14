@@ -1,0 +1,53 @@
+\section{<< section.title | tex >>}
+
+<<% for c in cases %>>
+\subsection{Case: << c.case.label | tex >>}
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|L|r|l|}
+    \hline
+    \reporthead{\textbf{Quantity} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Phase                 & << c.case.phase.value | tex >> & \\ \hline
+    Launch configuration  & << c.case.launch_config.value | tex >> & \\ \hline
+    Temperature           & << c.environment.temperature_c | num(".2f") >> & \si{\celsius}\\ \hline
+    Season factor         & << c.environment.season | num(".4f") >> & \\ \hline
+    Dose I                & << c.environment.dose_i | num(".3f") >> & \(\times 10^{14}\)\\ \hline
+    Dose V                & << c.environment.dose_v | num(".3f") >> & \(\times 10^{14}\)\\ \hline
+    Current loss product  & << c.environment.current_loss | num(".4f") >> & \\ \hline
+    Voltage loss product  & << c.environment.voltage_loss | num(".4f") >> & \\ \hline
+    Array \(I_{sc}\)      & << c.results.array.isc | num(".3f") >> & A\\ \hline
+    Array \(V_{oc}\)      & << c.results.array.voc | num(".2f") >> & V\\ \hline
+    Array MPP voltage     & << c.results.array.v_mp | num(".2f") >> & V\\ \hline
+    Array MPP current     & << c.results.array.i_mp | num(".3f") >> & A\\ \hline
+    Array MPP power       & << c.results.array.p_mp | num(".1f") >> & W\\ \hline
+<<% if c.bus %>>
+    Current at \(V_{bus}\) = << c.bus.bus_voltage_v | num(".2f") >> V & << c.bus.current_a | num(".3f") >> & A\\ \hline
+    Power at \(V_{bus}\)   & << c.bus.power_w | num(".1f") >> & W\\ \hline
+<<% endif %>>
+  \end{tabularx}
+\end{table}
+
+{\centering
+\rowcolors{2}{white}{tablerowgrey}
+\begin{xltabular}{\linewidth}{|L|r|r|r|r|}
+  \hline
+  \reporthead{\textbf{Section} & \(\boldsymbol{V_{mp}}\) [V] & \(\boldsymbol{I_{mp}}\) [A] & \(\boldsymbol{P_{mp}}\) [W] & \(\boldsymbol{V_{oc}}\) [V]}\\ \hline
+  \endfirsthead
+  \multicolumn{5}{l}{\footnotesize\itshape Table~\thetable\ (continued)}\\ \hline
+  \reporthead{\textbf{Section} & \(\boldsymbol{V_{mp}}\) [V] & \(\boldsymbol{I_{mp}}\) [A] & \(\boldsymbol{P_{mp}}\) [W] & \(\boldsymbol{V_{oc}}\) [V]}\\ \hline
+  \endhead
+  \hline
+  \multicolumn{5}{r}{\footnotesize\itshape continued on next page}\\
+  \endfoot
+  \endlastfoot
+<<% for s in c.results.sections %>>
+  \texttt{\small << s.name | tex >>} & << s.v_mp | num(".2f") >>
+                              & << s.i_mp | num(".3f") >>
+                              & << s.p_mp | num(".1f") >>
+                              & << s.voc  | num(".2f") >>\\ \hline
+<<% endfor %>>
+\end{xltabular}
+\par}
+\clearpage
+<<% endfor %>>

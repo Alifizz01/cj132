@@ -1,0 +1,41 @@
+<!-- ===================================================================
+     CHAPTER 2 · SECTION 7 — Worked solutions
+     Practice IDs: Q7-1, Q7-2, Q7-3  (matched in _frag_Q7.html)
+     =================================================================== -->
+
+<div class="soln"><span class="sid">Q7-1.</span>
+Sizing the raw long table for <code>R = 2500</code> runs over <code>N = 600</code> cells, 12 columns.<br>
+<strong>(a) Rows = runs &times; cells.</strong> One row per (run, cell):<br>
+<code>rows = R &times; N = 2500 &times; 600 = </code><strong>1,500,000 rows</strong>.<br>
+<strong>(b) Memory ≈ rows &times; columns &times; bytes-per-number</strong>, at 12 columns and ~8 bytes per 64-bit number:<br>
+<code>bytes &asymp; 1,500,000 &times; 12 &times; 8 = 144,000,000 &asymp; </code><strong>144 MB</strong> in memory (a few MB as compressed Parquet).<br>
+<strong>(c) Fit in one Excel sheet?</strong> Excel's cap is 1,048,576 rows. Here <code>1,500,000 &gt; 1,048,576</code>, so it does <strong>NOT</strong> fit — it overflows a single sheet.<br>
+<strong>Conclusion.</strong> Store the raw table in Parquet/HDF5 (it both overflows Excel <em>and</em> is far too large to query comfortably there); use Excel only for a generated summary. (Check: <code>2500&times;600 = 1.5&nbsp;M</code> ✓; <code>1.5&nbsp;M &times; 12 &times; 8 = 144&nbsp;M</code> bytes ✓; <code>1.5&nbsp;M &gt; 1.05&nbsp;M</code> ✓.)
+</div>
+
+<div class="soln"><span class="sid">Q7-2.</span>
+Choosing the right artifact — Parquet/HDF5 store vs Excel summary workbook.<br>
+<strong>(i) A printable one-page table of the ten most-damaging failure positions for a report.</strong> → <strong>Excel summary workbook.</strong> It is a tiny (ten-row), human-facing, printable view — exactly the ranking-sheet job Excel is for. Generate it <em>from</em> the store; do not treat the spreadsheet as the data.<br>
+<strong>(ii) Recompute the max-temperature histogram after changing the hot-spot threshold, over all 700,000 rows.</strong> → <strong>Parquet/HDF5 store.</strong> This is a large-scale aggregation over the full raw table (700k rows) — read the relevant columns from the columnar store into a DataFrame and recompute. Excel would be slow, near its row limit, and is the wrong tool for re-aggregating raw data.<br>
+<strong>(iii) Filter every row where <code>criterion_tripped</code> is set, across the whole sweep.</strong> → <strong>Parquet/HDF5 store.</strong> A filter over the entire raw long table is a database-style query; the columnar store reads just that column fast and returns the matching rows. (The result could then be <em>exported</em> to an Excel sheet for a colleague to read, but the filtering happens against the store.)
+</div>
+
+<div class="soln"><span class="sid">Q7-3.</span>
+The 12 columns of the long (tidy) results table, and the rows one run contributes.<br>
+<strong>The 12 columns (one row per (run, cell)):</strong>
+<ol>
+<li><code>run_id</code> — which run the row belongs to (key, run).</li>
+<li><code>mode</code> — sampling mode that produced the run: position / count / random (run-level key).</li>
+<li><code>failed_ids</code> — which cells were failed in this run, i.e. the failure pattern (run-level key).</li>
+<li><code>cell_id</code> — which cell this row describes, 0…N&minus;1 (key, cell).</li>
+<li><code>V</code> — cell voltage, V (measured).</li>
+<li><code>I</code> — cell current, A (measured).</li>
+<li><code>P_elec</code> — cell electrical power, W; negative when absorbing in reverse (measured).</li>
+<li><code>T_front</code> — converged front-face temperature, °C (measured).</li>
+<li><code>T_rear</code> — converged rear-face temperature, °C (measured).</li>
+<li><code>reverse_flag</code> — was this cell reverse-biased? true/false (flag).</li>
+<li><code>hotspot_flag</code> — did this cell exceed the hot-spot threshold? true/false (flag).</li>
+<li><code>criterion_tripped</code> — which §5 breakdown criterion tripped here, if any (flag).</li>
+</ol>
+<strong>Rows from one run.</strong> A single run records one row <em>per cell</em>, so a run on an <code>N</code>-cell array contributes <strong><code>N</code> rows</strong> (e.g. 600 rows for a 600-cell array). That is why the whole sweep has <code>R&times;N</code> rows: <code>R</code> runs, each adding <code>N</code> rows — one observation per (run, cell). Within those <code>N</code> rows the run-level columns (<code>run_id</code>, <code>mode</code>, <code>failed_ids</code>) repeat identically, which is the redundancy that columnar compression (Parquet/HDF5) crushes to almost nothing.
+</div>

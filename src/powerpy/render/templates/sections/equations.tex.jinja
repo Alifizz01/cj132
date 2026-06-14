@@ -1,0 +1,18 @@
+\section{<< section.title | tex >>}
+<<% if section.description %>>
+\noindent\textit{<< section.description | tex >>}
+\par\vspace{0.4em}
+<<% endif %>>
+<<% if equations %>>
+<<% for eq in equations %>>
+\paragraph{<< eq.name | tex >>.}
+\begin{equation}
+  << eq.tex >>
+  \label{eq:<< eq.id | tex >>}
+\end{equation}
+<<% if eq.description %>>\noindent<< eq.description | tex >>\par<<% endif %>>
+<<% endfor %>>
+<<% else %>>
+\textit{(no equations loaded; add an ``equations'' sheet to the
+workbook, or remove this row from the structure sheet.)}
+<<% endif %>>

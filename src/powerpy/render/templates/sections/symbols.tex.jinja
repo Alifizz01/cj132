@@ -1,0 +1,18 @@
+\section{<< section.title | tex >>}
+<<% if section.description %>>
+\noindent\textit{<< section.description | tex >>}
+\par\vspace{0.4em}
+<<% endif %>>
+<<% if symbols %>>
+\begin{longtable}{lll}
+  \toprule
+  Symbol & Description & Unit\\
+  \midrule\endhead
+<<% for s in symbols %>>
+  \(<< s.symbol >>\) & << s.description | tex >> & << s.unit | tex >>\\
+<<% endfor %>>
+  \bottomrule
+\end{longtable}
+<<% else %>>
+\textit{(no nomenclature loaded.)}
+<<% endif %>>

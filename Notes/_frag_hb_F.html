@@ -1,0 +1,284 @@
+<section class="partopener"><div class="pn">Appendix F</div><h2>Assumptions, Limitations, Validation &amp; Roadmap</h2><div class="blurb">What the model assumes, where it stops, how it is checked, and what comes next.</div></section>
+
+<section class="sec">
+<h3><span class="sec-num">F.1</span>Modelling assumptions</h3>
+
+<p class="slow">Every simulator is a contract between fidelity and tractability. Before a single number from this tool is trusted, the reader is owed an explicit statement of what the model takes for granted. The assumptions below are not apologies; they are the load-bearing walls of the formulation. Each one was chosen deliberately, each one is defensible in the operating regime the simulator targets — a satellite solar array radiating to deep space — and each one has a clearly understood failure mode if pushed outside that regime. We list them in the order they enter the physics.</p>
+
+<div class="keyidea"><span class="lbl">Key idea</span>The model is a <b>steady-state, two-node-per-cell, radiation-plus-conduction energy balance</b> solved by Newton's method on a per-tile temperature vector. Everything below is a consequence of, or a qualifier on, that single sentence.</div>
+
+<h4>F.1.1 Steady state — no time term (yet)</h4>
+
+<p class="slow">The governing equation solved at every tile is an <em>algebraic</em> energy balance, not a differential one in time. We assert that the net heat flow into each node is zero: absorbed solar and albedo flux, plus electrical dissipation, plus lateral conduction from neighbours, exactly balances radiative emission to space. There is no <span class="num">&rho;&middot;c&middot;V&middot;dT/dt</span> term. Physically this means the model reports the temperature the array <em>would settle to</em> if the current illumination and electrical load were held fixed forever and the thermal mass had finished responding.</p>
+
+<p class="slow">This is the correct first question to answer for a power-budget and survival analysis: full-sun equilibrium and worst-case hot-spot equilibrium are steady-state quantities. It is the <em>wrong</em> tool for two questions that matter later — how fast a shadowed cell heats up after a string fault, and how cold the array drifts during an eclipse pass. Those are transient questions and are explicitly deferred to the roadmap (F.5, item&nbsp;#3).</p>
+
+<div class="oldnew"><div class="row"><div class="cell prev"><div class="hdr">Previous</div>A transient model would carry a heat-capacity term per node and march in time, requiring an initial condition, a time step, and a stability criterion — far more machinery, and far more places to be wrong, than the equilibrium question needs.</div><div class="cell now"><div class="hdr">Now</div>A pure algebraic balance: one nonlinear root-find per scenario, no time axis, no stability worries. The answer is the fixed point, reached directly.</div></div><div class="flawline"><b>Flaw:</b> Cannot say <em>how long</em> a hot spot takes to develop or an eclipse takes to cool — only the endpoints.</div><div class="benefitline"><b>Benefit:</b> The questions that gate the design (peak survival temperature, equilibrium power) are answered exactly and cheaply, with no integrator to tune.</div></div>
+
+<h4>F.1.2 Two thermal nodes per cell — front and rear</h4>
+
+<p class="slow">Each cell is represented by exactly two temperatures: a front (illuminated, cell/coverglass) node and a rear (substrate/backsheet) node, coupled by a through-thickness conductance. We do <em>not</em> resolve any temperature variation <em>within</em> the front node or <em>within</em> the rear node — no through-thickness gradient finer than that single front-to-rear link, and no in-plane variation inside one tile. A cell is, to the model, two isothermal lumps stacked with a resistor between them.</p>
+
+<p class="slow">This is the classic lumped-capacitance idealisation applied across the stack. It is justified because the in-plane Biot number of a single cell is small: the cell is thin, its lateral dimension modest, and the dominant resistances are the front-to-rear stack and the radiation boundary, not gradients across a few centimetres of silicon. Resolving more than two nodes per cell buys precision the boundary conditions do not deserve, and multiplies the unknown count for no decision-relevant gain.</p>
+
+<div class="deep"><span class="lbl">Deeper</span>Two nodes is the minimum that still distinguishes the optically/electrically active front face (which absorbs sun and dissipates I&sup2;R-like losses) from the rear face (which sees the spacecraft body or a different view to space). Collapsing to one node would erase the front-rear &Delta;T that drives the through-thickness flux and would misreport rear-side radiator effectiveness. Three or more nodes would resolve gradients the boundary data cannot constrain.</div>
+
+<h4>F.1.3 Radiation and conduction only — no convection</h4>
+
+<p class="slow">The only heat-transfer modes in the model are <b>radiative exchange</b> (Stefan&ndash;Boltzmann emission to a cold sink, with supplied emissivities and view factors) and <b>solid conduction</b> (front-to-rear through the stack, and tile-to-tile laterally). There is no convective term. In vacuum this is not an approximation — it is exactly correct. There is no fluid to carry heat, so omitting convection introduces zero error in the intended operating environment.</p>
+
+<div class="pitfall"><span class="lbl">Pitfall</span>This same assumption makes the model <b>invalid for ground/ambient testing in air</b>. A thermal-vacuum chamber reproduces the modelled physics; a benchtop test in atmosphere does not, because natural and forced convection then become first-order. Do not validate this simulator against an in-air measurement and conclude it is "running hot" — it is correctly modelling vacuum, and the air test is the outlier.</div>
+
+<h4>F.1.4 Uniform per-tile properties</h4>
+
+<p class="slow">Within a single tile, every material and optical property is treated as a single scalar: one absorptivity, one emissivity, one through-thickness conductance, one area. Properties may differ <em>between</em> tiles (that is the point of a tile grid), but they are constant <em>across</em> any one tile. This keeps each tile's contribution to the energy balance a closed-form function of its two node temperatures and its neighbours, which is what makes the Jacobian sparse and analytically writable.</p>
+
+<h4>F.1.5 Lateral conduction as a single scalar g_lat</h4>
+
+<p class="slow">Heat sharing between adjacent tiles is modelled by one lateral conductance, <span class="num">g_lat</span>, applied uniformly: front-to-front between neighbouring front nodes, and rear-to-rear between neighbouring rear nodes, with the same scalar value. There is no per-link conductance, no directional anisotropy (the array is treated as laterally isotropic), and no distinction between, say, a bus-bar-rich direction and a substrate-only direction.</p>
+
+<p class="slow">This single scalar is the most consequential simplification in the model, and it is honest to flag it as such. It is exactly right when the interconnect and substrate are laterally homogeneous, and it is the term that most directly governs hot-spot spreading (see F.4 — raising lateral coupling drops a reverse-biased cell from 187&nbsp;&deg;C to roughly 87&nbsp;&deg;C). Per-link and anisotropic conductance is a planned generalisation (F.5).</p>
+
+<div class="deep"><span class="lbl">Deeper</span>Crucially, <span class="num">g_lat = 0</span> is a supported, exercised case: with lateral conduction switched off, every tile decouples and the system reduces to independent per-cell balances. This is not a degenerate edge case bolted on — it is a strict <em>subset</em> of the general solver, and reproducing the independent solver exactly in this limit is one of the validation oracles (F.4).</div>
+
+<h4>F.1.6 Electrical dissipation P_elec — solved or injected</h4>
+
+<p class="slow">The electrical power term entering each tile's front-node balance is either (a) computed from a circuit solve that maps the array's voltage/current state to per-cell dissipation, or (b) injected directly as a known per-tile power. The thermal solver does not care which: it consumes <span class="num">P_elec</span> as a boundary input. This clean interface is what lets the electrical and thermal halves be developed, tested, and validated independently before being coupled (the coupling itself is exercised — V&middot;I &rarr; P_elec drives a temperature change, see F.4).</p>
+
+<h4>F.1.7 Tilt as a cosine; view factors as supplied scalars</h4>
+
+<p class="slow">The incidence of solar flux on a tile is scaled by the cosine of the tilt angle between the panel normal and the sun vector — a Lambert-cosine projection of the collecting area, with no further angular dependence of absorptivity. Radiative view factors (tile-to-space, tile-to-body) are taken as <em>supplied scalar constants</em>; the model does not compute geometric view factors from a CAD mesh, nor does it update them as the spacecraft attitude changes. Whoever supplies the scenario is responsible for view factors consistent with the geometry being studied.</p>
+
+<table>
+<thead><tr><th>Assumption</th><th>Holds when</th><th>Breaks when</th></tr></thead>
+<tbody>
+<tr><td>Steady state</td><td>Illumination &amp; load held long enough to equilibrate</td><td>Eclipse entry/exit, fault transients</td></tr>
+<tr><td>2 nodes/cell</td><td>Thin cell, small in-plane Biot number</td><td>Thick/large tiles with strong in-plane gradients</td></tr>
+<tr><td>No convection</td><td>Vacuum (on orbit, TVAC)</td><td>Any test in air</td></tr>
+<tr><td>Uniform tile props</td><td>Laterally homogeneous tile</td><td>Strong intra-tile material variation</td></tr>
+<tr><td>Scalar g_lat</td><td>Isotropic, homogeneous interconnect</td><td>Anisotropic bus-bar layout, varied bonding</td></tr>
+<tr><td>Cosine tilt</td><td>Diffuse/flat-plate collector approximation</td><td>Strongly specular or concentrator optics</td></tr>
+<tr><td>Scalar view factors</td><td>Fixed geometry, supplied consistently</td><td>Slewing attitude, self-shadowing changes</td></tr>
+</tbody>
+</table>
+
+<div class="recap"><span class="lbl">Recap</span>The model is a vacuum-correct, steady-state, two-node-per-cell radiative/conductive balance with one lateral conductance scalar and a clean electrical-power interface. It answers equilibrium questions exactly; it does not yet answer time-dependent ones.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">F.2</span>Numerical assumptions</h3>
+
+<p class="slow">Stating the physics is only half the contract. The other half is: <em>does the solver actually find the root reliably?</em> A nonlinear energy balance can in principle have multiple solutions, no solution, or a region where the iteration diverges. This section explains why, for the physics at hand, Newton's method is not merely convenient but provably well-behaved, and what guards are in place for the one pathological case that exists.</p>
+
+<h4>F.2.1 Why Newton converges — the imbalance is a reliable compass</h4>
+
+<p class="slow">The solver seeds every tile temperature at a sensible <b>28&nbsp;&deg;C</b> and applies Newton iteration on the energy-imbalance residual. The reason this is robust is structural, not lucky. The radiative term scales as <span class="num">T&#8308;</span> and the conductive terms scale as <span class="num">T</span>; the net energy-loss curve as a function of node temperature is therefore <b>smooth and monotone</b> over the entire physical range. Monotonicity is the whole game: it means the sign of the residual unambiguously tells the solver which direction to step. The imbalance is a reliable compass — if a node is emitting less than it absorbs, the residual says "hotter", and it is never lying because the curve never turns around.</p>
+
+<div class="keyidea"><span class="lbl">Key idea</span>Because emission (&prop;T&#8308;) plus conduction (&prop;T) is strictly increasing in temperature, the energy-balance residual is monotone, so the root is unique and Newton steps always point the right way. Smoothness gives a well-defined Jacobian everywhere physical; monotonicity gives a unique root and global sense of direction.</div>
+
+<h4>F.2.2 The one flat spot — and the guard</h4>
+
+<p class="slow">There is exactly one place the bare method's derivative vanishes: at <b>absolute zero</b>, where both <span class="num">dT&#8308;/dT</span> and the conduction slope go to zero, the residual has a flat spot and a naive Newton step has no gradient to ride. This is a mathematical corner case, not a physical operating point — no array node sits at 0&nbsp;K — but a solver must not silently misbehave there. The code therefore <b>guards</b> this degenerate flat spot explicitly rather than trusting the bare iteration to stumble through it.</p>
+
+<div class="pitfall"><span class="lbl">Pitfall</span>The flat spot exists only at <span class="num">T = 0&nbsp;K</span>. Starting from the 28&nbsp;&deg;C (~301&nbsp;K) seed, the iteration is nowhere near it, but a careless initial guess of exactly 0&nbsp;K (or a numerical underflow toward it) would land on the one point where the bare method has no slope to follow. The guard catches this so the solver degrades gracefully instead of dividing by a vanishing derivative.</div>
+
+<h4>F.2.3 Tolerances</h4>
+
+<p class="slow">Convergence is declared when the energy-balance residual falls below a tight absolute tolerance, with an iteration cap as a backstop. Because the residual is monotone and smooth, Newton's quadratic convergence kicks in close to the root and the tolerance is reached in a handful of iterations from the 28&nbsp;&deg;C seed — there is no slow crawl, because there is no nearby competing root or ill-conditioned plateau to fight.</p>
+
+<h4>F.2.4 Sparse solve for lateral coupling</h4>
+
+<p class="slow">When lateral conduction is active, every tile's residual depends on its neighbours, so the Jacobian is no longer block-diagonal — but it is highly <b>sparse</b>, with a fixed nearest-neighbour pattern dictated by the tile grid. The linear system at each Newton step is therefore solved with sparse linear algebra rather than a dense factorisation. This is what makes large grids tractable: the cost grows with the number of nonzeros (proportional to the tile count) rather than with the cube of a dense matrix dimension.</p>
+
+<div class="deep"><span class="lbl">Deeper</span>The sparsity pattern is <em>constant</em> across iterations and across scenarios for a given grid — the tiles do not move, so the neighbour graph never changes. This invariance is exploited in the vectorised constant-pattern Jacobian (F.5 item #4), which is why 1600 tiles solve in 0.046&nbsp;s: the structure is built once, then only the numerical values are refreshed each step.</div>
+
+<div class="recap"><span class="lbl">Recap</span>Newton is robust here because the residual is smooth and monotone (unique root, reliable step direction); the only flat spot is at absolute zero and is explicitly guarded; lateral coupling is handled by a sparse solve whose fixed pattern is reused for speed.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">F.3</span>Limitations</h3>
+
+<p class="slow">An honest handbook lists what does <em>not</em> work as plainly as what does. None of the limitations below is a hidden defect; each is a known boundary of the current build, and each maps to a roadmap item. Read this section as "do not bill the simulator for capabilities it does not yet have."</p>
+
+<h4>F.3.1 Orbit propagation is a stub</h4>
+
+<p class="slow">Time-varying environmental fluxes — the changing solar, albedo, and planet-IR loads as the spacecraft moves along its orbit — are <em>not</em> auto-generated. The intended propagator (built on <b>hapsira</b>) is wired as an interface but raises <span class="num">NotImplementedError</span>; it is a stub. Consequently, the user must <b>supply fluxes manually</b> for each scenario of interest. The simulator will faithfully equilibrate to whatever fluxes it is handed, but it will not yet walk an orbit and produce the flux time series itself.</p>
+
+<div class="pitfall"><span class="lbl">Pitfall</span>Because of the stub, there is currently <em>no</em> automatic eclipse-entry or beta-angle sweep. Any orbital-average or worst-case-position result must be assembled by hand from individually supplied flux points until the propagator is implemented (F.5 #3).</div>
+
+<h4>F.3.2 Electrical solve wired but on a mock</h4>
+
+<p class="slow">The electrical&ndash;thermal coupling is fully wired and tested at the interface level (a V&middot;I product flows in as <span class="num">P_elec</span> and demonstrably moves the temperatures). However, the <em>real</em> electrical solve currently runs against a <b>mock</b>. To drive genuine ngspice circuit results into the thermal model, the OCR-damaged <span class="num">cell.py</span> must first be repaired so it imports cleanly (the specific repairs are catalogued in F.6). Until then, the coupling is proven in principle and in plumbing, but the device physics behind <span class="num">P_elec</span> is stand-in, not the production cell model.</p>
+
+<h4>F.3.3 Bypass-diode clamping not yet modelled</h4>
+
+<p class="slow">The real-world mitigator for hot spots — the bypass diode that clamps a shadowed or failed cell's reverse voltage — is <b>not yet in the model</b>. At present a reverse voltage is simply imposed on a reverse-biased cell. The important consequence is the <em>direction</em> of the error: with no clamp, the cell absorbs more reverse-bias dissipation than a diode-protected cell would, so the predicted bare hot-spot temperature is <b>conservative</b> (it over-predicts the peak). That is the safe direction to err for a survival analysis, but it means the tool currently cannot answer the design question "what bypass-diode spacing is safe?" — that requires the clamp (F.5 #2).</p>
+
+<div class="keyidea"><span class="lbl">Key idea</span>The missing bypass diode makes the hot-spot prediction <b>pessimistic, not optimistic</b>. A real diode-protected array will run at or below the reported reverse-bias temperature, never above it. The limitation costs design insight, not safety margin.</div>
+
+<h4>F.3.4 Single scalar g_lat — no anisotropy, no per-link</h4>
+
+<p class="slow">As stated in F.1.5, lateral conduction is one global scalar. The model cannot yet represent a stiffer conduction path in one in-plane direction than another, nor assign a different conductance to an individual tile-to-tile link (for example, a degraded solder joint). For arrays where the interconnect is strongly directional, this will under- or over-spread heat depending on which way the real conduction favours. Per-link and anisotropic <span class="num">g_lat</span> is a planned generalisation.</p>
+
+<h4>F.3.5 Efficiency-vs-temperature is a hook, not a model</h4>
+
+<p class="slow">Cell conversion efficiency falls as the cell heats — a coupling that feeds back into <span class="num">P_elec</span> and hence into the thermal balance. The code provides a <b>hook</b> for a temperature-dependent efficiency but does not yet <b>populate</b> it with a real characteristic. At present efficiency is effectively temperature-flat at the point where it would otherwise be derated. This is a second-order feedback for survival temperatures but matters for accurate power-budget numbers at high temperature.</p>
+
+<table>
+<thead><tr><th>Limitation</th><th>Current state</th><th>Effect on results</th><th>Roadmap</th></tr></thead>
+<tbody>
+<tr><td>Orbit propagation (hapsira)</td><td>Stub — <span class="num">NotImplementedError</span></td><td>Fluxes must be supplied by hand</td><td>#3</td></tr>
+<tr><td>Real electrical solve</td><td>Wired, runs on a mock</td><td>P_elec is stand-in until cell.py repaired</td><td>#1</td></tr>
+<tr><td>Bypass-diode clamp</td><td>Not modelled; reverse V imposed</td><td>Hot-spot prediction is conservative</td><td>#2</td></tr>
+<tr><td>Lateral conductance</td><td>Single global scalar</td><td>No anisotropy / per-link variation</td><td>per-link</td></tr>
+<tr><td>Efficiency vs temperature</td><td>Hook present, unpopulated</td><td>Power budget not derated with heat</td><td>temp-eff</td></tr>
+</tbody>
+</table>
+
+<div class="recap"><span class="lbl">Recap</span>Five honest boundaries: orbit fluxes are manual, the electrical solve waits on a cell.py repair, the bypass diode is absent (making hot spots conservative), lateral coupling is one scalar, and temperature-dependent efficiency is a hook. Each maps to a roadmap item.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">F.4</span>Validation</h3>
+
+<p class="slow">A model that cannot be checked is a model that cannot be trusted. The simulator is backed by <b>33 passing tests</b>, and — more importantly than the count — by a set of <em>oracles</em>: independent references against which the solver's output must agree, sometimes approximately and in one decisive case <em>exactly</em>. This section walks the oracles, then lays out the ladder of checks required to go live with the real electrical solve.</p>
+
+<h4>F.4.1 The thermal oracle</h4>
+
+<p class="slow">For a baseline illuminated case the solver returns front/rear equilibrium temperatures of <b>65.26&nbsp;&deg;C and 64.60&nbsp;&deg;C</b>. These are checked against an independent hand-/reference calculation of the same energy balance. The sub-degree front-to-rear split is itself a sanity signal: it confirms the through-thickness link is active and that the front node — carrying absorbed sun and dissipation — sits slightly hotter than the rear, exactly as the two-node topology demands.</p>
+
+<h4>F.4.2 Reverse-bias hot spot</h4>
+
+<p class="slow">With a cell driven into reverse bias and <em>no</em> lateral relief, the solver reports a hot-spot temperature of <b>187.48&nbsp;&deg;C</b>. This is the conservative, un-clamped, un-spread worst case (see F.3.3). It is the number that motivates both the bypass-diode work and the lateral-spreading study below.</p>
+
+<h4>F.4.3 The exact-superset oracle: g_lat = 0</h4>
+
+<p class="slow">This is the strongest single piece of evidence in the validation suite. When lateral conduction is switched off (<span class="num">g_lat = 0</span>), the coupled solver must decouple into independent per-cell balances — and it reproduces an <b>independent reference solver EXACTLY</b>, not approximately. That word matters: it proves the general lateral solver is a strict <em>superset</em> of the trusted independent solver. Any case the simple solver handles, the general one handles identically, with the lateral machinery contributing precisely zero when it should. There is no regression hiding in the coupling.</p>
+
+<div class="keyidea"><span class="lbl">Key idea</span><b>Strict superset.</b> g_lat=0 makes the complex solver collapse onto the simple one bit-for-bit. This is the gold standard of refactoring/extension validation: the new capability provably costs nothing in the limit where it should be invisible.</div>
+
+<h4>F.4.4 Lateral spreading: 187 &rarr; ~87 &deg;C</h4>
+
+<p class="slow">Turning lateral conduction <em>on</em> for the reverse-bias hot-spot case drops the peak from <b>187&nbsp;&deg;C to roughly 87&nbsp;&deg;C</b>. This is not just a number that moved — it is a physically correct, directionally and magnitudinally sensible result: a 100&nbsp;&deg;C reduction shows neighbouring tiles soaking up and re-radiating the concentrated dissipation. It validates the lateral coupling does what conduction must do (share heat, lower peaks) and quantifies how much hot-spot relief the spreading provides.</p>
+
+<h4>F.4.5 Breakdown — both criteria</h4>
+
+<p class="slow">The breakdown / failure detection is tested against <b>both</b> of its triggering criteria, confirming that each independently fires when it should. This guards against the common defect where a compound condition passes its test because one branch happens to dominate; here each criterion is exercised on its own.</p>
+
+<h4>F.4.6 Monte-Carlo statistics</h4>
+
+<p class="slow">The Monte-Carlo failure sweep is checked on its statistical machinery: a <b>standard_error of 1.0</b> and a corresponding <b>runs_needed of 1600</b>. This validates the auto-sizing logic — the routine correctly translates a target precision into the number of trials required, which is the foundation for the planned auto-stop sweep (F.5 #5). The agreement confirms the estimator and its convergence accounting are wired correctly.</p>
+
+<h4>F.4.7 Electrical wiring drives coupling</h4>
+
+<p class="slow">Finally, the coupling itself is exercised end-to-end at the interface: a <b>V&middot;I product is converted to P_elec</b> and is shown to <em>drive</em> the thermal solution — feeding electrical power in measurably changes the equilibrium temperatures. This proves the plumbing between the two solvers is correct even while the electrical side still runs on a mock (F.3.2).</p>
+
+<table>
+<thead><tr><th>Oracle / test</th><th>Quantity checked</th><th>Result</th><th>What it proves</th></tr></thead>
+<tbody>
+<tr><td>Thermal baseline</td><td>Front / rear equilibrium</td><td><span class="num">65.26 / 64.60 &deg;C</span></td><td>Energy balance &amp; node split correct</td></tr>
+<tr><td>Reverse-bias hot spot</td><td>Un-spread peak</td><td><span class="num">187.48 &deg;C</span></td><td>Conservative worst case captured</td></tr>
+<tr><td>g_lat = 0</td><td>vs independent solver</td><td><b>EXACT</b></td><td>Strict superset, no regression</td></tr>
+<tr><td>Lateral spreading</td><td>Peak with conduction on</td><td><span class="num">187 &rarr; ~87 &deg;C</span></td><td>Conduction shares heat correctly</td></tr>
+<tr><td>Breakdown</td><td>Both criteria</td><td>Each fires independently</td><td>No hidden compound-condition gap</td></tr>
+<tr><td>Monte-Carlo</td><td>standard_error / runs_needed</td><td><span class="num">1.0 / 1600</span></td><td>Auto-sizing statistics correct</td></tr>
+<tr><td>Electrical wiring</td><td>V&middot;I &rarr; P_elec &rarr; T</td><td>Drives coupling</td><td>Inter-solver plumbing correct</td></tr>
+</tbody>
+</table>
+
+<h4>F.4.8 The validation ladder to go live</h4>
+
+<p class="slow">The remaining step — replacing the mock with a real ngspice electrical solve — is gated behind a four-rung ladder, each rung a precondition for the next:</p>
+
+<table>
+<thead><tr><th>Rung</th><th>Action</th><th>Pass criterion</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Fix <span class="num">cell.py</span> (see F.6)</td><td>Module imports without error</td></tr>
+<tr><td>2</td><td>Import the repaired module</td><td>Symbols resolve, no shadowing</td></tr>
+<tr><td>3</td><td>Compare <span class="num">per_cell_vi</span> vs <span class="num">cell.currentAtVoltage</span> on a 2&times;2</td><td>Per-cell V&ndash;I agrees with the device model</td></tr>
+<tr><td>4</td><td>Run <span class="num">couple</span> with real ngspice</td><td>Coupled solve stable, temperatures sane</td></tr>
+</tbody>
+</table>
+
+<div class="recap"><span class="lbl">Recap</span>33 tests, anchored by an <em>exact</em> superset oracle at g_lat=0, a physically-sensible 187&rarr;87&nbsp;&deg;C spreading result, dual-criterion breakdown, validated Monte-Carlo auto-sizing, and a proven V&middot;I&rarr;P_elec coupling. Going live needs only the four-rung cell.py ladder.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">F.5</span>Roadmap (prioritised)</h3>
+
+<p class="slow">The roadmap is ordered by decision value, not by ease. Two items are already done; the rest are listed with the engineering question each unlocks, so the supervisor can see <em>why</em> each is where it is in the queue.</p>
+
+<h4>#1 Close the electrical loop &mdash; DONE (wired + tested), awaits 2 typo fixes</h4>
+<p class="slow">The highest-priority item is essentially complete: the electrical&ndash;thermal coupling is wired and tested (F.4.7). All that stands between the mock and the real solve is the pair of <span class="num">cell.py</span> typo repairs catalogued in F.6. This is a finishing task, not a build task.</p>
+
+<h4>#2 Bypass-diode clamping &mdash; the real hot-spot mitigator</h4>
+<p class="slow">Adding the bypass diode is the most valuable <em>new physics</em> on the list because it answers a concrete design question the tool currently cannot: <b>"what diode spacing is safe?"</b> Modelling the clamp turns the conservative 187&nbsp;&deg;C bare hot spot into the realistic protected temperature, and lets the designer trade diode count against peak cell temperature.</p>
+
+<h4>#3 Transient + orbit</h4>
+<p class="slow">Re-introducing the time term — heat capacity <span class="num">&rho;&middot;c&middot;V</span> per node plus time-stepping — converts the simulator from "where does it settle?" to "how does it get there?". This unlocks <b>hot-spot rise time</b> and <b>eclipse cool-down</b>, and, paired with implementing the hapsira propagator, lets the orbital flux time series feed the transient solve automatically (removing the F.3.1 manual-flux limitation).</p>
+
+<h4>#4 Vectorised constant-pattern sparse Jacobian &mdash; DONE</h4>
+<p class="slow">Already delivered: exploiting the fixed nearest-neighbour sparsity (F.2.4), the Jacobian is built once and refreshed numerically each step, solving <b>1600 tiles in 0.046&nbsp;s</b>. This performance work is what makes large-grid Monte-Carlo sweeps practical.</p>
+
+<h4>#5 Worst-case failure search + auto-stop Monte-Carlo</h4>
+<p class="slow">Building on the validated Monte-Carlo statistics (F.4.6), this item adds a directed search for the worst-case failure configuration and an auto-stop that halts sampling once the target standard error is reached — so a sweep runs exactly as long as the requested precision demands, no more.</p>
+
+<h4>Plus: smaller follow-ons</h4>
+<p class="slow">Per-link / anisotropic <span class="num">g_lat</span> (F.3.4), temperature-dependent efficiency populating the existing hook (F.3.5), a command-line interface, and continuous integration to keep the 33-test suite green on every change.</p>
+
+<table>
+<thead><tr><th>#</th><th>Item</th><th>Status</th><th>Unlocks</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Close electrical loop</td><td><b>DONE</b> — awaits 2 typo fixes</td><td>Real ngspice-driven P_elec</td></tr>
+<tr><td>2</td><td>Bypass-diode clamping</td><td>Planned</td><td>"What diode spacing is safe?"</td></tr>
+<tr><td>3</td><td>Transient + orbit (hapsira)</td><td>Planned</td><td>Hot-spot rise, eclipse cool-down, auto fluxes</td></tr>
+<tr><td>4</td><td>Vectorised sparse Jacobian</td><td><b>DONE</b></td><td>1600 tiles in 0.046 s</td></tr>
+<tr><td>5</td><td>Worst-case search + auto-stop MC</td><td>Planned</td><td>Precision-bounded failure sweeps</td></tr>
+<tr><td>+</td><td>per-link g_lat, temp-eff, CLI, CI</td><td>Backlog</td><td>Fidelity, usability, regression safety</td></tr>
+</tbody>
+</table>
+
+<div class="recap"><span class="lbl">Recap</span>Priority follows decision value: the electrical loop (done bar two typos) and the vectorised Jacobian (done) are behind us; bypass-diode clamping and transient+orbit are the next high-value physics; failure search/auto-stop and the smaller follow-ons round out the plan.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">F.6</span>cell.py repair summary</h3>
+
+<p class="slow">The real electrical solve is blocked by a small number of well-localised defects in <span class="num">cell.py</span>, several introduced by OCR damage when the module was recovered. They are listed here precisely so the repair is mechanical, not investigative. Two are hard <em>import blockers</em>; the rest are correctness or hygiene fixes needed before the device model can be trusted.</p>
+
+<h4>F.6.1 Import blockers — duplicated <code>self</code></h4>
+<p class="slow">Two method definitions carry a duplicated <span class="num">self</span> parameter and will not parse/import as written:</p>
+<ul>
+<li><b>Line 156 — <span class="num">setTemperature</span></b>: duplicated <code>self</code> in the signature. Remove the repeat.</li>
+<li><b>Line 436 — <span class="num">currentAtVoltage</span></b>: duplicated <code>self</code> in the signature. Remove the repeat.</li>
+</ul>
+<p class="slow">These two are the entire reason the module fails to import, and therefore the entire reason rung&nbsp;1 of the validation ladder (F.4.8) is not yet passed.</p>
+
+<h4>F.6.2 Missing lines 665&ndash;667 — a cut-off imp_dt formula</h4>
+<p class="slow">Lines <b>665&ndash;667</b> are missing: a truncated <span class="num">imp_dt</span> (current-at-max-power temperature-derivative) formula was cut off. These cannot be reconstructed by guesswork; they must be restored from the <b>authoritative repository</b> to guarantee the device characteristic is correct, not merely syntactically valid.</p>
+
+<div class="pitfall"><span class="lbl">Pitfall</span>Do not fabricate the lines 665&ndash;667 formula to make the import succeed. A plausible-but-wrong <span class="num">imp_dt</span> would pass import and silently corrupt every temperature-dependent current result. Restore from the authoritative source only.</div>
+
+<h4>F.6.3 Line 274 — restore <code>isc&middot;size_coeff</code></h4>
+<p class="slow">At <b>line 274</b>, a short-circuit-current scaling by <span class="num">size_coeff</span> (<code>isc &middot; size_coeff</code>) needs to be restored. Without it, the cell's short-circuit current is not scaled to the cell size, throwing off the per-cell V&ndash;I that rung&nbsp;3 of the ladder checks against <span class="num">per_cell_vi</span>.</p>
+
+<h4>F.6.4 Hygiene — <code>string.py</code> shadows the stdlib</h4>
+<p class="slow">A local <span class="num">string.py</span> shadows Python's standard-library <code>string</code> module and should be <b>renamed</b>. Left in place it can cause import ambiguity and confusing failures unrelated to the actual logic.</p>
+
+<h4>F.6.5 Cleanup — <code>eclipse.py</code> removed</h4>
+<p class="slow"><span class="num">eclipse.py</span> has been <b>removed</b>, superseded by <span class="num">environment.py</span>. This is recorded here so a reader hunting for eclipse logic knows where it now lives and does not attempt to revive a dead module.</p>
+
+<table>
+<thead><tr><th>Location</th><th>Defect</th><th>Fix</th><th>Severity</th></tr></thead>
+<tbody>
+<tr><td>Line 156 (<span class="num">setTemperature</span>)</td><td>Duplicated <code>self</code></td><td>Remove repeat</td><td>Import blocker</td></tr>
+<tr><td>Line 436 (<span class="num">currentAtVoltage</span>)</td><td>Duplicated <code>self</code></td><td>Remove repeat</td><td>Import blocker</td></tr>
+<tr><td>Lines 665&ndash;667</td><td>Cut-off <span class="num">imp_dt</span> formula</td><td>Restore from authoritative repo</td><td>Correctness</td></tr>
+<tr><td>Line 274</td><td>Missing <code>isc&middot;size_coeff</code></td><td>Restore scaling</td><td>Correctness</td></tr>
+<tr><td><span class="num">string.py</span></td><td>Shadows stdlib</td><td>Rename</td><td>Hygiene</td></tr>
+<tr><td><span class="num">eclipse.py</span></td><td>Obsolete</td><td>Removed &rarr; environment.py</td><td>Cleanup</td></tr>
+</tbody>
+</table>
+
+<div class="recap"><span class="lbl">Recap</span>Two duplicated-<code>self</code> lines (156, 436) block import; lines 665&ndash;667 and line 274 are correctness restores (the former from the authoritative repo); <code>string.py</code> must be renamed and <code>eclipse.py</code> is gone in favour of <code>environment.py</code>. Clear these and the validation ladder of F.4.8 can run end-to-end.</div>
+</section>

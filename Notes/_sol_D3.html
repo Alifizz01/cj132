@@ -1,0 +1,81 @@
+<div class="soln"><span class="sid">D3-1.</span>
+<strong>The bug: a mutable default argument.</strong> The default <code>log=[]</code> is created <em>once</em>, when the function is <em>defined</em> — not freshly on each call. Every call that omits <code>log</code> therefore shares the <em>same</em> list, so readings accumulate across unrelated calls:
+<pre>
+append_reading(1)   # [1]
+append_reading(2)   # [1, 2]   <-- the 1 from the previous call is still there
+</pre>
+<strong>Why it misbehaves (one line).</strong> The default list is evaluated once at definition time, so all calls that don't pass their own list mutate one shared object.<br>
+<strong>The fix — default to <code>None</code>, create the list inside:</strong>
+<pre>
+def append_reading(x, log=None):
+    if log is None:
+        log = []            # a fresh list on every call that omits it
+    log.append(x)
+    return log
+</pre>
+Now <code>append_reading(1)</code> → <code>[1]</code> and <code>append_reading(2)</code> → <code>[2]</code>: the two calls are independent. The same pattern fixes any mutable default (list, dict, set) — never use a mutable literal as a default; default to <code>None</code> and build it in the body.
+</div>
+
+<div class="soln"><span class="sid">D3-2.</span>
+<strong>Rewrite returning a dataclass instead of a 4-tuple.</strong>
+<pre>
+from dataclasses import dataclass
+
+@dataclass
+class IVPoints:
+    isc: float
+    imp: float
+    vmp: float
+    voc: float
+
+def iv_points(cell, t: float) -> IVPoints:
+    """Return the four IV points of `cell` at temperature `t` (°C)."""
+    isc = cell.isc_ref * (1 + 0.0005 * (t - 25))
+    imp = isc * 0.95
+    vmp = cell.vmp_ref * (1 - 0.003 * (t - 25))
+    voc = vmp * 1.18
+    return IVPoints(isc=isc, imp=imp, vmp=vmp, voc=voc)
+</pre>
+<strong>A call site reading a field by name:</strong>
+<pre>
+pts = iv_points(cell, 40.0)
+peak_power = pts.vmp * pts.imp        # by NAME — no counting positions
+</pre>
+<strong>One bug the dataclass version makes impossible.</strong> Mis-indexing. With the tuple, a caller writing <code>result[3]</code> intending <code>vmp</code> would silently get <code>voc</code> instead (both are floats, so nothing complains) — a wrong number with no error. With the dataclass you write <code>pts.vmp</code>; there is no position to miscount, and a typo such as <code>pts.vmpp</code> raises <code>AttributeError</code> at the access site rather than flowing on as a wrong value. (Bonus: reordering or adding a field can't shift any caller's index, and the editor autocompletes the field names.)
+</div>
+
+<div class="soln"><span class="sid">D3-3.</span>
+<strong>The two problems.</strong>
+<ol>
+<li><strong>Hard error — duplicated <code>self</code> in the signature.</strong> <code>def calcT(self, self, p)</code> lists <code>self</code> twice, which is a <code>SyntaxError: duplicate argument 'self'</code>. The method is uncallable and the module won't even import.</li>
+<li><strong>Bad practice — bare <code>except: pass</code>.</strong> The <code>try/except</code> catches <em>everything</em> and silently discards it. If <code>self.k</code> is zero (division by zero), missing, or wrong-typed, the failure vanishes and <code>self.T</code> is left stale or never set — a silent wrong answer. It even swallows <code>KeyboardInterrupt</code>.</li>
+</ol>
+<strong>Clean rewrite</strong> (PEP 8 name, docstring, type hints, early validation, loud failure):
+<pre>
+class Panel:
+    def compute_temperature(self, power: float) -> float:
+        """Set and return the panel temperature from dissipated `power` (W).
+
+        Parameters
+        ----------
+        power : float
+            Dissipated power, in watts.
+
+        Returns
+        -------
+        float
+            The computed temperature (°C), also stored on self.temperature.
+
+        Raises
+        ------
+        ValueError
+            If the thermal conductance `self.k` is not positive.
+        """
+        if self.k <= 0:
+            raise ValueError(f"thermal conductance k must be > 0, got {self.k}")
+        self.temperature = power / self.k
+        return self.temperature
+</pre>
+<strong>What changed and why.</strong> One <code>self</code> (fixes the syntax error); the PEP 8 name <code>compute_temperature</code> with a descriptive <code>power</code> parameter instead of <code>calcT</code>/<code>p</code>; a docstring stating units, return, and what it raises; type hints (<code>power: float -&gt; float</code>); the bad input (<code>k &le; 0</code>) is <em>validated early</em> and raises a <em>clear</em> <code>ValueError</code> instead of being swallowed — so a real problem fails <strong>loudly and locatably</strong> rather than silently corrupting <code>self.T</code>. The method also now <em>returns</em> the value (not purely a hidden mutation), so callers can use it directly.<br>
+<em>Note:</em> this method still has a side effect (it writes <code>self.temperature</code>); if you wanted it fully pure you would compute and return <code>power / self.k</code> without storing it, letting the caller decide whether to save it.
+</div>

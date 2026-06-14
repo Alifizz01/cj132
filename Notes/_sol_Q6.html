@@ -1,0 +1,21 @@
+<div class="soln"><span class="sid">Q6-1.</span>
+Runs needed to tighten the standard error from 6&nbsp;°C to 1.5&nbsp;°C.<br>
+<strong>(a) Known values (with units).</strong> <code>N<sub>old</sub> = 50</code> runs; <code>SE<sub>old</sub> = 6&nbsp;°C</code>; <code>SE<sub>target</sub> = 1.5&nbsp;°C</code>.<br>
+Since <code>SE = s/&radic;N</code> with <code>s</code> fixed, runs scale as the inverse square of the error:<br>
+<code>N = N<sub>old</sub> &middot; (SE<sub>old</sub> / SE<sub>target</sub>)<sup>2</sup> = 50 &middot; (6&nbsp;°C / 1.5&nbsp;°C)<sup>2</sup></code>.<br>
+<code>6 / 1.5 = 4</code>; <code>4<sup>2</sup> = 16</code>; <code>50 &middot; 16 = </code><strong>800 runs</strong> in total.<br>
+<strong>(b) Rule of thumb.</strong> Error falls like <code>1/&radic;N</code>, so to cut the error by a factor <code>f</code> you need <code>f<sup>2</sup></code> times as many runs — here <code>f = 4</code>, so 4<sup>2</sup> = 16× the runs. (Check: the °C units cancel inside the ratio, leaving a pure run count, as it must.)
+</div>
+
+<div class="soln"><span class="sid">Q6-2.</span>
+Matching each question to its sampling mode.<br>
+<strong>(i) "Which single cell, if it dies, costs us the most power?"</strong> → <strong>POSITION sweep.</strong> It asks about a <em>single</em> failure and wants the worst <em>location</em>; the position sweep fails one cell at a time over every location (deterministic, O(N)) and ranks them, finding the worst single cell with no luck involved.<br>
+<strong>(ii) "If cells fail with probability 2% each, what is the distribution of array power we should expect?"</strong> → <strong>RANDOM sampling.</strong> The question explicitly asks for a <em>distribution</em> under a per-cell failure probability; draw many random patterns (each cell dead w.p. 2%) and histogram the resulting array power to get its spread.<br>
+<strong>(iii) "How many simultaneous dead cells before peak temperature crosses the breakdown limit?"</strong> → <strong>COUNT sweep.</strong> It asks how damage grows with the <em>number</em> of simultaneous failures; fail <code>k</code> random cells for <code>k</code>=1,2,3,… and find the <code>k</code> at which peak temperature crosses the §5 limit.
+</div>
+
+<div class="soln"><span class="sid">Q6-3.</span>
+Position sweep on an 800-cell array, 0.4&nbsp;s per run.<br>
+<strong>(a) Runs and 1-core wall-clock.</strong> A position sweep fails one cell at a time over every location → one run per cell → <strong>800 runs</strong>. On a single core the runs are sequential: <code>800 runs &times; 0.4&nbsp;s/run = </code><strong>320&nbsp;s</strong> (≈ 5 min&nbsp;20&nbsp;s).<br>
+<strong>(b) 4-core wall-clock and why it is slightly longer in practice.</strong> The runs are <em>independent</em> — each fails its cell, solves, records and resets, sharing no state with any other run — so the sweep is <strong>embarrassingly parallel</strong> and 4 cores share the work: ideal time <code>= 320&nbsp;s / 4 = </code><strong>80&nbsp;s</strong>. The real time is a little longer than 80&nbsp;s because parallelism carries small overheads — spawning the worker processes, distributing the runs, and gathering the results back (e.g. via <code>joblib</code>) — so the speed-up is <em>near</em>-linear, not perfectly linear. (Check: <code>800 &times; 0.4 = 320</code> ✓; <code>320 / 4 = 80</code> ✓.)
+</div>

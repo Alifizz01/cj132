@@ -1,0 +1,222 @@
+<h3>5 &nbsp; When does it break? Breakdown and melt criteria</h3>
+
+<p class="lede">We have spent two sections learning that a reverse-biased cell turns its neighbours' power into heat and runs hot — Chapter&nbsp;1 §6 told the story, and Chapter&nbsp;2 §2 nailed a number to it: a failed cell forced to absorb ~9.6&nbsp;W converged to a front temperature of <strong>187&nbsp;°C</strong>. That is alarming. But "alarming" is not a number a computer can act on. To run the Monte-Carlo failure sweep (§6) we need a <em>precise, mechanical rule</em> the code can apply to every cell, every trial, with no human in the loop: given this cell's converged state, is it <strong>destroyed</strong> — yes or no? This section defines that rule. The whole point is to convert the intuition "it gets dangerously hot / it is being driven dangerously hard" into a go/no-go flag.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> A cell (or the substrate under it) is flagged <strong>destroyed</strong> if <em>either</em> of two independent criteria trips: (1) its converged temperature reaches a structural limit — <em>did it get hot enough to soften or melt the assembly?</em> — or (2) the power it dissipates in reverse bias reaches a power limit — <em>is it being driven backwards hard enough to damage it, regardless of the steady temperature?</em> Temperature captures the thermal <em>outcome</em>; reverse-power captures the electrical <em>stress</em>. We use <strong>both</strong>, OR-ed together, because either one alone can miss a failure the other catches.
+</div>
+
+<h4>5.1 &nbsp; Two questions, two criteria</h4>
+
+<p>There are two genuinely different ways a cell can be ruined, and they ask different questions. The first is about the <em>steady thermal state</em>: once the electro-thermal loop of §3 has converged, how hot did this cell (and the substrate it is bonded to) actually get? If that settled temperature is high enough to soften the structure or melt the bond, the cell is destroyed by <em>heat</em>. The second is about <em>electrical dose</em>: how much power is being forced through this cell while it is reverse-biased? A large reverse dissipation can damage a cell through very localised heating, cracking, or interconnect failure <em>even if</em> the cell-averaged steady temperature never looks frightening. These are not the same question, and — as §5.3 shows with concrete numbers — a cell can fail one test while comfortably passing the other.</p>
+
+<div class="callout">
+<strong>Why a flag at all?</strong> The Monte-Carlo sweep (§6) runs thousands of random failure patterns. For each, it must aggregate "how many cells / which patterns destroyed the panel?" That aggregation needs a Boolean per cell, not a temperature to be eyeballed. The criteria here are exactly the function that turns each cell's converged physical state into the <code>destroyed: True/False</code> that §6 counts and §7 stores.
+</div>
+
+<h4>5.2 &nbsp; Criterion 1 — the temperature limit</h4>
+
+<p>The first criterion compares the cell's converged front temperature against a material limit:</p>
+
+<div class="formula">
+destroyed&nbsp;(thermal)&nbsp;&hArr;&nbsp; T<sub>front</sub> &ge; T<sub>limit</sub>
+<div class="where">
+where<br>
+&bull; <code>T<sub>front</sub></code> = the cell's (or substrate's) converged front-face temperature from the §3 loop, in <strong>°C</strong><br>
+&bull; <code>T<sub>limit</sub></code> = the temperature at or above which the bonded assembly is considered destroyed, in <strong>°C</strong> — a <em>project input</em>, not a universal constant
+</div>
+</div>
+
+<p>The subtle part is choosing <code>T<sub>limit</sub></code>, and to choose it you must distinguish two very different temperatures of a material.</p>
+
+<div class="term"><strong>Melting point.</strong> The temperature at which a solid turns to liquid. For the aluminium that forms the substrate's honeycomb core, this is about <strong>660&nbsp;°C</strong>. It is a clean, well-defined physical constant — and, for our purposes, a <em>trap</em>: by the time aluminium actually melts, the structure failed long ago.</div>
+
+<div class="term"><strong>Softening / structural (bond) limit.</strong> The much lower temperature at which the assembly stops doing its job — where aluminium loses mechanical strength and, critically, where the <em>adhesive bond</em> holding the cell to the substrate begins to fail. Aluminium softens and creeps well below its melting point, and the bonding adhesives degrade lower still. For a bonded solar-panel assembly a conservative structural limit is of order <strong>~150–200&nbsp;°C</strong>. This — not the melting point — is the number that belongs in <code>T<sub>limit</sub></code>. The exact value is a project input set by the materials and bond used.</div>
+
+<div class="keyidea">
+<strong>The substrate is aluminium honeycomb — but use its <em>structural</em> limit, not its melt.</strong> The core melts at ~660&nbsp;°C, yet the panel is destroyed far earlier: the bond lets go and the aluminium softens somewhere around 150–200&nbsp;°C. Sizing <code>T<sub>limit</sub></code> at 660&nbsp;°C would declare a panel "fine" at 400&nbsp;°C — a temperature at which it has, structurally, already failed. Conservative engineering uses the lower limit.
+</div>
+
+<h4>5.3 &nbsp; Criterion 2 — the reverse-power limit</h4>
+
+<p>The second criterion ignores temperature entirely and looks at how hard the cell is being driven backwards. It only applies to a cell that is actually <em>reverse-biased</em> — one whose terminal voltage has gone negative because its neighbours are forcing current through it (Chapter&nbsp;1 §6, and the negative <code>P_elec</code> of §3).</p>
+
+<div class="formula">
+P<sub>rev</sub> = |V<sub>i</sub> &middot; I<sub>i</sub>|&nbsp;&nbsp;<em>only when</em>&nbsp;V<sub>i</sub> &lt; 0; &nbsp;&nbsp;&nbsp; destroyed&nbsp;(reverse-power)&nbsp;&hArr;&nbsp; P<sub>rev</sub> &ge; P<sub>limit</sub>
+<div class="where">
+where<br>
+&bull; <code>V<sub>i</sub></code>, <code>I<sub>i</sub></code> = the cell's converged terminal voltage (<strong>V</strong>) and branch current (<strong>A</strong>) from the §3 solve<br>
+&bull; <code>P<sub>rev</sub></code> = the magnitude of the power dissipated <em>in reverse bias</em>, in <strong>W</strong>. The absolute value is taken because we care about the <em>amount</em> of power being dumped as heat, not its book-keeping sign<br>
+&bull; <code>P<sub>limit</sub></code> = the per-cell reverse dissipation the assembly can survive, in <strong>W</strong> — again a <em>project input</em><br>
+&bull; the <strong>gate <code>V<sub>i</sub> &lt; 0</code> is essential</strong>: a forward cell (V&nbsp;&gt;&nbsp;0) is <em>generating</em> power, and no amount of forward power should ever trip this test (see the pitfall in §5.6)
+</div>
+</div>
+
+<p>Why bother with this when we already have a temperature test? Because raw dissipation and steady temperature are not the same physics. <code>P<sub>rev</sub></code> measures the <em>electrical stress</em> — the rate at which energy is being forced into the cell — and damage can be driven by that stress in ways the cell-averaged converged temperature does not reveal. Energy concentrated into a tiny defect, a cracked interconnect, or a few square millimetres of silicon can ruin a cell whose bulk temperature, smeared over its whole area by the lumped thermal model, still reads modest. Reverse-power catches the <em>dose</em>; temperature catches the <em>outcome</em>.</p>
+
+<h4>5.4 &nbsp; Why both — and the cases each one catches alone <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>If the two criteria always agreed, one would be redundant. They do not. Here are the two asymmetric cases — each a real failure that <em>one</em> test catches and the <em>other</em> misses — which together are the entire justification for OR-ing them.</p>
+
+<div class="worked">
+<strong>Case A — temperature catches what reverse-power misses (the poorly-radiating cell).</strong>
+Imagine a cell whose reverse dissipation is only moderate — say <code>P<sub>rev</sub> = 1.2&nbsp;W</code>, comfortably <em>below</em> a <code>P<sub>limit</sub> = 2&nbsp;W</code>. The reverse-power test says PASS. But suppose this cell radiates heat poorly (a low-emissivity patch, a blocked radiating path, a hot neighbour on every side). With nowhere to dump even 1.2&nbsp;W, its converged <code>T<sub>front</sub></code> climbs to, say, <strong>170&nbsp;°C ≥ T<sub>limit</sub> = 150&nbsp;°C</strong> — the temperature test trips.
+<div class="check"><strong>What this proves.</strong> Low electrical dose, but a hot steady state because the heat cannot escape. Reverse-power alone (1.2&nbsp;W &lt; 2&nbsp;W) would have waved this cell through as healthy; the <em>temperature</em> criterion is what catches it. A modest <code>P<sub>rev</sub></code> can still cook a cell that cannot radiate. &#10003;</div>
+</div>
+
+<div class="worked">
+<strong>Case B — reverse-power catches what temperature misses (intense, localised heating).</strong>
+Now the opposite: a cell driven hard backwards, <code>P<sub>rev</sub> = 9.6&nbsp;W ≥ P<sub>limit</sub> = 2&nbsp;W</code> — the reverse-power test trips immediately. But imagine the heating is extremely <em>localised</em> (a pinhole short, a tiny avalanche site): the energy ruins a few square millimetres of silicon, yet the <em>cell-averaged</em> converged <code>T<sub>front</sub></code> that the lumped thermal model reports is only, say, <strong>120&nbsp;°C &lt; T<sub>limit</sub> = 150&nbsp;°C</strong> — the temperature test passes.
+<div class="check"><strong>What this proves.</strong> High electrical dose, but a whole-cell steady temperature that looks survivable because the lumped model smears the hot-spot over the full area. Temperature alone would have called this cell healthy; the <em>reverse-power</em> criterion is what catches it. &#10003;</div>
+</div>
+
+<div class="keyidea">
+<strong>That is why it is "either trips."</strong> Case&nbsp;A is a thermal failure with a passing reverse-power number; Case&nbsp;B is an electrical-dose failure with a passing temperature number. Neither test is a superset of the other, so the only safe go/no-go rule is the logical <strong>OR</strong>: flag the cell destroyed if <em>either</em> criterion trips. For a safety check you take the <em>union</em> of the dangers, never the intersection.
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 190" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .b{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.3}</style>
+<rect class="b" x="170" y="12" width="130" height="30" rx="4"/><text class="tx" x="235" y="31" text-anchor="middle">converged per-cell result</text>
+<rect x="40" y="78" width="170" height="34" rx="4" fill="#fcefea" stroke="#9a3b3b"/><text class="tx" x="125" y="92" text-anchor="middle" font-size="9">T_front ≥ T_limit ?</text><text class="tx" x="125" y="105" text-anchor="middle" font-size="8" fill="#5d6b79">(thermal)</text>
+<rect x="260" y="78" width="180" height="34" rx="4" fill="#fcefea" stroke="#9a3b3b"/><text class="tx" x="350" y="92" text-anchor="middle" font-size="9">V&lt;0 and |V·I| ≥ P_limit ?</text><text class="tx" x="350" y="105" text-anchor="middle" font-size="8" fill="#5d6b79">(reverse power)</text>
+<line stroke="#5d6b79" x1="200" y1="42" x2="125" y2="78"/><line stroke="#5d6b79" x1="270" y1="42" x2="350" y2="78"/>
+<rect x="175" y="150" width="120" height="30" rx="4" fill="#9a3b3b"/><text class="tx" x="235" y="170" text-anchor="middle" fill="#fff">cell destroyed</text>
+<line stroke="#9a3b3b" x1="125" y1="112" x2="225" y2="150"/><line stroke="#9a3b3b" x1="350" y1="112" x2="245" y2="150"/>
+<text class="tx" x="235" y="140" text-anchor="middle" font-size="11" fill="#9a3b3b">OR</text>
+</svg>
+<figcaption>Figure 2.9 — Breakdown is flagged if EITHER the temperature criterion OR the reverse-power criterion trips.</figcaption></figure>
+
+<h4>5.5 &nbsp; The criteria in action: a bypass diode, and the same cell with and without it <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>The two criteria earn their keep by quantifying <em>exactly</em> when the panel's protection is enough. Recall the protection mechanism from Chapter&nbsp;1 §5–§6: a <strong>bypass diode</strong> sits across a cell and, if that cell is driven into reverse, conducts the string current around it — <em>clamping</em> the cell's reverse voltage to roughly the diode's forward drop, about <strong>−0.7&nbsp;V</strong>. Remove that diode and a reverse-biased cell can be pushed all the way to its own <em>reverse breakdown</em> voltage, of order <strong>−20&nbsp;V</strong>, before it conducts. Same current either way — but a factor of nearly 30 in voltage, and therefore in dissipated power. We will run the <em>same physical cell</em> through the criteria twice: once protected, once not.</p>
+
+<div class="worked">
+<strong>Worked example (a) — the protected cell (bypass diode present).</strong>
+A failed cell is carrying the string current <code>I&nbsp;=&nbsp;0.48&nbsp;A</code>. Its bypass diode clamps its voltage to <code>V&nbsp;=&nbsp;−0.7&nbsp;V</code>. Limits for this assembly: <code>P<sub>limit</sub>&nbsp;=&nbsp;2&nbsp;W</code>, <code>T<sub>limit</sub>&nbsp;=&nbsp;150&nbsp;°C</code>.
+
+<div class="step"><strong>Step 1 — reverse-power criterion.</strong> The cell is reverse-biased (<code>V&nbsp;=&nbsp;−0.7&nbsp;V&nbsp;&lt;&nbsp;0</code>), so the test applies.
+<div class="formula">
+P<sub>rev</sub> = |V &middot; I| = |(−0.7&nbsp;V)(0.48&nbsp;A)| = |−0.336&nbsp;W| = <strong>0.34&nbsp;W</strong>
+</div>
+Compare: <code>0.34&nbsp;W &lt; P<sub>limit</sub> = 2&nbsp;W</code> &rArr; <strong>PASS</strong> on reverse-power.</div>
+
+<div class="step"><strong>Step 2 — temperature criterion.</strong> Dissipating only 0.34&nbsp;W, this cell barely warms; its converged front temperature is <code>T<sub>front</sub> = 45&nbsp;°C</code>.
+Compare: <code>45&nbsp;°C &lt; T<sub>limit</sub> = 150&nbsp;°C</code> &rArr; <strong>PASS</strong> on temperature.</div>
+
+<div class="check"><strong>Verdict.</strong> PASS on <em>both</em> criteria &rArr; cell <strong>not destroyed</strong>. The bypass diode did its job: by holding the reverse voltage to −0.7&nbsp;V it kept dissipation to a third of a watt, far below anything that could overheat or over-stress the cell. &#10003;</div>
+</div>
+
+<div class="callout">
+<strong>Even the passing cell shows why we still need the temperature test.</strong> Example (a) passes both, yet it quietly makes the case for keeping criterion&nbsp;1. That same modest <strong>0.34&nbsp;W</strong> is harmless <em>only because this cell can radiate it away</em> to settle at 45&nbsp;°C. Put an identical 0.34&nbsp;W into a cell that radiates poorly (Case&nbsp;A's mechanism) and its <code>T<sub>front</sub></code> could still climb past 150&nbsp;°C — a failure the reverse-power test, seeing only 0.34&nbsp;W, would <em>never</em> flag. The low <code>P<sub>rev</sub></code> guarantees nothing about the steady temperature; that is precisely the gap the temperature criterion exists to close.
+</div>
+
+<div class="worked">
+<strong>Worked example (b) — the unprotected cell (no bypass diode).</strong>
+The <em>same</em> failed cell, same string current <code>I&nbsp;=&nbsp;0.48&nbsp;A</code> — but now with no bypass diode, so it is pushed to its reverse-breakdown voltage <code>V&nbsp;=&nbsp;−20&nbsp;V</code>. Same limits: <code>P<sub>limit</sub>&nbsp;=&nbsp;2&nbsp;W</code>, <code>T<sub>limit</sub>&nbsp;=&nbsp;150&nbsp;°C</code>.
+
+<div class="step"><strong>Step 1 — reverse-power criterion.</strong> Still reverse-biased (<code>V&nbsp;=&nbsp;−20&nbsp;V&nbsp;&lt;&nbsp;0</code>):
+<div class="formula">
+P<sub>rev</sub> = |V &middot; I| = |(−20&nbsp;V)(0.48&nbsp;A)| = |−9.6&nbsp;W| = <strong>9.6&nbsp;W</strong>
+</div>
+Compare: <code>9.6&nbsp;W &ge; P<sub>limit</sub> = 2&nbsp;W</code> &rArr; <strong>FAIL</strong> on reverse-power (it exceeds the limit nearly fivefold).</div>
+
+<div class="step"><strong>Step 2 — temperature criterion.</strong> This is the very same 9.6&nbsp;W that drove the §2/§3 worked example: forced to absorb it, the cell's converged front temperature runs away to <code>T<sub>front</sub> = 187&nbsp;°C</code>.
+Compare: <code>187&nbsp;°C &ge; T<sub>limit</sub> = 150&nbsp;°C</code> &rArr; <strong>FAIL</strong> on temperature.</div>
+
+<div class="check"><strong>Verdict.</strong> FAIL on <em>both</em> criteria &rArr; cell <strong>destroyed</strong>. Here the two tests <em>agree</em> — the dose is so brutal that it both over-stresses the cell electrically <em>and</em> cooks it. Note this is one cell and one diode telling the whole story: clamping −20&nbsp;V down to −0.7&nbsp;V collapses 9.6&nbsp;W to 0.34&nbsp;W, and turns a double failure into a double pass. The criteria are what let us <em>state</em> that the protection was the difference between destroyed and fine. &#10003;</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 420 180" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<line stroke="#1d2733" x1="70" y1="150" x2="380" y2="150"/>
+<rect x="110" y="146" width="60" height="4" fill="#1f6a6a"/><text font-family="Segoe UI,Arial,sans-serif" x="140" y="145" text-anchor="middle" font-size="9" fill="#fff"></text><text font-family="Segoe UI,Arial,sans-serif" x="140" y="165" text-anchor="middle" font-size="9" fill="#1d2733">protected</text><text font-family="Segoe UI,Arial,sans-serif" x="140" y="142" text-anchor="middle" font-size="9" fill="#1f6a6a">0.34 W</text>
+<rect x="240" y="45" width="60" height="105" fill="#9a3b3b"/><text font-family="Segoe UI,Arial,sans-serif" x="270" y="165" text-anchor="middle" font-size="9" fill="#1d2733">unprotected</text><text font-family="Segoe UI,Arial,sans-serif" x="270" y="41" text-anchor="middle" font-size="9" fill="#9a3b3b">9.6 W</text>
+<line x1="70" y1="128" x2="380" y2="128" stroke="#c9a227" stroke-width="1.6" stroke-dasharray="5 3"/><text font-family="Segoe UI,Arial,sans-serif" x="384" y="131" font-size="9" fill="#b9851a">P_limit = 2 W</text>
+<text font-family="Segoe UI,Arial,sans-serif" transform="translate(20,90) rotate(-90)" text-anchor="middle" fill="#1d2733">reverse power</text>
+</svg>
+<figcaption>Figure 2.10 — Reverse dissipation: a bypass diode keeps it at 0.34 W (below the 2 W limit); unprotected reverse breakdown reaches 9.6 W (well above).</figcaption></figure>
+
+<h4>5.6 &nbsp; What gets recorded per cell</h4>
+
+<p>The criteria are not evaluated in a vacuum — they are computed as part of a <em>per-cell record</em> written after the §3 loop converges. For every cell, the code stores:</p>
+
+<ul>
+<li><code>T<sub>front</sub></code> — converged front-face temperature (°C);</li>
+<li><code>T<sub>rear</sub></code> — converged rear-face temperature (°C);</li>
+<li><code>P<sub>elec</sub></code> — the signed electrical power <code>V·I</code> (W): positive if the cell generates, negative if it absorbs (§3);</li>
+<li>the <strong>reverse flag</strong> — whether <code>V&nbsp;&lt;&nbsp;0</code> (is this cell reverse-biased at all?);</li>
+<li><code>P<sub>rev</sub></code> — the reverse dissipation <code>|V·I|</code> when reverse-biased, else 0 (W);</li>
+<li>which criterion (if any) tripped — none, temperature, reverse-power, or both.</li>
+</ul>
+
+<div class="callout">
+<strong>This record is the bridge to the rest of the chapter.</strong> It is precisely what the <em>data layer</em> (§7) persists for each trial, and what the <em>Monte-Carlo sweep</em> (§6) aggregates across thousands of random failure patterns to answer "which patterns destroy the panel, and how often?" The destruction flag computed here is one column of that record; the raw <code>T</code>, <code>P</code> and flags are kept alongside it so later analysis can ask questions the single Boolean cannot answer.
+</div>
+
+<h4>5.7 &nbsp; Connecting the criteria to the bypass diode</h4>
+
+<p>Pulling §5.5 together as a principle: the bypass diode is the panel's defence against reverse-bias destruction, and the two criteria are how we <em>measure</em> whether that defence held.</p>
+
+<div class="keyidea">
+<strong>The diode sets <code>P<sub>rev</sub></code>; the criteria judge it.</strong> <em>With</em> a bypass diode, reverse voltage is clamped to ~−0.7&nbsp;V, so <code>P<sub>rev</sub> = 0.7&nbsp;V × I</code> — for a 0.48&nbsp;A string, 0.34&nbsp;W, usually well under <code>P<sub>limit</sub></code>. <em>Without</em> it, the cell can reach reverse breakdown ~−20&nbsp;V, so <code>P<sub>rev</sub> = 20&nbsp;V × I</code> — 9.6&nbsp;W, far over <code>P<sub>limit</sub></code>. The criteria quantify <em>exactly</em> when the protection is or is not enough: the same cell flips from a double PASS to a double FAIL the moment you remove its diode.
+</div>
+
+<h4>5.8 &nbsp; Socratic ladder — why two criteria, not one?</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). What does the <em>temperature</em> criterion actually measure, and against what does it compare?</div>
+<div class="answer">It measures the cell's (or substrate's) <strong>converged steady-state front temperature</strong> <code>T<sub>front</sub></code> — the settled outcome of the §3 electro-thermal loop, after the cell has finished heating up. It compares that against a <strong>structural temperature limit</strong> <code>T<sub>limit</sub></code> (the softening/bond limit of the aluminium-honeycomb assembly, ~150–200&nbsp;°C — <em>not</em> the ~660&nbsp;°C melting point). In one phrase: <em>did it end up hot enough to soften or unbond the structure?</em> It is a test on the thermal <em>result</em>.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (build up). What does the <em>reverse-power</em> criterion measure instead, and why is it a different question?</div>
+<div class="answer">It measures the <strong>electrical stress / dose</strong>: <code>P<sub>rev</sub> = |V·I|</code>, the rate at which power is being forced into the cell <em>while it is reverse-biased</em> (<code>V&nbsp;&lt;&nbsp;0</code>), compared against <code>P<sub>limit</sub></code>. It is a different question because dissipation is not temperature: how <em>hard</em> the cell is driven backwards is not the same as how hot its bulk steadily becomes. A large <code>P<sub>rev</sub></code> concentrated in a tiny region can damage the cell even if the area-averaged converged temperature stays modest. In one phrase: <em>how hard is it being driven backwards?</em> It is a test on the electrical <em>cause</em>.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (the crux). Give one failure each criterion catches that the other would miss.</div>
+<div class="answer"><strong>Temperature catches, reverse-power misses:</strong> a <em>poorly-radiating</em> cell with a modest <code>P<sub>rev</sub></code> <em>below</em> <code>P<sub>limit</sub></code> (say 1.2&nbsp;W &lt; 2&nbsp;W → reverse-power says PASS), whose heat cannot escape so its <code>T<sub>front</sub></code> climbs <em>past</em> <code>T<sub>limit</sub></code> (e.g. 170&nbsp;°C ≥ 150&nbsp;°C). Low dose, hot steady state — only the temperature test flags it (Case&nbsp;A). <strong>Reverse-power catches, temperature misses:</strong> an <em>intensely localised</em> fault with <code>P<sub>rev</sub></code> ≥ <code>P<sub>limit</sub></code> (9.6&nbsp;W → reverse-power says FAIL) that ruins a few mm² of silicon, while the cell-averaged <code>T<sub>front</sub></code> the lumped model reports stays <em>below</em> <code>T<sub>limit</sub></code> (e.g. 120&nbsp;°C &lt; 150&nbsp;°C). High dose, survivable-looking bulk temperature — only the reverse-power test flags it (Case&nbsp;B).</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (deep — the target). Given those two cases, why is "<em>either</em> trips" the right rule for a go/no-go design check — rather than "both must trip", or just picking one criterion?</div>
+<div class="answer">Because the two tests detect <em>non-overlapping</em> dangers, and for a safety decision you must take the <strong>union</strong> of all the ways the panel can die, not the intersection. <em>Picking one</em> blinds you to whichever failure mode that test cannot see — drop the temperature test and Case&nbsp;A's poorly-radiating cell sails through; drop reverse-power and Case&nbsp;B's localised fault sails through. Requiring "<em>both</em> must trip" (logical AND) is even worse: it would only flag a cell that is <em>simultaneously</em> over-temperature <em>and</em> over-power, so it would clear <em>both</em> Case&nbsp;A and Case&nbsp;B — each a real destruction — because each trips only one test. The conservative, defensible go/no-go rule is the logical <strong>OR</strong>: if any credible criterion says "destroyed," treat it as destroyed. A design check should err toward catching failures, and OR is what does that.</div>
+</div>
+</div>
+
+<h4>5.9 &nbsp; Pitfalls</h4>
+
+<div class="pitfall">
+<strong>Pitfall 1 — forgetting the sign gate on reverse-power.</strong> The reverse-power test must compare <code>|V·I|</code> against <code>P<sub>limit</sub></code> <em>only when</em> <code>V&nbsp;&lt;&nbsp;0</code>. Sign decides everything here: a <em>forward</em> cell delivering <strong>9.6&nbsp;W of useful power</strong> is perfectly healthy — that is the array doing its job — whereas a <em>reverse</em> cell <em>dissipating</em> 9.6&nbsp;W is destroyed. <strong>Same magnitude, opposite meaning.</strong> If you drop the <code>V&nbsp;&lt;&nbsp;0</code> gate and test <code>|P|</code> unconditionally, you will flag every strong <em>generator</em> as a failure and the sweep becomes nonsense. Gate first on the reverse flag, then take the magnitude.</div>
+
+<div class="pitfall">
+<strong>Pitfall 2 — using the aluminium <em>melting</em> point as <code>T<sub>limit</sub></code>.</strong> The honeycomb core melts at ~660&nbsp;°C, but the assembly is destroyed far earlier — the bond fails and the aluminium softens around ~150–200&nbsp;°C. Setting <code>T<sub>limit</sub> = 660&nbsp;°C</code> would pronounce a 400&nbsp;°C panel "healthy" when it has structurally failed. In our examples <code>T<sub>limit</sub> = 150&nbsp;°C</code> is the <em>structural</em> limit — roughly <strong>four times below</strong> the melt — and that lower number is the one that matters. Conservative wins: melt is the wrong limit.</div>
+
+<h4>5.10 &nbsp; Section recap</h4>
+
+<div class="callout">
+<strong>Section recap.</strong> A cell/substrate is flagged <strong>destroyed</strong> if <em>either</em> criterion trips (logical OR). <strong>Criterion&nbsp;1 (temperature):</strong> <code>T<sub>front</sub> ≥ T<sub>limit</sub></code>, with <code>T<sub>limit</sub></code> the assembly's <em>structural/bond</em> limit (~150–200&nbsp;°C for aluminium honeycomb), <em>not</em> its ~660&nbsp;°C melting point. <strong>Criterion&nbsp;2 (reverse-power):</strong> <code>P<sub>rev</sub> = |V·I| ≥ P<sub>limit</sub></code>, evaluated <em>only when</em> <code>V&nbsp;&lt;&nbsp;0</code>. We use both because temperature captures the steady thermal <em>outcome</em> while reverse-power captures the electrical <em>dose</em>, and each catches a real failure the other misses (the poorly-radiating cell vs the intensely localised fault). A <strong>bypass diode</strong> clamps reverse voltage to ~−0.7&nbsp;V so <code>P<sub>rev</sub> ≈ 0.34&nbsp;W</code> (PASS); without it the cell reaches ~−20&nbsp;V so <code>P<sub>rev</sub> = 9.6&nbsp;W</code> (FAIL on both) — the same 9.6&nbsp;W and 187&nbsp;°C as §2/§3. Each cell's <code>T<sub>front</sub></code>, <code>T<sub>rear</sub></code>, <code>P<sub>elec</sub></code>, reverse flag, <code>P<sub>rev</sub></code> and tripped-criterion are written to the per-cell record that §7 stores and §6 aggregates.
+</div>
+
+<div class="practice">
+<strong>Practice Q5-1.</strong> The §3 loop has converged for three cells. Limits: <code>P<sub>limit</sub> = 2&nbsp;W</code>, <code>T<sub>limit</sub> = 150&nbsp;°C</code>. For each, compute <code>P<sub>rev</sub></code> (remember the sign gate), then decide PASS or FAIL on <em>each</em> criterion and give the overall destroyed flag.<br>
+(i) <code>V = −0.7&nbsp;V</code>, <code>I = 0.50&nbsp;A</code>, converged <code>T<sub>front</sub> = 52&nbsp;°C</code>.<br>
+(ii) <code>V = +2.3&nbsp;V</code>, <code>I = 0.46&nbsp;A</code>, converged <code>T<sub>front</sub> = 61&nbsp;°C</code>.<br>
+(iii) <code>V = −15&nbsp;V</code>, <code>I = 0.40&nbsp;A</code>, converged <code>T<sub>front</sub> = 140&nbsp;°C</code>.<br>
+Show the arithmetic with units, and say which (if any) criterion is what condemns each destroyed cell.
+<div class="answerspace lines-10"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q5-2.</strong> In two or three sentences, explain <em>why a bypass diode usually keeps</em> <code>P<sub>rev</sub></code> <em>under</em> <code>P<sub>limit</sub></code>. Reference the voltage it clamps the cell to, write the resulting <code>P<sub>rev</sub></code> in terms of the string current <code>I</code>, and contrast it with the reverse-breakdown voltage the cell would reach without the diode.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q5-3.</strong> A colleague proposes setting <code>T<sub>limit</sub></code> to the aluminium melting point (~660&nbsp;°C) "to be physically accurate." Give a one-paragraph rationale for choosing a much lower <code>T<sub>limit</sub></code> (~150–200&nbsp;°C) instead. Name the failure mechanism that occurs below the melting point, explain what "conservative" means for a go/no-go design check, and state who/what decides the exact number.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q5-4.</strong> Construct your <em>own</em> worked numbers for the two disagreement cases (do not reuse §5.4's values). Pick limits, then invent: (a) a cell that FAILS on temperature but PASSES on reverse-power, and (b) a cell that FAILS on reverse-power but PASSES on temperature. For each, give <code>V</code>, <code>I</code>, <code>P<sub>rev</sub></code> and <code>T<sub>front</sub></code> with units, and one line on the physical situation (poorly-radiating vs intensely localised) that makes it plausible.
+<div class="answerspace lines-10"></div>
+</div>

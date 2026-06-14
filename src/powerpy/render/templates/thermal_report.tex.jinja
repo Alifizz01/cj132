@@ -1,0 +1,111 @@
+% =====================================================================
+% PowerPy THERMAL report -- auto-generated.  Edit the Jinja template.
+% Reuses the shared AIRBUS preamble; data-only (no captions/prose).
+% =====================================================================
+<<% include "_preamble.tex.jinja" %>>
+
+\begin{document}
+
+% ---------------------------------------------------------------- title
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{2.0cm}
+  {\airbusmark[\Huge]}\par
+  \vspace{2.4cm}
+  {\LARGE\bfseries Thermal Analysis --- << document.project_name | tex >>\par}
+  \vspace{2.4cm}
+
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.32\linewidth}|>{\raggedright\arraybackslash}p{0.52\linewidth}|}
+    \hline
+    \reporthead{\textbf{Document information} & \textbf{}}\\ \hline
+    Document number & << document.doc_number | tex >>\\ \hline
+    Issued date     & << document.issued_date >>\\ \hline
+    Project         & << document.project_name | tex >>%
+                      <<% if document.project_code %>>\quad(<< document.project_code | tex >>)<<% endif %>>\\ \hline
+    Prepared by     & << document.prepared_by | tex >>\\ \hline
+  \end{tabular}
+  \vfill
+  \vspace{0.8cm}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% ---------------------------------------------------------------- 1. inputs
+\clearpage
+\section{Thermal Inputs}
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.46\linewidth}|r|l|}
+    \hline
+    \reporthead{\textbf{Parameter} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Cell solar absorptance \(\alpha\)      & << inputs.cell_alpha | num(".4f") >> & \\ \hline
+    Cell IR emittance \(\varepsilon\)      & << inputs.cell_epsilon | num(".4f") >> & \\ \hline
+    Cell area                              & << inputs.cell_area_m2 | num(".6f") >> & \si{\square\metre}\\ \hline
+    Substrate                              & \multicolumn{2}{l|}{<< inputs.substrate_name | tex >>}\\ \hline
+    Substrate rear absorptance \(\alpha_r\) & << inputs.substrate_alpha_rear | num(".4f") >> & \\ \hline
+    Substrate rear emittance \(\varepsilon_r\) & << inputs.substrate_epsilon_rear | num(".4f") >> & \\ \hline
+    Substrate conductivity                 & << inputs.substrate_conductivity | num(".4f") >> & \si{\watt\per\metre\per\kelvin}\\ \hline
+    Substrate thickness                    & << inputs.substrate_thickness_m | num(".6f") >> & \si{\metre}\\ \hline
+    Through-thickness conductance \(c\)     & << inputs.substrate_c_cond | num(".1f") >> & \si{\watt\per\square\metre\per\kelvin}\\ \hline
+    Solar constant (AM0)                   & << inputs.am0_w_m2 | num(".0f") >> & \si{\watt\per\square\metre}\\ \hline
+  \end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------- 1b. layout
+<<% if layout_figure %>>
+\clearpage
+\section{Panel Layout}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.92\linewidth]{<< layout_figure >>}
+\end{figure}
+<<% endif %>>
+
+% ---------------------------------------------------------------- 2. equilibrium
+\clearpage
+\section{Equilibrium Temperatures}
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.34\linewidth}|r|r|r|}
+    \hline
+    \reporthead{\textbf{Case} & \textbf{\(P_{sun}\) [\si{\watt\per\square\metre}]} & \textbf{\(P_{elec}\) [W]} & \textbf{\(T_{eq}\) [°C]}}\\ \hline
+<<% for p in points %>>
+    << p.case.label | tex >> & << p.p_sun | num(".0f") >> & << p.p_elec_w | num(".3f") >> & << p.t_front_c | num(".1f") >>\\ \hline
+<<% endfor %>>
+  \end{tabular}
+\end{table}
+
+% ---------------------------------------------------------------- 3. panel map
+\clearpage
+\section{Panel Temperature Map}
+<<% if panel_figure %>>
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.9\linewidth]{<< panel_figure >>}
+\end{figure}
+<<% endif %>>
+
+% ---------------------------------------------------------------- 4. hot spot
+\clearpage
+\section{Failed-Diode Hot Spot}
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.52\linewidth}|r|l|}
+    \hline
+    \reporthead{\textbf{Quantity} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Healthy cell temperature            & << hotspot.nominal_c | num(".1f") >> & °C\\ \hline
+    Failed (open-bypass) cell temperature & << hotspot.failed_c | num(".1f") >> & °C\\ \hline
+    Temperature rise \(\Delta T\)        & << hotspot.delta_c | num(".1f") >> & °C\\ \hline
+    Dissipated power in failed cell      & << hotspot.p_dissipated_w | num(".3f") >> & W\\ \hline
+    Temperature limit                    & << hotspot.t_limit_c | num(".1f") >> & °C\\ \hline
+    Margin to limit                      & << hotspot.margin_c | num(".1f") >> & °C\\ \hline
+  \end{tabular}
+\end{table}
+
+\end{document}

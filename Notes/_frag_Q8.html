@@ -1,0 +1,246 @@
+<!-- ===================================================================
+     CHAPTER 2 · SECTION 8 — Putting it together:
+     the full pipeline, end to end  (FINAL section of the chapter)
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     Practice IDs: Q8-1, Q8-2, Q8-3  (matched in _sol_Q8.html)
+     =================================================================== -->
+
+<h3>8 &nbsp; Putting it together: the full pipeline, end to end</h3>
+
+<p class="lede">Seven sections in, we have built seven separate machines: a parametric, fault-addressable <code>Circuit</code> (§1); a vectorised thermal solver (§2); the electro-thermal coupling loop that makes electricity and temperature agree (§3); an orbit-driven environment from hapsira (§4); a pair of breakdown criteria (§5); a Monte-Carlo failure sweep (§6); and a long-format results store with Excel export (§7). Each was taught on its own. This final section does the one thing none of the earlier ones could: it <strong>assembles them into a single workflow</strong> and shows how one concrete engineering question flows through every module from end to end. The question we will trace is deliberately sharp — <em>"which single-cell failure is most likely to melt the substrate?"</em> — and by the end you will be able to name, for each module, exactly what it contributes to the answer.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> The seven modules are not seven tools you pick from; they are seven <em>stages of one assembly line</em>. The array shape (§1), the substrate (a small new loader), and the orbit/environment (§4) are <em>built once</em>; then the Monte-Carlo driver (§6) turns a crank thousands of times, and on every turn a single failure pattern is pushed through the same fixed sequence — <code>circuit.fail</code> (§1) &rarr; electro-thermal loop (§3, which calls the vectorised thermal solve §2) &rarr; breakdown criteria (§5) &rarr; a row in the results store (§7) — and at the end the store is aggregated into heat-maps, histograms, rankings and an Excel summary (§7). Understanding the pipeline <em>is</em> understanding where each section lives in that sequence.</div>
+
+<h4>8.1 &nbsp; The new-module map: what we are actually building</h4>
+
+<p>The chapter has been a design for a set of new Python modules, each one responsible for a single stage and each one standing on the <em>proven Chapter-1 primitives</em> (the cell physics, the SPICE model writer <code>cellBuilder</code>/<code>cell.buildModel</code>, and the ngspice runner <code>ng_sim</code>). Nothing below re-derives the cell; every module is new <em>assembly</em> on old bricks. Here is the complete map, smallest responsibility to largest.</p>
+
+<table>
+  <caption>The seven proposed new modules and the single responsibility of each. Every one builds on the Chapter-1 cell / electric / ngspice primitives.</caption>
+  <thead>
+    <tr><th>Module</th><th>Responsibility</th><th>Section</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>circuit.py</code></td><td>The parametric <code>Circuit</code> class + recursive netlist builder + fault injection (<code>fromPrototype</code>, the Group/CellRef tree, <code>circuit.fail</code>).</td><td>§1</td></tr>
+    <tr><td><code>substrate.py</code></td><td>Substrate loader / dataclass: absorptivity&nbsp;&alpha;, emissivity&nbsp;&epsilon;, conductivity and thickness. PowerPy already exposes <code>getSubstrateData</code> with exactly this schema, so this module wraps a known data source.</td><td>(feeds §2)</td></tr>
+    <tr><td><code>thermal_vectorized.py</code></td><td>The vectorised 2-node Newton solver: residuals, the block-diagonal Jacobian, the closed-form 2&times;2 update applied elementwise to all cells at once.</td><td>§2</td></tr>
+    <tr><td><code>electrothermal.py</code></td><td>The circuit&hArr;thermal coupling loop: solve the circuit at current temperatures, form the per-cell <code>P_elec</code> vector, run the thermal solve, iterate to the self-consistent fixed point.</td><td>§3</td></tr>
+    <tr><td><code>environment_orbit.py</code></td><td>hapsira orbit &rarr; fluxes &rarr; an <code>Environment</code> time series: <code>P_Sun</code>, <code>P_Albedo</code>, <code>P_IR</code> and tilt at every point around the orbit, including eclipse.</td><td>§4</td></tr>
+    <tr><td><code>montecarlo.py</code></td><td>The three-mode failure-sweep driver (position / count / random) + the breakdown criteria applied per cell per run.</td><td>§6 (+§5)</td></tr>
+    <tr><td><code>results.py</code></td><td>The long-format store (Parquet / HDF5) + Excel summary and plot export (heat-maps, histograms, rankings).</td><td>§7</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+<strong>Why these seven, and not one big script.</strong> Each module has exactly one reason to change. If the orbit model improves, only <code>environment_orbit.py</code> moves; if the breakdown limits are re-tuned, only the criteria inside <code>montecarlo.py</code> (or the small criteria helper) move; if the array is re-wired, only the <code>Circuit</code> declaration changes. The thermal solver never knows there is a Monte-Carlo loop above it, and the Monte-Carlo loop never knows how the thermal solve works inside — it just calls the coupling loop and reads back numbers. That separation is what lets a five-stage pipeline stay debuggable.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 560 210" xmlns="http://www.w3.org/2000/svg">
+<rect x="40" y="16" width="150" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="115.0" y="31" text-anchor="middle" font-size="8.5" fill="#1d2733">montecarlo.py</text>
+<rect x="40" y="58" width="130" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="105.0" y="73" text-anchor="middle" font-size="8.5" fill="#1d2733">electrothermal.py</text><rect x="200" y="58" width="150" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="275.0" y="73" text-anchor="middle" font-size="8.5" fill="#1d2733">environment_orbit.py</text><rect x="380" y="58" width="120" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="440.0" y="73" text-anchor="middle" font-size="8.5" fill="#1d2733">results.py</text>
+<rect x="40" y="100" width="110" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="95.0" y="115" text-anchor="middle" font-size="8.5" fill="#1d2733">circuit.py</text><rect x="170" y="100" width="160" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="250.0" y="115" text-anchor="middle" font-size="8.5" fill="#1d2733">thermal_vectorized.py</text><rect x="360" y="100" width="120" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="420.0" y="115" text-anchor="middle" font-size="8.5" fill="#1d2733">substrate.py</text>
+<rect x="40" y="150" width="440" height="40" rx="5" fill="#fbf4e2" stroke="#c9a227"/><text font-family="Segoe UI,Arial,sans-serif" x="260" y="166" text-anchor="middle" font-size="9" fill="#b9851a">Chapter-1 primitives</text><text font-family="Segoe UI,Arial,sans-serif" x="260" y="182" text-anchor="middle" font-size="8.5" fill="#1d2733">cell · electric (cellBuilder, ng_sim) · ngspice · Environment</text>
+<line x1="115" y1="38" x2="105" y2="58" stroke="#5d6b79" stroke-width="1"/><line x1="115" y1="38" x2="275" y2="58" stroke="#5d6b79" stroke-width="1"/><line x1="115" y1="38" x2="440" y2="58" stroke="#5d6b79" stroke-width="1"/><line x1="105" y1="80" x2="95" y2="100" stroke="#5d6b79" stroke-width="1"/><line x1="105" y1="80" x2="250" y2="100" stroke="#5d6b79" stroke-width="1"/><line x1="250" y1="80" x2="250" y2="100" stroke="#5d6b79" stroke-width="1"/><line x1="95" y1="122" x2="150" y2="150" stroke="#5d6b79" stroke-width="1"/><line x1="250" y1="122" x2="250" y2="150" stroke="#5d6b79" stroke-width="1"/><line x1="420" y1="122" x2="400" y2="150" stroke="#5d6b79" stroke-width="1"/><line x1="440" y1="80" x2="440" y2="150" stroke="#5d6b79" stroke-width="1"/>
+</svg>
+<figcaption>Figure 2.15 — The new modules all stand on the Chapter-1 primitives (cell, electric/ngspice, Environment).</figcaption></figure>
+
+<h4>8.2 &nbsp; The end-to-end flow, stage by stage</h4>
+
+<p>Now the assembly line itself. Read it once as five numbered stages; each stage names the module and section it belongs to. Stages&nbsp;1&ndash;2 happen <em>once</em>; stages&nbsp;3&ndash;4 are the body of the Monte-Carlo loop and repeat once per run; stage&nbsp;5 happens <em>once</em> at the end.</p>
+
+<ol>
+<li><strong>Build the array (once) &mdash; §1.</strong> Declare the topology and clone the prototype cell into the whole tree:
+<pre><code>circuit = Circuit.fromPrototype(cell,
+              cells_per_line, lines_parallel,
+              modules_per_block, n_blocks)</code></pre>
+This fixes the shape, assigns every cell its hierarchical id (<code>B3.M2.L1.C7</code>), and fills the flat <code>circuit.cells</code> registry that fault injection will reach into.</li>
+
+<li><strong>Load the substrate and define the orbit (once) &mdash; §4 (+ <code>substrate.py</code>).</strong> Pull the substrate's &alpha;,&nbsp;&epsilon;,&nbsp;conductivity and thickness from <code>getSubstrateData</code>; define the orbit with hapsira and generate the <code>Environment</code> time series &mdash; <code>P_Sun</code>, <code>P_Albedo</code>, <code>P_IR</code> and tilt at every orbit point, including the eclipse where direct sun drops to zero. From this series we can pick the <em>worst</em> orbit point (the harshest combination of fluxes) to stress the array.</li>
+
+<li><strong>For each Monte-Carlo run: plant a failure and solve &mdash; §6 &rarr; §1 &rarr; §3 &rarr; §2 &rarr; §5.</strong> The driver (§6) chooses a failure pattern; then, for that run:
+  <ul>
+  <li><strong>plant it</strong> &mdash; <code>circuit.fail(id, "dead")</code> degrades the chosen cell(s) by id (§1);</li>
+  <li><strong>solve it</strong> &mdash; at the chosen orbit point(s), run the electro-thermal coupling loop (§3), which repeatedly calls the vectorised thermal solver (§2) until temperature and the operating point agree (the self-consistent fixed point);</li>
+  <li><strong>judge it</strong> &mdash; apply the breakdown criteria (§5) to every cell's converged state: <code>destroyed</code> if <code>T<sub>front</sub> &ge; T<sub>limit</sub></code> <em>or</em> (reverse-biased and <code>P<sub>rev</sub> = |V&middot;I| &ge; P<sub>limit</sub></code>).</li>
+  </ul></li>
+
+<li><strong>Record per cell, then reset and repeat &mdash; §7 &rarr; §6.</strong> Write the per-cell record &mdash; <code>T<sub>front</sub></code>, <code>T<sub>rear</sub></code>, signed <code>P<sub>elec</sub></code>, reverse flag, <code>P<sub>rev</sub></code>, which criterion tripped &mdash; as rows in the long-format store (§7), tagged with the run id and the failure pattern. Un-fail the cell so the next run starts from a pristine array (§6's reset rule), and loop back to stage&nbsp;3.</li>
+
+<li><strong>Aggregate (once) &mdash; §7.</strong> When every run is done, aggregate the store: heat-maps of vulnerability by location, histograms of power-loss / max-temperature / hot-spot count, and a <em>ranking</em> of failure positions by damage. Export an Excel summary the engineer can read and act on.</li>
+</ol>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg">
+<rect x="20" y="20" width="100" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="70.0" y="35" text-anchor="middle" font-size="8.5" fill="#1d2733">Circuit §1</text><rect x="20" y="60" width="100" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="70.0" y="75" text-anchor="middle" font-size="8.5" fill="#1d2733">Substrate</text><rect x="20" y="100" width="120" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="80.0" y="115" text-anchor="middle" font-size="8.5" fill="#1d2733">Orbit/hapsira §4</text>
+<rect x="190" y="40" width="120" height="80" rx="6" fill="#eef5fb" stroke="#0b3d63" stroke-width="1.6"/><text font-family="Segoe UI,Arial,sans-serif" x="250" y="74" text-anchor="middle" font-size="9.5" fill="#0b3d63">Monte-Carlo</text><text font-family="Segoe UI,Arial,sans-serif" x="250" y="90" text-anchor="middle" font-size="9.5" fill="#0b3d63">driver §6</text>
+<rect x="350" y="20" width="130" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="415.0" y="35" text-anchor="middle" font-size="8.5" fill="#1d2733">fail(pattern) §1</text><rect x="350" y="58" width="140" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="420.0" y="73" text-anchor="middle" font-size="8.5" fill="#1d2733">electro-thermal §3</text><rect x="350" y="96" width="150" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="425.0" y="111" text-anchor="middle" font-size="8.5" fill="#1d2733">vectorised thermal §2</text><rect x="350" y="134" width="120" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="410.0" y="149" text-anchor="middle" font-size="8.5" fill="#1d2733">breakdown §5</text>
+<rect x="350" y="172" width="130" height="22" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="415.0" y="187" text-anchor="middle" font-size="8.5" fill="#1d2733">results store §7</text>
+<path d="M120 30 H188" stroke="#b9851a" stroke-width="1.6" fill="none"/><polygon points="188,30 182,26 182,34" fill="#b9851a"/><path d="M120 70 H188" stroke="#b9851a" stroke-width="1.6" fill="none"/><polygon points="188,70 182,66 182,74" fill="#b9851a"/><path d="M120 110 H188" stroke="#b9851a" stroke-width="1.6" fill="none"/><polygon points="188,110 182,106 182,114" fill="#b9851a"/>
+<path d="M310 80 H348" stroke="#b9851a" stroke-width="1.6" fill="none"/><polygon points="348,80 342,76 342,84" fill="#b9851a"/>
+<path d="M250 120 V190 H348" stroke="#0b3d63" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="470" y="200" font-size="8" fill="#5d6b79">→ heat-maps · histograms · Excel</text>
+</svg>
+<figcaption>Figure 2.16 — The full pipeline: Circuit + Substrate + Orbit feed the Monte-Carlo driver; each run runs fail → electro-thermal (vectorised) → breakdown → results store.</figcaption></figure>
+
+<div class="keyidea">
+<strong>The shape of the whole thing, in one breath.</strong> Build <strong>once</strong> (array §1, substrate, environment §4) &rarr; loop <strong>many</strong> times (fail §1, couple §3 calling thermal §2, judge §5, record §7) &rarr; aggregate <strong>once</strong> (rank, histogram, Excel §7). The "loop many times" body is identical every iteration; only the failure pattern the driver hands in (§6) changes. That is the entire system.</div>
+
+<h4>8.3 &nbsp; Tracing one question through every module</h4>
+
+<p>Abstract maps are easy to nod at and hard to keep. So let us push the chapter's headline question &mdash; <em>"which single-cell failure most endangers the panel?"</em> &mdash; through the pipeline and watch each module hand its piece to the next. This is the same trace, told as a relay.</p>
+
+<table>
+  <caption>One question, seven contributions: what each module adds to answering "which single-cell failure most endangers the panel?"</caption>
+  <thead>
+    <tr><th>Stage</th><th>Module (§)</th><th>What it contributes to <em>this</em> question</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>build the array</td><td><code>circuit.py</code> (§1)</td><td>creates all 600 addressable cells, so "each single position in turn" is even expressible</td></tr>
+    <tr><td>set the conditions</td><td><code>environment_orbit.py</code> + <code>substrate.py</code> (§4)</td><td>supplies the worst-case fluxes and the material constants that decide how hot a given dissipation gets</td></tr>
+    <tr><td>choose the failures</td><td><code>montecarlo.py</code> (§6)</td><td><em>position</em> mode: march one dead cell across every location (deterministic, O(N) &mdash; 600 runs)</td></tr>
+    <tr><td>plant the failure</td><td><code>circuit.py</code> (§1)</td><td><code>circuit.fail(id,"dead")</code> kills exactly that one addressed cell, nothing else</td></tr>
+    <tr><td>find the temperatures</td><td><code>electrothermal.py</code> &rarr; <code>thermal_vectorized.py</code> (§3&rarr;§2)</td><td>the coupling loop converges to the self-consistent operating point and every cell's temperature</td></tr>
+    <tr><td>decide "destroyed"</td><td>criteria (§5)</td><td>the OR of the temperature and reverse-power tests turns each cell's state into a Boolean</td></tr>
+    <tr><td>store &amp; rank</td><td><code>results.py</code> (§7)</td><td>records every run, then sorts positions by damage &mdash; the top of that list <em>is</em> the answer</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+<strong>Read the relay as a sentence.</strong> "<code>circuit.py</code> makes the cells addressable; <code>montecarlo.py</code> walks a single failure across every address; <code>circuit.fail</code> plants each one; <code>electrothermal.py</code> (calling <code>thermal_vectorized.py</code>) finds the temperatures it causes; the §5 criteria say whether that killed anything; <code>results.py</code> stores all 600 outcomes and ranks them &mdash; and the worst-ranked position is the cell whose death most endangers the panel." Every module is one verb in that sentence. If you can recite the sentence, you understand the pipeline.</div>
+
+<h4>8.4 &nbsp; A worked end-to-end scenario, with the chapter's numbers <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>Let us run the question on a concrete array and read the result off the established numbers. We reuse the chapter's typical shape and the §2/§5 thermal results exactly, so the scenario is fully traceable.</p>
+
+<div class="worked">
+<strong>Worked scenario &mdash; the most-damaging single-cell failure on a 600-cell array.</strong>
+
+<div class="step"><strong>Step 1 &mdash; build the array (§1).</strong> Take the chapter's typical topology: <code>cells_per_line=10</code>, <code>lines_parallel=1</code>, <code>modules_per_block=3</code>, <code>n_blocks=20</code>. Total cells = 10&times;1&times;3&times;20 = <strong>600</strong>. Series depth (what sets the bus voltage) = cells_per_line &times; modules_per_block = 10&times;3 = 30 cells &rArr; <code>V<sub>bus</sub> = 30 &times; 2.35&nbsp;V &asymp; 70.5&nbsp;V</code> &mdash; the project's ~70&nbsp;V bus. Note <code>lines_parallel = 1</code>: <strong>each line is the only current path in its module &mdash; there is no line-level redundancy.</strong> Hold that fact; it is the whole story.</div>
+
+<div class="step"><strong>Step 2 &mdash; conditions (§4).</strong> Load the substrate (&alpha;,&nbsp;&epsilon;,&nbsp;conductivity, thickness via <code>getSubstrateData</code>) and build the orbit's <code>Environment</code> with hapsira. From the time series, pick the <strong>worst orbit point</strong> &mdash; the harshest sun/tilt combination &mdash; and run the sweep <em>there</em>, where failures bite hardest.</div>
+
+<div class="step"><strong>Step 3 &mdash; choose mode and sweep (§6).</strong> The question is single-fault vulnerability, so use the <strong>position sweep</strong>: fail one cell at a time across all 600 locations &mdash; <strong>600 deterministic runs</strong>, no seed needed.</div>
+
+<div class="step"><strong>Step 4 &mdash; the decisive run (§1&rarr;§3&rarr;§2&rarr;§5).</strong> Consider the run that kills the cell at a particular <em>series</em> position. <code>circuit.fail(id,"dead")</code> sets that cell's photocurrent to zero (§1). But a dead cell in a series line does not simply vanish: the other cells in its line still try to push the string current through it, forcing it into <strong>reverse bias</strong>. With no effective bypass, it is driven to its reverse-breakdown voltage <code>V = &minus;20&nbsp;V</code> while still carrying the string current <code>I = 0.48&nbsp;A</code>. The electro-thermal loop (§3), calling the vectorised solver (§2), converges to:
+<div class="formula">
+P<sub>rev</sub> = |V&middot;I| = |(&minus;20&nbsp;V)(0.48&nbsp;A)| = <strong>9.6&nbsp;W</strong> &nbsp;&rarr;&nbsp; T<sub>front</sub> &asymp; <strong>187&nbsp;&deg;C</strong>
+</div>
+Now apply the §5 criteria: <code>P<sub>rev</sub> = 9.6&nbsp;W &ge; P<sub>limit</sub> = 2&nbsp;W</code> &rArr; FAIL on reverse-power; <code>T<sub>front</sub> = 187&nbsp;&deg;C &ge; T<sub>limit</sub> = 150&nbsp;&deg;C</code> &rArr; FAIL on temperature. <strong>Both criteria trip</strong> &mdash; this position is flagged <code>destroyed</code> and, being among the hottest/most-stressed, ranks <strong>most-damaging</strong>.</div>
+
+<div class="step"><strong>Step 5 &mdash; the rest of the array, and the power (§5&rarr;§7).</strong> The <em>healthy</em> cells, meanwhile, sit near <strong>~39&nbsp;&deg;C</strong> (the §2 healthy-cell figure, 38.89&nbsp;&deg;C) &mdash; cool, generating, well clear of both limits. But the failed cell's whole line has stopped generating (its current path is broken), so the array's total power drops by that lost string's share &mdash; the contribution of one line out of the array. Every per-cell number goes into the long-format store (§7).</div>
+
+<div class="check"><strong>What the engineer learns.</strong> The ranking (§7) names the series position whose single-cell death drives 9.6&nbsp;W / 187&nbsp;&deg;C and trips both criteria as the array's weak spot. Two fixes follow directly: <strong>(1) add a bypass diode at that position</strong> &mdash; from §5, clamping &minus;20&nbsp;V to &minus;0.7&nbsp;V collapses 9.6&nbsp;W to 0.34&nbsp;W and the cell settles cool, a destroyed-to-fine flip; or <strong>(2) change the layout</strong> &mdash; raise <code>lines_parallel</code> from 1 to 2, the redundant module §6 compared, so a dead cell's line is no longer the only path and the others carry on. The pipeline did not just say "it gets hot"; it said <em>where</em>, <em>how hot</em>, <em>why</em>, and <em>what to do</em>. &#10003;</div>
+</div>
+
+<div class="keyidea">
+<strong>Why <code>lines_parallel = 1</code> was the whole story.</strong> With a single line per module, one dead cell breaks the only path and forces itself into &minus;20&nbsp;V reverse breakdown &mdash; the 9.6&nbsp;W / 187&nbsp;&deg;C catastrophe. The §1 topology knob, the §5 criteria, and the §6 layout comparison all meet at this one cell: the array is fragile <em>because</em> of a wiring choice, and the fix is a different wiring choice. That is the chapter's argument in a single cell.</div>
+
+<h4>8.5 &nbsp; Honest status: what is proven, what is pending</h4>
+
+<p>A study-notes chapter should be candid about which parts already stand and which are still a plan. Here is the honest accounting.</p>
+
+<div class="keyidea">
+<strong>Proven now.</strong> The <strong>vectorised thermal solver</strong> (§2, <code>thermal_vectorized.py</code>) is <em>pure numpy</em> &mdash; it depends on no external simulator &mdash; and it is <strong>verified against a hand-worked single-cell energy balance</strong>: the §2 worked example (65.26&nbsp;&deg;C idle, 38.89&nbsp;&deg;C extracting, 187.48&nbsp;&deg;C dissipating) was reproduced by hand, step by Newton step, with the residual collapsing to ~10<sup>&minus;11</sup>. Where the solver overlaps a closed-form balance, it agrees. That stage is trustworthy today.</div>
+
+<div class="callout">
+<strong>Pending validation.</strong> The <strong>circuit / ngspice</strong> path (§1) and the <strong>Monte-Carlo</strong> machinery (§6) depend on the existing Chapter-1 cell model <em>and</em> on ngspice actually running and reporting correctly. Those are validated in two steps, smallest first:
+<ul>
+<li><strong>Tiny 2&times;2 circuit first.</strong> Build a 4-cell <code>Circuit</code> (cells_per_line=2, lines_parallel=2 &rarr; one tiny block), run it through ngspice, and <strong>read back each cell's V and I</strong> to confirm the per-cell operating point is extracted correctly and matches a hand calculation. This is the smallest test that exercises the netlist build, the run, <em>and</em> the read-back together.</li>
+<li><strong>Then end-to-end.</strong> Only once the 2&times;2 read-back is trusted do we wire the full pipeline (§1&ndash;§7) and run a real sweep, checking that healthy cells land near ~39&nbsp;&deg;C and a forced reverse cell reproduces the ~187&nbsp;&deg;C / 9.6&nbsp;W signature from §2/§5.</li>
+</ul></div>
+
+<div class="pitfall">
+<strong>The main implementation risk &mdash; per-cell V,I extraction from ngspice.</strong> Everything downstream rides on one fragile step: pulling each cell's converged voltage and current back out of the ngspice result, correctly, by id. The §3 loop needs that per-cell <code>P_elec</code> vector to compute heat; §5 needs each cell's V (and its sign) to apply the reverse-power criterion. If the read-back maps a current to the wrong cell, or drops a sign, then one circuit solve quietly corrupts the whole per-cell power vector &mdash; and <em>every</em> temperature, every breakdown flag, every ranking built on it is wrong, silently. This is exactly why the 2&times;2 read-back test exists: prove the extraction on four cells you can check by hand before trusting it on six hundred.</div>
+
+<h4>8.6 &nbsp; What changed versus the legacy code</h4>
+
+<p>It is worth seeing the whole redesign at a glance &mdash; each section replaced one specific legacy weakness with a structured alternative.</p>
+
+<table>
+  <caption>The chapter as a list of replacements: legacy approach &rarr; new approach.</caption>
+  <thead>
+    <tr><th>Aspect</th><th>Legacy code</th><th>New approach</th><th>§</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>thermal solve</td><td>per-cell <code>scipy.fsolve</code> in a Python loop</td><td>one <em>vectorised Newton</em> over all cells at once</td><td>§2</td></tr>
+    <tr><td>array structure</td><td>fixed cell&rarr;string&rarr;section&rarr;panel hierarchy</td><td>parametric <code>Circuit</code> with per-cell ids and switchable series/parallel</td><td>§1</td></tr>
+    <tr><td>environment</td><td>broken <code>poliastro</code> albedo</td><td><em>hapsira</em> orbit &rarr; sun / albedo / IR fluxes over time</td><td>§4</td></tr>
+    <tr><td>outputs</td><td>ad-hoc, one-off prints / plots</td><td>long-format <em>Parquet</em> store + <em>Excel</em> summary</td><td>§7</td></tr>
+  </tbody>
+</table>
+
+<h4>8.7 &nbsp; Socratic ladder &mdash; trace the question through every module</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder &mdash; trace one question, "which single-cell failure most endangers the panel?", through every module and name what each contributes.</div>
+
+<div class="socratic">
+<div class="q">Rung 1 (foundation). Which module <em>builds the array</em>, and what does it give us that makes "a single-cell failure" even meaningful?</div>
+<div class="answer"><code>circuit.py</code> (§1). <code>Circuit.fromPrototype(...)</code> clones the prototype cell into the full Group/CellRef tree, assigns every cell a stable hierarchical id (<code>B3.M2.L1.C7</code>), and fills the flat <code>circuit.cells</code> registry. That per-cell addressability is what lets us speak of "<em>this</em> single cell" at all &mdash; without it you can count cells but never point at one.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 2 (build up). Which module <em>plants the failure</em>, and how does it choose <em>which</em> failures to try for this question?</div>
+<div class="answer">Planting is <code>circuit.fail(id,"dead")</code> from §1 &mdash; it sets the chosen cell's photocurrent to zero and leaves every other cell untouched. <em>Choosing</em> which failures is the §6 driver in <code>montecarlo.py</code>: because the question is single-fault vulnerability, it uses the <strong>position sweep</strong> &mdash; one dead cell marched across every location, deterministic, O(N) (600 runs for 600 cells), no randomness or seed required.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 3 (the engine). Which module(s) <em>find the temperatures</em> the failure causes, and how do the two cooperate?</div>
+<div class="answer"><code>electrothermal.py</code> (§3) drives the loop; <code>thermal_vectorized.py</code> (§2) does the thermal arithmetic. The coupling loop solves the circuit at the current temperatures to get each cell's <code>P_elec</code>, hands that power vector to the vectorised Newton thermal solve to get new temperatures, and iterates until the two stop changing &mdash; the self-consistent fixed point. §3 is the "keep going until they agree" wrapper; §2 is the fast inner solve it calls each pass.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 4 (the verdict). Which module decides a cell is <em>"destroyed"</em>, and what exactly is its rule?</div>
+<div class="answer">The §5 breakdown criteria (living in <code>montecarlo.py</code> / a small criteria helper). A cell is <code>destroyed</code> if <em>either</em> test trips: temperature, <code>T<sub>front</sub> &ge; T<sub>limit</sub></code> (the structural/bond limit, ~150&nbsp;&deg;C, not the ~660&nbsp;&deg;C melt); <em>or</em> reverse-power, <code>P<sub>rev</sub> = |V&middot;I| &ge; P<sub>limit</sub></code> evaluated <em>only when</em> <code>V&lt;0</code>. The logical OR is deliberate &mdash; each test catches a real failure the other misses.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 5 (the record). Which module <em>stores and ranks</em> the outcomes, and where in its output is the answer to our question?</div>
+<div class="answer"><code>results.py</code> (§7). Every run writes a long-format row per cell &mdash; <code>T<sub>front</sub></code>, <code>T<sub>rear</sub></code>, signed <code>P<sub>elec</sub></code>, reverse flag, <code>P<sub>rev</sub></code>, tripped criterion &mdash; into Parquet/HDF5. Aggregation then <strong>sorts the 600 positions by damage</strong> (peak temperature or power loss). The <em>top of that ranking</em> is the answer: the single-cell position whose failure most endangers the panel. An Excel summary makes it actionable.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 6 (deep &mdash; the target). Put it together: trace the whole question through every module in order, naming each contribution; and say why, for <em>this</em> question, Monte-Carlo chooses the failures the way it does.</div>
+<div class="answer"><strong>The full trace.</strong> <code>circuit.py</code> (§1) builds 600 addressable cells &rarr; the §6 driver in <code>montecarlo.py</code> chooses the failures, here a <em>deterministic position sweep</em> (one dead cell per location, 600 runs) &rarr; <code>circuit.fail(id,"dead")</code> (§1) plants each one &rarr; <code>electrothermal.py</code> (§3), calling <code>thermal_vectorized.py</code> (§2) at the worst orbit point from <code>environment_orbit.py</code> (§4) on the substrate from <code>substrate.py</code>, converges to the temperatures and operating point &rarr; the §5 criteria turn each cell's state into a <code>destroyed</code> Boolean &rarr; <code>results.py</code> (§7) records every run and <em>ranks</em> the positions by damage; the top-ranked position is the answer. <strong>Why position mode chooses failures this way:</strong> the question asks about a <em>single</em> cell's failure and wants the worst <em>location</em>. There are only N single-cell failures (one per cell), so we can afford to test <em>all</em> of them &mdash; a deterministic, exhaustive march, no sampling and no seed, which is guaranteed to find the true worst single position with no luck involved. (Random or count sampling would be the right choice only if we cared about <em>combinations</em> of failures or the <em>spread</em> of outcomes &mdash; the 2<sup>N</sup>-combination questions §6 samples because they cannot be enumerated.)</div>
+</div>
+</div>
+
+<h4>8.8 &nbsp; Two pipeline-level pitfalls</h4>
+
+<div class="pitfall">
+<strong>Pitfall 1 &mdash; sweeping at a benign orbit point and declaring victory.</strong> The §4 environment is a <em>time series</em>: the fluxes and tilt rise and fall around the orbit, so the same failure is far more dangerous at some orbit points than others. If you run the whole sweep at a <em>benign</em> point &mdash; full sun, easy tilt, nothing stressed &mdash; even the worst single-cell failure may stay under the limits, and you will conclude "the array is safe." It is not; you simply never tested it when it was hot. Always identify the <strong>worst-case orbit point</strong> (or sweep across the harsh part of the orbit) <em>before</em> drawing any safety conclusion. A clean sweep at the easiest moment of the orbit proves nothing about the hardest.</div>
+
+<div class="pitfall">
+<strong>Pitfall 2 &mdash; getting the per-cell read-back wrong poisons everything downstream.</strong> One circuit solve produces the <em>entire</em> per-cell <code>P_elec</code> vector that the §3 loop feeds to the §2 thermal solve, and the per-cell V that §5's reverse-power criterion gates on. Get that extraction wrong &mdash; a current attributed to the wrong id, a dropped sign on V &mdash; and the error does not stay local: <em>every</em> temperature, every breakdown flag, and every ranking computed from that vector is wrong, and wrong <em>silently</em> (the numbers still look plausible). This is the same risk flagged in §8.5; it is why the 2&times;2 read-back test must pass before the pipeline is trusted. The pipeline is only as correct as its weakest hand-off, and this is the weakest.</div>
+
+<h4>8.9 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice Q8-1.</strong> A colleague asks you to answer <em>"how many simultaneous random cell failures can our array tolerate before its peak temperature crosses the breakdown limit?"</em> Put the pipeline stages below into the correct execution order, and for each name the module/section responsible. Stages (shuffled): aggregate and rank/plot&nbsp;(A); run the electro-thermal coupling loop at the worst orbit point&nbsp;(B); build the array from the prototype&nbsp;(C); apply the breakdown criteria per cell&nbsp;(D); choose the failure pattern for this run&nbsp;(E); load substrate + build the orbit environment&nbsp;(F); record the per-cell results and reset&nbsp;(G). Also state which of the three §6 modes this question calls for, and why.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q8-2.</strong> For each sub-task below, name the single module (and its §) that owns it, in one line: (i) clamp a reverse-biased cell's voltage decision into a <code>destroyed</code> flag; (ii) turn a hapsira orbit into <code>P_Sun</code>, <code>P_Albedo</code>, <code>P_IR</code> over time; (iii) update every cell's temperature at once from a power vector; (iv) sort failure positions by damage and write an Excel summary; (v) mark the cell with id <code>B5.M1.L2.C9</code> as dead; (vi) make the circuit's operating point and the temperature field agree.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<strong>Practice Q8-3.</strong> A position sweep on a small array returned the table below (limits <code>P<sub>limit</sub> = 2&nbsp;W</code>, <code>T<sub>limit</sub> = 150&nbsp;&deg;C</code>). Each row is the cell that was failed in that run, with its own converged state. (a) For each row, decide PASS/FAIL on each §5 criterion (mind the sign gate) and give the <code>destroyed</code> flag. (b) Name the <strong>most-damaging position</strong> and say which criterion/criteria condemn it. (c) In one line, what fix would you recommend there?
+<table>
+  <thead>
+    <tr><th>Failed position</th><th>V (V)</th><th>I (A)</th><th>T<sub>front</sub> (&deg;C)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>P&middot;a</td><td>+2.30</td><td>0.46</td><td>39</td></tr>
+    <tr><td>P&middot;b</td><td>&minus;0.70</td><td>0.48</td><td>45</td></tr>
+    <tr><td>P&middot;c</td><td>&minus;20.0</td><td>0.48</td><td>187</td></tr>
+    <tr><td>P&middot;d</td><td>&minus;1.20</td><td>0.50</td><td>168</td></tr>
+  </tbody>
+</table>
+<div class="answerspace lines-10"></div>
+</div>
+
+<div class="callout">
+<strong>Chapter recap &mdash; the whole pipeline in one place.</strong> Chapter&nbsp;2 turned seven ideas into seven modules that compose into one workflow. <strong>Build once:</strong> declare the array with <code>Circuit.fromPrototype</code> (§1, <code>circuit.py</code>); load the substrate (<code>substrate.py</code>) and build the orbit <code>Environment</code> with hapsira (§4, <code>environment_orbit.py</code>). <strong>Loop many times</strong> under the Monte-Carlo driver (§6, <code>montecarlo.py</code>): pick a failure pattern &rarr; <code>circuit.fail(id,mode)</code> (§1) &rarr; the electro-thermal coupling loop (§3, <code>electrothermal.py</code>) calling the vectorised Newton thermal solve (§2, <code>thermal_vectorized.py</code>) at the worst orbit point &rarr; the breakdown criteria (§5) flag each cell <code>destroyed</code> if <code>T<sub>front</sub>&ge;T<sub>limit</sub></code> <em>or</em> (<code>V&lt;0</code> and <code>P<sub>rev</sub>&ge;P<sub>limit</sub></code>) &rarr; write the per-cell row to the long-format store and reset (§7, <code>results.py</code>). <strong>Aggregate once:</strong> heat-maps, histograms, a damage ranking, an Excel summary (§7). On a 600-cell array (10&times;1&times;3&times;20, ~70&nbsp;V bus), a position sweep finds that the worst single-cell failure forces a dead cell to &minus;20&nbsp;V / <strong>9.6&nbsp;W</strong> / <strong>187&nbsp;&deg;C</strong> (trips both §5 criteria) while healthy cells sit near <strong>~39&nbsp;&deg;C</strong> &mdash; the fragility traced to <code>lines_parallel = 1</code> (no line redundancy), fixed by a bypass diode there or by going to <code>lines_parallel = 2</code>. <strong>Status:</strong> the pure-numpy thermal solver (§2) is proven against the hand-worked balance; the ngspice/circuit and Monte-Carlo parts are validated on a tiny 2&times;2 read-back first, then end-to-end &mdash; the main risk being robust per-cell V,I extraction from ngspice, on which every downstream number depends. <strong>Versus legacy:</strong> per-cell <code>fsolve</code> &rarr; vectorised Newton; fixed hierarchy &rarr; parametric <code>Circuit</code>; broken poliastro albedo &rarr; hapsira fluxes; ad-hoc outputs &rarr; Parquet + Excel.</div>

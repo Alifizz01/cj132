@@ -1,0 +1,108 @@
+% =====================================================================
+% PowerPy MONTE-CARLO failure report -- auto-generated.  Data-only.
+% =====================================================================
+<<% include "_preamble.tex.jinja" %>>
+
+\begin{document}
+
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{2.0cm}
+  {\airbusmark[\Huge]}\par
+  \vspace{2.4cm}
+  {\LARGE\bfseries Thermal Failure Monte-Carlo --- << document.project_name | tex >>\par}
+  \vspace{2.4cm}
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.32\linewidth}|>{\raggedright\arraybackslash}p{0.52\linewidth}|}
+    \hline
+    \reporthead{\textbf{Document information} & \textbf{}}\\ \hline
+    Document number & << document.doc_number | tex >>\\ \hline
+    Issued date     & << document.issued_date >>\\ \hline
+    Project         & << document.project_name | tex >>\\ \hline
+    Prepared by     & << document.prepared_by | tex >>\\ \hline
+  \end{tabular}
+  \vfill
+  \vspace{0.8cm}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+% ---------------------------------------------------------------- 1. setup
+\clearpage
+\section{Study Setup}
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|L|r|l|}
+    \hline
+    \reporthead{\textbf{Parameter} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Panel grid (rows $\times$ cols)        & << inputs.panel_rows >> $\times$ << inputs.panel_cols >> & \\ \hline
+    Cells in panel                         & << inputs.n_cells >> & \\ \hline
+    Phase / launch                         & \multicolumn{2}{l|}{<< inputs.phase | tex >> / << inputs.launch_config | tex >>}\\ \hline
+    Per-cell failure probability           & << inputs.p_fail | num(".3f") >> & \\ \hline
+    Healthy cell power (extracted)         & << inputs.healthy_w | num(".3f") >> & W\\ \hline
+    Failed cell power (dissipated)         & << inputs.reverse_w | num(".3f") >> & W\\ \hline
+    Hot-spot dissipation multiple          & << inputs.dissipation_multiple | num(".1f") >> & \\ \hline
+    Temperature limit                      & << inputs.t_limit_c | num(".1f") >> & °C\\ \hline
+    Auto-stop target std.\ error           & << inputs.target_se | num(".2f") >> & °C\\ \hline
+    Maximum runs                           & << inputs.max_runs >> & \\ \hline
+  \end{tabularx}
+\end{table}
+
+% ---------------------------------------------------------------- 2. results
+\clearpage
+\section{Results}
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|L|r|l|}
+    \hline
+    \reporthead{\textbf{Quantity} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Monte-Carlo runs executed              & << summary.n_runs >> & \\ \hline
+    Stop reason                            & \multicolumn{2}{l|}{<< summary.stopped | tex >>}\\ \hline
+    Mean peak temperature                  & << summary.mean_peak_c | num(".2f") >> & °C\\ \hline
+    Standard error of the mean             & << summary.standard_error | num(".3f") >> & °C\\ \hline
+    Maximum peak temperature (sampled)     & << summary.max_peak_c | num(".2f") >> & °C\\ \hline
+    Runs with a cell over the limit        & << (p_over_limit * 100) | num(".1f") >> & \%\\ \hline
+  \end{tabularx}
+\end{table}
+
+<<% if hist_figure %>>
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\linewidth]{<< hist_figure >>}
+\end{figure}
+<<% endif %>>
+
+% ---------------------------------------------------------------- 3. worst case
+\clearpage
+\section{Worst-Case Failure Cluster}
+\noindent The greedy search adds the single most-damaging failure at each step;
+because lateral conduction lets adjacent hot cells reinforce one another, this
+finds the worst cluster directed sampling usually misses.
+
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabularx}{\linewidth}{|r|L|r|r|}
+    \hline
+    \reporthead{\textbf{Step} & \textbf{Failed cells (flat index)} & \textbf{Peak [°C]} & \textbf{Over limit}}\\ \hline
+<<% for t in worst.trajectory %>>
+    << t.step >> & << t.failed | join(", ") >> & << t.peak_t_c | num(".1f") >> & << t.n_over_limit >>\\ \hline
+<<% endfor %>>
+  \end{tabularx}
+\end{table}
+
+<<% if worst_figure %>>
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\linewidth]{<< worst_figure >>}
+\end{figure}
+<<% endif %>>
+
+\noindent Worst-case peak temperature: \textbf{<< worst.peak_t_c | num(".1f") >>~°C}
+with << worst.failed | length >> failed cell(s).
+
+\end{document}

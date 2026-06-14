@@ -1,0 +1,36 @@
+# --- Python caches / build -------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# --- LaTeX render workspaces (rebuilt by the report pipeline) --------------
+build_report/
+build_thermal/
+build_montecarlo/
+build_mc3/
+build_mc/
+
+# --- spreadsheet backups / copies / Excel lock files -----------------------
+params_backup*.xlsx
+params - Copy.xlsx
+~$*.xlsx
+
+# --- tool / plugin dirs that landed in the tree ----------------------------
+.agents/
+
+# --- loose asset dirs (not part of the source package) ---------------------
+src/powerpy/pic/
+src/powerpy/newpic/
+
+# --- generated reports & figures (rebuild from Notes/ + scripts) -----------
+reports/
+Notes/*.pdf
+Notes/*.png
+Notes/*.html.bak
+
+# Keep authored sources in Notes/ tracked (the *.html notes, *.css, *_frag_*,
+# and the _build_*.py scripts) — only the rendered outputs above are ignored.

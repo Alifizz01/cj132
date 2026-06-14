@@ -1,0 +1,82 @@
+% =====================================================================
+% PowerPy report  --  auto-generated.  Edit the Jinja template, not the
+% rendered .tex.
+%
+% House style: AIRBUS technical note.  Classic LaTeX serif (Computer
+% Modern), AIRBUS wordmark on the title page and in the running header,
+% plain numbered sections, "Table N:" / "Figure N:" captions.
+%
+% The section order, visibility, and CONTENT TYPE are all driven by the
+% workbook's ``structure`` sheet.  Each row is dispatched here by its
+% ``type`` column.
+% =====================================================================
+<<% include "_preamble.tex.jinja" %>>
+
+\begin{document}
+
+% =====================================================================
+% TITLE PAGE  (AIRBUS wordmark, serif title, then a document-control
+% table populated from the workbook's ``document`` sheet)
+% =====================================================================
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{2.0cm}
+  {\airbusmark[\Huge]}\par
+  \vspace{2.4cm}
+  {\LARGE\bfseries << document.doc_title | tex >>\par}
+  \vspace{2.4cm}
+
+  % --- Document information / control block --------------------------
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.32\linewidth}|>{\raggedright\arraybackslash}p{0.52\linewidth}|}
+    \hline
+    \reporthead{\textbf{Document information} & \textbf{}}\\ \hline
+    Document number & << document.doc_number | tex >>\\ \hline
+    Issued date     & << document.issued_date >>\\ \hline
+    Project         & << document.project_name | tex >>%
+                      <<% if document.project_code %>>\quad(<< document.project_code | tex >>)<<% endif %>>\\ \hline
+    Prepared by     & << document.prepared_by | tex >>\\ \hline
+    Approved by     & <<% if document.approved_by %>><< document.approved_by | tex >><<% else %>>\textemdash<<% endif %>>\\ \hline
+  \end{tabular}
+
+  \vfill
+  \vspace{0.8cm}
+\end{titlepage}
+
+% =====================================================================
+% FRONT MATTER
+% =====================================================================
+{\hypersetup{linkcolor=black}\tableofcontents}
+\clearpage
+
+% =====================================================================
+% DATA-DRIVEN SECTION SEQUENCE
+% Each structure row dispatches to the partial matching its type.
+% =====================================================================
+<<% for section in structure %>>
+% --- row << section.row_index >> -- id=<< section.id | tex >> type=<< section.type.value | tex >>
+\clearpage
+<<% if section.type.value == "section" %>>
+<<% include "sections/prose.tex.jinja" %>>
+<<% elif section.type.value == "figure" %>>
+<<% include "sections/figure.tex.jinja" %>>
+<<% elif section.type.value == "cell_params" %>>
+<<% include "sections/cell.tex.jinja" %>>
+<<% elif section.type.value == "sections_table" %>>
+<<% include "sections/sections.tex.jinja" %>>
+<<% elif section.type.value == "loss_table" %>>
+<<% include "sections/losses.tex.jinja" %>>
+<<% elif section.type.value == "results_table" %>>
+<<% include "sections/results.tex.jinja" %>>
+<<% elif section.type.value == "equations" %>>
+<<% include "sections/equations.tex.jinja" %>>
+<<% elif section.type.value == "symbols" %>>
+<<% include "sections/symbols.tex.jinja" %>>
+<<% else %>>
+\section{<< section.title | tex >>}
+\textit{(no template for content type ``<< section.type.value | tex >>'')}
+<<% endif %>>
+<<% endfor %>>
+
+\end{document}

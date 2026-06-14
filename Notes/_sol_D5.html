@@ -1,0 +1,44 @@
+<!-- ===================================================================
+     SOLUTIONS — Section D5 (Testing, reproducibility, trusting results)
+     =================================================================== -->
+
+<div class="soln"><span class="sid">D5-1.</span>
+<strong>The assertion (agree to one millikelvin):</strong>
+<pre>
+import math
+assert math.isclose(t_new, t_ref, abs_tol=1e-3)
+</pre>
+Equivalently <code>assert abs(t_new - t_ref) &lt; 1e-3</code> — both say "the two front-temperatures differ by less than a millikelvin (1e-3&nbsp;°C)". <code>abs_tol</code> (an <em>absolute</em> window) is the right choice here because we want a fixed millikelvin band, not a band that scales with the value.<br>
+<strong>Why not <code>==</code> (one line).</strong> Floating-point rounding makes two correct computations differ in their last bits, so <code>t_new == t_ref</code> would report failure on an answer that is right to twelve decimals — computed floats must be compared within a tolerance, never with <code>==</code>.
+</div>
+
+<div class="soln"><span class="sid">D5-2.</span>
+<strong>Two physical-sanity checks</strong> (any two of the following; messages make the failure self-explanatory):
+<pre>
+assert 0.0 <= t_panel <= 150.0, f"panel temp {t_panel} °C outside plausible 0–150 band"
+assert p_out <= p_in,           f"output {p_out} W exceeds incident {p_in} W"
+</pre>
+(A third valid one, if a current is in hand: <code>assert current &gt;= 0.0, f"forward-bias current {current} A is negative"</code>.)<br>
+<strong>Which bug each catches.</strong>
+<ul>
+<li>The <strong>temperature-band</strong> check catches a <em>gross magnitude</em> error in the thermal solve — a sign flip, a unit mix-up (kelvin vs °C), or a non-converged blow-up that lands the panel at, say, &minus;800&nbsp;°C or 4000&nbsp;°C.</li>
+<li>The <strong>power</strong> check catches a <em>conservation-of-energy</em> violation — a bug that has the panel output more electrical power than the sunlight delivers, which is physically impossible and signals a wrong efficiency, double-counting, or a sign error in the electrical model.</li>
+</ul>
+Both are weak (a plausible-but-wrong value still passes) but cost one line each and guard <em>every</em> result, so they are a cheap coarse net beneath the exact oracle checks.
+</div>
+
+<div class="soln"><span class="sid">D5-3.</span>
+<strong>Why fixing the seed matters when comparing two layouts.</strong> A Monte-Carlo run draws random numbers; without a fixed seed those draws differ every run, so the computation is <em>not</em> <strong>deterministic</strong> — run the <em>same</em> layout twice and you get two different converged temperatures. If layout&nbsp;A and layout&nbsp;B are each simulated with a <em>different</em> unfixed seed, then any difference you observe between them is a mix of two causes you cannot separate: the genuine effect of the <em>layout</em>, and the noise of two <em>different random draws</em>. You might "conclude" A runs cooler when in truth it was just handed a milder random sample — the comparison is confounded.<br>
+<strong>What fixing the seed buys you.</strong> Give both layouts the <em>same</em> fixed seed and the random draws are identical, so the only thing that differs between the two runs is the layout itself. Now the computation is <strong>deterministic</strong> (same inputs &rarr; same outputs, so A repeats exactly and so does B) and the experiment is <em>controlled</em>: any temperature difference is attributable to the layout, not to luck. It is also <strong>reproducible</strong> — recording that seed and the parameters lets anyone recreate both runs exactly and confirm your conclusion. (This is the same discipline as Chapter&nbsp;2&nbsp;&sect;6&ndash;&sect;7: fix the seed, and log it with the results.)
+</div>
+
+<div class="soln"><span class="sid">D5-4.</span>
+<strong>Why it gives false confidence.</strong> The test <em>computes</em> a boolean and then throws it away. <code>math.isclose(t, 65.26, abs_tol=0.01)</code> returns <code>True</code> or <code>False</code>, but its return value is never <code>assert</code>ed — nothing acts on it. The function therefore reaches its end without raising, so <code>pytest</code> records it as <em>passed</em> <strong>no matter what <code>t</code> is</strong>. It is a <em>vacuous</em> pass: green, but proving nothing. (The same fault appears whenever a test calls a check but forgets the <code>assert</code> in front of it.)<br>
+<strong>The fix — assert the boolean:</strong>
+<pre>
+def test_thermal():
+    t = vectorised_solver(reference_cell)
+    assert math.isclose(t, 65.26, abs_tol=0.01)
+</pre>
+Now the comparison's result is actually checked: if <code>t</code> drifts outside 65.26&nbsp;±&nbsp;0.01&nbsp;°C the <code>assert</code> raises and the test goes red. The rule: every test must contain at least one <code>assert</code> whose condition can genuinely fail — a check you compute but do not assert is no check at all.
+</div>

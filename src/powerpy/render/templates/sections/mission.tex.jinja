@@ -1,0 +1,25 @@
+\section{Mission}
+
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.42\linewidth}|r|l|}
+    \hline
+    \reporthead{\textbf{Parameter} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Orbit type             & << mission.orbit_type | tex >> & \\ \hline
+    Altitude               & << mission.altitude_km | num(".1f") >> & km\\ \hline
+    Inclination            & << mission.inclination_deg | num(".2f") >> & \si{\degree}\\ \hline
+    Eclipse duration       & << mission.eclipse_duration_min | num(".1f") >> & min\\ \hline
+    Launch date            & << mission.launch_date >> & \\ \hline
+    Mission duration       & << mission.mission_duration_years | num(".2f") >> & years\\ \hline
+    LEOP duration          & << mission.leop_duration_days | num(".0f") >> & d\\ \hline
+    ORP duration           & << mission.orp_duration_months | num(".1f") >> & months\\ \hline
+    Sun intensity (BOL)    & << mission.sun_intensity_bol_W_m2 | num(".0f") >> & \si{\watt\per\square\metre}\\ \hline
+    Sun intensity (EOL min)& << mission.sun_intensity_eol_min_W_m2 | num(".0f") >> & \si{\watt\per\square\metre}\\ \hline
+    Max operating temp     & << mission.temp_max_K | num(".1f") >> & K\\ \hline
+    Min operating temp     & << mission.temp_min_K | num(".1f") >> & K\\ \hline
+    Bus voltage            & << mission.bus_voltage_V | num(".2f") >> & V\\ \hline
+    Max string current     & << mission.max_string_current_A | num(".3f") >> & A\\ \hline
+  \end{tabular}
+  \caption{Mission parameters}
+\end{table}

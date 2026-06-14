@@ -1,0 +1,63 @@
+<!-- ===================================================================
+     CHAPTER 2 · SECTION 1 — Worked solutions to the practice questions
+     PowerPy study notes · solutions fragment
+     IDs match _frag_Q1.html: Q1-1, Q1-2, Q1-3
+     =================================================================== -->
+
+<div class="soln"><span class="sid">Q1-1.</span>
+A line with <code>cells_per_line&nbsp;=&nbsp;4</code>, cells of <var>V</var><sub>mp</sub>&nbsp;=&nbsp;2.35&nbsp;V and <var>I</var><sub>mp</sub>&nbsp;=&nbsp;0.48&nbsp;A; then a module of <code>lines_parallel&nbsp;=&nbsp;2</code> such lines.
+<br><br>
+<strong>(a) Series or parallel?</strong> A <em>line</em> is a <strong>series</strong> group — <code>cells_per_line</code> cells wired end-to-end. (Series is the line's default combine; its job is to build voltage.)
+<br><br>
+<strong>(b) The line's max-power voltage and current.</strong> In series, <em>voltages add</em> and the <em>current is common</em> to all cells in the chain.
+<br>
+<var>V</var><sub>mp,line</sub> = 4 × 2.35&nbsp;V = <strong>9.4&nbsp;V</strong>. &nbsp;
+<var>I</var><sub>mp,line</sub> = <strong>0.48&nbsp;A</strong> (unchanged — putting cells in series does <em>not</em> increase current; the same current flows through every cell in the chain).
+<br><br>
+<strong>(c) The module (2 lines in parallel).</strong> A module is a <strong>parallel</strong> group, so its children (the lines) all sit between the same two rails: <em>voltage stays that of one line</em> and <em>currents add</em>.
+<br>
+<var>V</var><sub>mp,module</sub> = <strong>9.4&nbsp;V</strong> (same as one line). &nbsp;
+<var>I</var><sub>mp,module</sub> = 2 × 0.48&nbsp;A = <strong>0.96&nbsp;A</strong>.
+<br><br>
+<strong>(d) What adds where.</strong> <strong>Voltage adds in series; current adds in parallel.</strong> (And the partner quantity is the one held common: current is common down a series chain, voltage is common across a parallel rail pair.)
+<br>
+<em>Sanity check:</em> power tracks correctly either way — one line is 9.4&nbsp;V × 0.48&nbsp;A = 4.512&nbsp;W, two such lines in parallel is 9.4&nbsp;V × 0.96&nbsp;A = 9.024&nbsp;W = exactly twice one line, as two identical lines must give. ✓
+</div>
+
+<div class="soln"><span class="sid">Q1-2.</span>
+Target: nominal bus ≈ <strong>23.5&nbsp;V</strong> and exactly <strong>3 parallel current paths</strong>, with a 2.35&nbsp;V (<var>V</var><sub>mp</sub>) cell and default combines.
+<br><br>
+<strong>(a) Cells in series.</strong> Voltage adds only along series links, so the number of series cells is
+<br>
+<var>N</var><sub>series</sub> = <var>V</var><sub>bus</sub> / <var>V</var><sub>mp</sub> = 23.5&nbsp;V / 2.35&nbsp;V = <strong>10 cells in series</strong>.
+<br><br>
+<strong>(b) <code>cells_per_line</code> and <code>modules_per_block</code>.</strong> The series levels are the line and the block, and they multiply: cells_per_line × modules_per_block = 10. Any factor pair works; the cleanest is
+<br>
+<code>cells_per_line&nbsp;=&nbsp;10</code>, <code>modules_per_block&nbsp;=&nbsp;1</code> &nbsp;(10 × 1 = 10). &nbsp;
+<span class="small">(Equally valid: <code>cells_per_line&nbsp;=&nbsp;5</code>, <code>modules_per_block&nbsp;=&nbsp;2</code>, since 5 × 2 = 10.)</span>
+<br><br>
+<strong>(c) <code>lines_parallel</code> and <code>n_blocks</code>.</strong> The parallel levels are the module and the circuit, and they multiply to the number of paths: lines_parallel × n_blocks = 3. So
+<br>
+<code>lines_parallel&nbsp;=&nbsp;1</code>, <code>n_blocks&nbsp;=&nbsp;3</code> &nbsp;(1 × 3 = 3). &nbsp;
+<span class="small">(Equally valid: <code>lines_parallel&nbsp;=&nbsp;3</code>, <code>n_blocks&nbsp;=&nbsp;1</code>.)</span>
+<br><br>
+<strong>(d) Total cells.</strong> Multiply all four counts:
+<br>
+With (10, 1, 1, 3): cells_per_line × lines_parallel × modules_per_block × n_blocks = 10 × 1 × 1 × 3 = <strong>30 cells</strong>.
+<br>
+<em>Cross-check:</em> series-depth × parallel-width = 10 × 3 = 30 = total cells. The two routes agree, so the choice is consistent. (If you picked 5×2 and 3×1 instead, that is 5×2×3×1 = 30 as well — same total, as it must be: 10 series × 3 parallel = 30 either way.) ✓
+</div>
+
+<div class="soln"><span class="sid">Q1-3.</span>
+<strong>(a) Hierarchical id of cell 5, line 3, module 1, block 12.</strong> The id is the path from the root down to the cell, segment by segment — block, module, line, cell — joined with dots:
+<br>
+<strong><code>B12.M1.L3.C5</code></strong>.
+<br>
+(Note the order is always block → module → line → cell, regardless of the order the question names them in. Here block 12 → <code>B12</code>, module 1 → <code>M1</code>, line 3 → <code>L3</code>, cell 5 → <code>C5</code>.)
+<br><br>
+<strong>(b) Modules wired side by side — which parameter, to what value?</strong> "Side by side, currents add, block voltage stays that of one module" is the definition of a <strong>parallel</strong> combination. The block's combine rule is a parameter, so change the <em>block level's</em> <code>combine</code> from its default <code>"series"</code> to <strong><code>"parallel"</code></strong> (passed via <code>combine_levels</code> on <code>Circuit.fromPrototype</code>). Nothing else changes.
+<br><br>
+<strong>(c) Why one value here but a rewrite in Chapter 1.</strong> In <code>Circuit</code> the series/parallel choice at every level is a stored <em>parameter</em> (<code>combine</code>), so re-reading the wiring is a single value flip; in the fixed Chapter-1 hierarchy the rules "string&nbsp;=&nbsp;series, section&nbsp;=&nbsp;parallel" are hard-coded into the classes, so changing one would mean rewriting the code, not editing a setting.
+<br>
+<em>Consequence check:</em> after the flip, a block's voltage drops to one module's voltage while its current multiplies by <code>modules_per_block</code> — so the same hardware now reads as a lower-voltage, higher-current bus, exactly the alternative interpretation the review proposed. ✓
+</div>

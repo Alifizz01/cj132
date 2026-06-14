@@ -1,0 +1,450 @@
+<h3>3 &nbsp; Writing functions and classes that are clear and correct</h3>
+
+<p>The previous sections were about <em>what</em> PowerPy computes — IV curves, thermal balance, the coupling loop. This section is about <em>how to write the code that computes it</em> so that you, and the next person, can <strong>trust it</strong>. A simulator is only as believable as its quietest function. A subtle sign error or a mis-indexed return value will not crash; it will hand you a plausible-looking number that is wrong, and you will plot it, believe it, and ship it. The whole craft here is making code that is <em>hard to fool yourself with</em>: small pieces that do one thing, named so plainly that the name <em>is</em> the documentation, with inputs checked at the door and failures that shout instead of whisper.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> Code is read far more often than it is written, and in a scientific codebase it is <em>trusted</em> more often than it is read. So optimise for trust: write <strong>small, single-purpose, well-named functions</strong> that take their inputs as arguments and <strong>return their results as values</strong> (rather than secretly mutating hidden state), document them with a docstring and type hints, bundle related data in a <strong>dataclass</strong> instead of a bare tuple or dict, validate inputs early, and <strong>fail loudly</strong> when something is wrong. Every one of those choices makes a class of bug either impossible or obvious. This section defines each term from scratch and shows the bug it kills.</p>
+</div>
+
+<p>We will build the vocabulary first (a function that does one thing; a <em>pure</em> function; naming conventions; docstrings; type hints; dataclasses; exceptions), then walk two full before/after refactors, then climb a Socratic ladder to the question that ties it all together: <em>why is a small pure function with a dataclass result easier to trust than a big method that mutates <code>self</code> and returns a tuple?</em></p>
+
+<h4>3.1 &nbsp; A good function does ONE thing</h4>
+
+<p>The single most useful rule for functions is also the simplest: <strong>a function should do one thing, and do it well.</strong> If you cannot describe what a function does without using the word "and", it is probably doing two things and wants to be two functions.</p>
+
+<p>Why does this matter so much? Three reasons, and they compound:</p>
+
+<ul>
+<li><strong>You can name it.</strong> A function that does one thing has an obvious name. A function that "validates the config and loads the cell data and computes the short-circuit current and formats it for the report" has no good name — so it ends up called something vague like <code>process()</code> or <code>do_stuff()</code>, and the vagueness of the name tells you the function is overloaded.</li>
+<li><strong>You can test it.</strong> One thing means one behaviour to check. You feed it inputs, you assert on the output. A four-job function needs you to set up four worlds at once just to test the third job.</li>
+<li><strong>You can reuse it.</strong> The short-circuit-current calculation buried inside that mega-function cannot be called from anywhere else, because calling it drags along the validation, the file loading, and the formatting you did not want.</li>
+</ul>
+
+<div class="callout">
+<strong>Single Responsibility, in one sentence.</strong> A function (or a class) should have <em>one reason to change</em>. If the report format changes <em>and</em> the physics changes <em>and</em> the file format changes, and all three force edits to the <em>same</em> function, that function is carrying three responsibilities that should have been three pieces. This is the "Single Responsibility Principle" (SRP) applied at the smallest scale.
+</div>
+
+<h4>3.2 &nbsp; Return values, not hidden mutations: the pure function</h4>
+
+<p>There are two ways a function can deliver its result. It can <strong>return a value</strong> — you call <code>isc = compute_isc(cell, temperature)</code> and the answer comes back in your hand. Or it can <strong>mutate hidden state</strong> — you call <code>cell.update_isc()</code> and the answer is silently written into <code>cell.isc</code> somewhere inside the object, where you have to know to look for it. The first style is almost always easier to reason about, and the reason is captured by one precise concept.</p>
+
+<div class="term"><strong>Pure function.</strong> A function whose <em>output depends only on its inputs</em>, and which has <em>no side effects</em> — it does not read or write any state outside itself (no globals, no mutating its arguments in place, no writing files, no touching <code>self</code>). Call a pure function twice with the same arguments and you get the same answer, every time, regardless of what else the program has done. <code>compute_isc(cell, t)</code> that takes a cell and a temperature and <em>returns</em> a number, touching nothing else, is pure. <code>cell.recompute()</code> that reaches into <code>self</code> and overwrites several attributes is not.</div>
+
+<div class="term"><strong>Side effect.</strong> Any change a function makes to the world <em>beyond returning a value</em>: mutating one of its arguments, writing to a global or to <code>self</code>, printing, logging, reading a clock, hitting the disk or network. Side effects are not evil — a program that <em>only</em> computed pure values and never wrote a file would be useless. The point is to <strong>know where they are</strong> and keep them out of the functions whose correctness you most need to trust.</div>
+
+<div class="keyidea">
+<strong>Small + pure = easy to test and reason about.</strong> A small pure function is the easiest thing in all of software to be sure about. To test it you need no setup, no mocks, no fixtures: you call it with inputs and assert on the output. To reason about it you need to read <em>only that function</em> — nothing it does can depend on hidden state, so nothing outside it can change its behaviour. That is the gold standard we push the physics toward: make the core calculations pure, and confine the messy side-effecting parts (file I/O, the ngspice call) to a thin, clearly-marked shell around them.
+</div>
+
+<p>Concretely, prefer the left over the right:</p>
+
+<pre>
+# GOOD — pure: output depends only on inputs, returns a value
+def compute_isc(cell, temperature):
+    """Return the short-circuit current of `cell` at `temperature` (A)."""
+    return cell.isc_ref * (1 + cell.alpha_isc * (temperature - cell.t_ref))
+
+isc = compute_isc(cell, 40.0)        # answer in hand; cell untouched
+
+# AVOID — side-effecting: mutates hidden state, returns nothing
+def update_isc(cell, temperature):
+    cell.isc = cell.isc_ref * (1 + cell.alpha_isc * (temperature - cell.t_ref))
+    # ...and now the rest of the code must KNOW that cell.isc changed in here
+</pre>
+
+<p>The right-hand version is not <em>wrong</em>, but it is harder to trust: to know what <code>update_isc</code> did you must know it reached into <code>cell</code>; to test it you must build a <code>cell</code>, call the method, then go fishing for <code>cell.isc</code>; and if two parts of the program both mutate <code>cell</code>, the order in which they ran now matters. The pure version has none of those worries.</p>
+
+<h4>3.3 &nbsp; Few parameters, and a verb-or-noun name</h4>
+
+<p><strong>Few parameters.</strong> A function with two or three parameters is easy to call correctly. A function with seven is a minefield: you will eventually pass them in the wrong order, and if several are the same type (four <code>float</code>s, say) the language will not catch you. When a function genuinely needs many related values, that is a signal to <em>bundle them</em> — which is exactly what a dataclass is for (§3.6).</p>
+
+<p><strong>A name that says what it is.</strong> Two tiny rules carry most of the weight:</p>
+
+<ul>
+<li><strong>Verbs for actions.</strong> A function that <em>does</em> something or <em>computes</em> something gets a verb phrase: <code>compute_isc</code>, <code>build_models</code>, <code>solve_circuit</code>, <code>load_config</code>. Reading the call site then reads like a sentence: "compute isc".</li>
+<li><strong>Nouns for values.</strong> A function or property that simply <em>is</em> a value gets a noun: <code>cell_count</code>, <code>bus_voltage</code>, <code>operating_point</code>. You are naming the thing it gives you, not an action.</li>
+</ul>
+
+<div class="callout">
+<strong>The name is the first line of documentation.</strong> A reader meets the name before they read the body. <code>compute_isc(cell, t)</code> tells them, before they look inside, that this returns a short-circuit current for a cell at a temperature. <code>proc2(c, t)</code> tells them nothing and forces them to read the body to learn what they could have read in the name. Spend the name well; it is read the most and costs the least.
+</div>
+
+<h4>3.4 &nbsp; Naming conventions: PEP 8</h4>
+
+<p>Beyond "verb or noun", Python has a shared, community-wide style guide so that <em>everyone's</em> code looks the same and you spend zero attention decoding formatting. It is called <strong>PEP 8</strong>.</p>
+
+<div class="term"><strong>PEP.</strong> <em>Python Enhancement Proposal</em> — a numbered design document for the Python language and community. <strong>PEP 8</strong> is the one that matters here: it is <em>Python's official style guide</em>, the agreed convention for how Python code should be formatted and named. Following it is not about taste; it is about being instantly readable to every other Python programmer.</div>
+
+<p>The naming rules you must internalise:</p>
+
+<ul>
+<li><strong>Functions and variables:</strong> <code>snake_case</code> — lowercase words joined by underscores: <code>compute_isc</code>, <code>bus_voltage</code>, <code>cell_count</code>.</li>
+<li><strong>Classes:</strong> <code>CapWords</code> (also called PascalCase) — each word capitalised, no underscores: <code>Environment</code>, <code>Substrate</code>, <code>SolarCell</code>.</li>
+<li><strong>Constants:</strong> <code>UPPER_CASE</code> with underscores: <code>BOLTZMANN</code>, <code>T_REF</code>, <code>MAX_ITERATIONS</code>.</li>
+</ul>
+
+<p>And the spirit behind them: <strong>descriptive, consistent, no cryptic abbreviations.</strong> <code>temperature</code> beats <code>tmp</code>; <code>short_circuit_current</code> or the well-known <code>isc</code> beats <code>x3</code>; <code>regressor</code> beats <code>rgsr</code>. The cost of a longer name is a few keystrokes once; the cost of a cryptic one is paid by every reader, forever.</p>
+
+<div class="pitfall">
+<strong>Pitfall — inconsistent or cryptic names.</strong> The worst naming sin is not ugliness, it is <em>inconsistency</em>: calling the same quantity <code>temp</code> in one function, <code>T</code> in the next, and <code>theta</code> in a third forces the reader to prove to themselves that the three are the same thing. Pick one name per concept and use it everywhere. Equally, a clever abbreviation that saved you two seconds ("<code>vmp</code>", fine, it is standard; "<code>vmpp_t_adj_fin</code>", not fine) costs every future reader a decode.
+</div>
+
+<h4>3.5 &nbsp; Docstrings: say what a function does</h4>
+
+<div class="term"><strong>Docstring.</strong> A string literal placed as the <em>first statement</em> inside a function, class, or module, written in triple quotes, that documents it: a short description of <em>what it does</em>, what its <em>parameters</em> mean, and what it <em>returns</em>. Unlike a comment, a docstring is a real object Python keeps at runtime (<code>help(compute_isc)</code> prints it), and tools (IDEs, doc generators) read it. PowerPy's existing code already has good docstrings — that is a strength worth preserving as the code grows.</div>
+
+<pre>
+def compute_isc(cell, temperature):
+    """Short-circuit current of a cell at a given temperature.
+
+    Parameters
+    ----------
+    cell : SolarCell
+        The cell whose reference parameters (isc_ref, alpha_isc, t_ref) are used.
+    temperature : float
+        Cell temperature in degrees Celsius.
+
+    Returns
+    -------
+    float
+        Short-circuit current in amperes (A).
+    """
+    return cell.isc_ref * (1 + cell.alpha_isc * (temperature - cell.t_ref))
+</pre>
+
+<p>Notice the discipline: one summary line, then the parameters with their <em>units</em>, then the return value with its <em>unit</em>. In a scientific codebase, units in the docstring are not decoration — a function that quietly expects kelvin while you feed it celsius is a textbook source of silent error, and the docstring is where that contract is stated.</p>
+
+<h4>3.6 &nbsp; Type hints: document expected types and catch mistakes</h4>
+
+<div class="term"><strong>Type hint.</strong> An optional annotation on a function's parameters and return value that states the <em>type</em> each is expected to be — for example <code>def thermal(p_sun: float, area: float) -> dict:</code> says "<code>p_sun</code> is a float, <code>area</code> is a float, and this returns a dict". Hints are <em>not</em> enforced by Python at runtime (the code runs the same with or without them), but they <strong>document the contract</strong> and let tools — type checkers like <code>mypy</code>, and your editor's autocomplete — catch a whole class of mistakes <em>before</em> you ever run the code, such as passing a string where a float was meant.</div>
+
+<pre>
+# Without hints — the contract lives only in your head
+def thermal(p_sun, area):
+    ...
+
+# With hints — the contract is on the page and tools can check it
+def thermal(p_sun: float, area: float) -> dict:
+    ...
+</pre>
+
+<div class="keyidea">
+<strong>Hints are optional, but valuable here.</strong> For a small script you can skip them. For a <em>scientific</em> codebase full of <code>float</code>s, arrays, and dicts being threaded through many functions, type hints earn their keep: they tell the reader (and the checker) that <code>thermal</code> wants two floats and yields a dict, so passing it a NumPy array by mistake, or unpacking its result as a tuple, gets flagged early instead of blowing up three functions downstream. They are documentation that the machine can verify.
+</div>
+
+<p>For the array-heavy parts of PowerPy, hints like <code>numpy.ndarray</code> on a parameter immediately tell a reader "this is a vector over all cells, not a single value" — a distinction that is otherwise invisible and easy to get wrong.</p>
+
+<h4>3.7 &nbsp; Dataclasses: bundle related fields with names</h4>
+
+<p>Functions often need to carry several related values together — a temperature, an irradiance, a sun angle. You can do that with a bare tuple or a dict, but both are traps. A tuple makes you remember positions (<em>was</em> voltage element 2 or element 3?); a dict makes you remember string keys (<code>"vmp"</code> vs <code>"v_mp"</code> vs <code>"Vmp"</code>) and mis-typing one fails silently or at runtime. The fix is a dataclass.</p>
+
+<div class="term"><strong>Dataclass.</strong> A class declared with the <code>@dataclass</code> decorator whose job is to <em>bundle a set of named fields</em> together, with the boilerplate (constructor, equality, a readable <code>repr</code>) generated for you. Instead of passing around an anonymous tuple or a stringly-keyed dict, you get a named type with named attributes you reach by <code>.</code> — <code>env.temperature</code>, <code>env.irradiance</code> — which the editor autocompletes and the type checker verifies.</div>
+
+<pre>
+from dataclasses import dataclass
+
+@dataclass
+class Environment:
+    temperature: float      # ambient temperature, °C
+    irradiance: float       # incident solar flux, W/m^2
+    sun_angle: float        # angle of incidence, degrees
+
+env = Environment(temperature=28.0, irradiance=1361.0, sun_angle=0.0)
+# Reach fields by NAME, with autocomplete and type-checking:
+q_in = env.irradiance * area
+</pre>
+
+<p>PowerPy's modern <code>Environment</code> dataclass and the planned <code>Substrate</code> are good examples of this style. Contrast them with the legacy habit they replace: a function that returned a <strong>6-tuple</strong></p>
+
+<pre>
+# LEGACY — a 6-tuple: positional, undocumented, easy to mis-index
+return (model, config, isc, imp, vmp, voc)
+
+# ...called like this, somewhere far away:
+result = build_cell(...)
+v_mp = result[4]      # is vmp really index 4? count again... is it imp? voc?
+</pre>
+
+<p>or a dict of string keys (<code>{"isc": ..., "imp": ..., "vmp": ..., "voc": ...}</code>) where a typo'd key — <code>result["Vmp"]</code> — fails. Both push onto every <em>reader</em> the job of remembering an order or a spelling. The dataclass moves that knowledge into the type, where the tools enforce it:</p>
+
+<pre>
+@dataclass
+class CellResult:
+    model: object
+    config: object
+    isc: float
+    imp: float
+    vmp: float
+    voc: float
+
+result = build_cell(...)
+v_mp = result.vmp        # unambiguous; a typo `result.vmpp` is caught
+</pre>
+
+
+
+<h4>3.8 &nbsp; Error handling: validate early, fail loudly</h4>
+
+<p>The opposite of trustworthy code is code that, when something is wrong, <em>keeps going anyway</em> and hands you a wrong answer with a straight face. The defence is a posture: check inputs at the door, and when they are bad, stop with a clear message rather than limping onward.</p>
+
+<div class="term"><strong>Exception.</strong> Python's mechanism for signalling that something has gone wrong: you <code>raise</code> an exception (e.g. <code>raise ValueError("temperature must be in °C, got kelvin-sized value")</code>), which immediately stops normal execution and propagates up until some caller <code>catches</code> it with <code>try/except</code> — or, if nobody does, halts the program with a traceback pointing at the problem. An exception with a clear message is a <em>loud, locatable</em> failure: it tells you what went wrong and where.</div>
+
+<p>Two habits follow:</p>
+
+<ul>
+<li><strong>Validate inputs early.</strong> Check preconditions at the top of the function and raise a clear exception if they are violated — before you compute on garbage. A negative area, an irradiance of <code>NaN</code>, an empty cell list: catch these at the door, where the error message can still say <em>which</em> input was bad.</li>
+<li><strong>Fail loudly, not silently.</strong> A wrong answer that looks right is far more dangerous than a crash. A crash points at the bug; a silently-wrong number gets plotted and believed. So prefer a loud exception over a quiet fallback that papers over the problem.</li>
+</ul>
+
+<pre>
+def thermal(p_sun: float, area: float) -> dict:
+    """Thermal balance for one element. Raises ValueError on bad input."""
+    if area <= 0:
+        raise ValueError(f"area must be positive, got {area}")
+    if p_sun < 0:
+        raise ValueError(f"p_sun (incident power) must be >= 0, got {p_sun}")
+    ...
+</pre>
+
+<div class="pitfall">
+<strong>Pitfall — the bare <code>except: pass</code> that hides real errors.</strong> The single most dangerous error-handling pattern is catching <em>everything</em> and doing <em>nothing</em>:
+<pre>
+try:
+    result = run_ngspice(netlist)
+except:          # bare: catches EVERYTHING, even bugs and Ctrl-C
+    pass         # ...and silently swallows it — the failure vanishes
+</pre>
+PowerPy's ngspice wrapper does exactly this, and it is a trap: a real failure (a malformed netlist, a missing binary, a parse error) is caught and discarded, so the loop sails on with stale or empty results and "converges" to nonsense. The cure is to catch <em>specific</em> exceptions and <em>log</em> them, so failures are visible and locatable:
+<pre>
+try:
+    result = run_ngspice(netlist)
+except NgspiceError as exc:
+    logger.error("ngspice failed on netlist %s: %s", name, exc)
+    raise                     # re-raise: do not hide it
+</pre>
+A bare <code>except</code> also catches <code>KeyboardInterrupt</code> and <code>SystemExit</code>, so it can even stop you killing the program with Ctrl-C. Catch the <em>specific</em> thing you can handle; let everything else surface.
+</div>
+
+<h4>3.9 &nbsp; Comments vs. self-documenting code</h4>
+
+<p>Good names reduce the <em>need</em> for comments. A comment that merely restates what the code plainly says is noise that can drift out of date and start lying. The rule of thumb: <strong>comment the WHY, not the WHAT.</strong></p>
+
+<pre>
+# BAD — the comment just restates the code (and will rot)
+i = i + 1          # add one to i
+omega = 0.5        # set omega to 0.5
+
+# GOOD — the code says WHAT; the comment says WHY (which code can't)
+omega = 0.5        # under-relax: omega=1 oscillates on a strongly heating fault
+</pre>
+
+<div class="pitfall">
+<strong>Pitfall — over-commenting obvious code.</strong> A comment on every line, each paraphrasing its line, does not aid the reader — it doubles the text to read and creates two things to keep in sync. When the code changes and the comment does not, the comment becomes a <em>lie</em>, which is worse than no comment. Prefer a clear name (<code>under_relaxation_factor</code> over <code>omega  # the under-relaxation factor</code>); reserve comments for the things the code genuinely cannot say — the <em>reason</em> a value was chosen, a non-obvious constraint, a reference to a paper or a gotcha.
+</div>
+
+<h4>3.10 &nbsp; Worked example (a) — refactor a fat function <span class="badge hot">EXAM-HOT</span></h4>
+
+<div class="worked">
+<strong>Worked example — splitting a function that validates + loads + computes + formats.</strong> Here is a function in the legacy style: it does four jobs, takes many parameters, mutates nothing cleanly, and returns a 6-tuple. We will turn it into three small typed single-purpose functions feeding a <code>@dataclass</code> result.
+
+<div class="step"><strong>Before — one function, four jobs, a 6-tuple out.</strong>
+<pre>
+def process_cell(path, t, area, alpha, vref, fmt):
+    # job 1: validation
+    if area <= 0 or t is None:
+        return None                      # silent failure: caller gets None
+    # job 2: load
+    cfg = read_config(path)
+    model = cfg["model"]
+    # job 3: compute the four IV points
+    isc = cfg["isc_ref"] * (1 + alpha * (t - 25))
+    imp = isc * 0.95
+    vmp = vref * (1 - 0.003 * (t - 25))
+    voc = vmp * 1.18
+    # job 4: format for the report
+    line = f"{model}: Isc={isc:.2f} Imp={imp:.2f} Vmp={vmp:.2f} Voc={voc:.2f}"
+    print(line)
+    return (model, cfg, isc, imp, vmp, voc)   # 6-tuple: mis-index waiting to happen
+</pre></div>
+
+<div class="step"><strong>What is wrong with it.</strong> Six parameters in an order you must get right; validation that fails <em>silently</em> by returning <code>None</code> (the caller will <code>AttributeError</code> three lines later, far from the cause); loading, physics, and report-formatting welded together so none can be tested or reused alone; and a 6-tuple return whose positions (<code>result[4]</code>?) are an invitation to mis-index. It has four reasons to change.</div>
+
+<div class="step"><strong>After — a dataclass result, and three pure, typed, single-purpose functions.</strong>
+<pre>
+from dataclasses import dataclass
+
+@dataclass
+class CellResult:
+    model: str
+    isc: float
+    imp: float
+    vmp: float
+    voc: float
+
+def load_cell_config(path: str) -> dict:
+    """Read and return the raw cell configuration dict from `path`."""
+    return read_config(path)
+
+def compute_iv_points(config: dict, temperature: float,
+                      alpha: float, v_ref: float) -> CellResult:
+    """Compute the four IV points at `temperature`. Pure: no I/O, returns a value."""
+    if temperature is None:
+        raise ValueError("temperature must be provided")
+    isc = config["isc_ref"] * (1 + alpha * (temperature - 25))
+    imp = isc * 0.95
+    vmp = v_ref * (1 - 0.003 * (temperature - 25))
+    voc = vmp * 1.18
+    return CellResult(model=config["model"], isc=isc, imp=imp, vmp=vmp, voc=voc)
+
+def format_cell_result(r: CellResult) -> str:
+    """Format a CellResult as one report line. Pure: returns the string."""
+    return f"{r.model}: Isc={r.isc:.2f} Imp={r.imp:.2f} Vmp={r.vmp:.2f} Voc={r.voc:.2f}"
+</pre></div>
+
+<div class="check"><strong>Why the after is better.</strong> Each function does one thing and is named for it. <code>compute_iv_points</code> is <em>pure</em> — same inputs, same output, no file read, no <code>print</code> — so you can test it with a dict literal and an assert, no disk needed. Validation now <em>raises</em> with a message instead of returning <code>None</code>, so a bad call fails loudly at the door. The result is a <code>CellResult</code> you read by name (<code>r.vmp</code>, never <code>result[4]</code>), so mis-indexing is impossible and a typo like <code>r.vmpp</code> is caught. Loading and formatting are separated out, so swapping the report format or the config source touches <em>one</em> small function, not the physics. ✓</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 180" xmlns="http://www.w3.org/2000/svg" font-size="9.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<text class="tx" x="100" y="16" text-anchor="middle" fill="#9a3b3b" font-weight="bold">before</text>
+<rect x="30" y="30" width="150" height="80" rx="5" fill="#fcefea" stroke="#9a3b3b"/><text class="tx" x="105" y="55" text-anchor="middle" font-size="9">one function:</text><text class="tx" x="105" y="72" text-anchor="middle" font-size="9">validate+load+</text><text class="tx" x="105" y="86" text-anchor="middle" font-size="9">compute+format</text>
+<rect x="55" y="120" width="100" height="22" rx="3" fill="#fff" stroke="#5d6b79"/><text class="tx" x="105" y="135" text-anchor="middle" font-size="8">returns 6-tuple</text>
+<text class="tx" x="340" y="16" text-anchor="middle" fill="#3f7a4f" font-weight="bold">after</text>
+<rect x="250" y="28" width="120" height="20" rx="3" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="310" y="42" text-anchor="middle" font-size="8.5">validate()</text><rect x="250" y="54" width="120" height="20" rx="3" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="310" y="68" text-anchor="middle" font-size="8.5">load_config()</text><rect x="250" y="80" width="120" height="20" rx="3" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="310" y="94" text-anchor="middle" font-size="8.5">compute_iv()</text>
+<rect x="390" y="54" width="60" height="40" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/><text class="tx" x="420" y="70" text-anchor="middle" font-size="8" fill="#1f6a6a">@dataclass</text><text class="tx" x="420" y="83" text-anchor="middle" font-size="8" fill="#1f6a6a">Result</text>
+<line x1="370" y1="38" x2="390" y2="74" stroke="#5d6b79"/><line x1="370" y1="64" x2="390" y2="74" stroke="#5d6b79"/><line x1="370" y1="90" x2="390" y2="74" stroke="#5d6b79"/>
+<text class="tx" x="320" y="130" text-anchor="middle" font-size="8.5" fill="#5d6b79">read by name: r.vmp (never result[4])</text>
+</svg>
+<figcaption>Figure 5 — Refactoring one fat function with a 6-tuple return into small typed functions feeding a @dataclass result.</figcaption></figure>
+
+<h4>3.11 &nbsp; Worked example (b) — spot and fix two classic bugs <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>Two bugs that genuinely appear in legacy scientific code. Both are the kind that do not announce themselves — one makes a method uncallable, the other corrupts results across calls.</p>
+
+<div class="worked">
+<strong>Bug 1 — a duplicated parameter in the signature.</strong>
+
+<div class="step"><strong>The bug.</strong>
+<pre>
+class Cell:
+    def setTemperature(self, self, temperature):   # `self` appears TWICE
+        self.temperature = temperature
+</pre>
+A copy-paste typo has put <code>self</code> in the parameter list twice. Python rejects a duplicate argument name in a function signature, so this raises <code>SyntaxError: duplicate argument 'self'</code> and the method is <em>uncallable</em> — in fact the whole module will not even import.</div>
+
+<div class="step"><strong>The fix.</strong> Remove the duplicate. A method takes <code>self</code> exactly once, as its first parameter.
+<pre>
+class Cell:
+    def set_temperature(self, temperature):        # one `self`; snake_case name
+        self.temperature = temperature
+</pre>
+(While here, the PEP 8 name is <code>set_temperature</code>, not <code>setTemperature</code> — Python uses snake_case for methods, not the Java-style camelCase.)</div>
+
+<div class="check"><strong>Check.</strong> One <code>self</code>, then the real parameters. The module imports; <code>cell.set_temperature(40)</code> works. ✓</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 120" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.tx{fill:#1d2733;font-family:monospace}</style>
+<rect x="20" y="24" width="430" height="34" rx="4" fill="#fcefea" stroke="#9a3b3b"/>
+<text class="tx" x="34" y="46" font-size="12">def setTemperature(self, self, temperature):</text>
+<line x1="232" y1="41" x2="290" y2="41" stroke="#9a3b3b" stroke-width="2.5"/><text font-family="Segoe UI,Arial,sans-serif" x="300" y="45" fill="#9a3b3b" font-size="9">duplicate self → SyntaxError</text>
+<rect x="20" y="72" width="430" height="34" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/>
+<text class="tx" x="34" y="94" font-size="12">def set_temperature(self, temperature):</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="360" y="94" fill="#1f6a6a" font-size="9">✓ one self, snake_case</text>
+</svg>
+<figcaption>Figure 6 — Spot the bug: a duplicated self makes the method uncallable; the fix takes self exactly once.</figcaption></figure>
+
+<div class="worked">
+<strong>Bug 2 — a mutable default argument.</strong>
+
+<div class="step"><strong>The bug.</strong>
+<pre>
+def accumulate(value, cache={}):     # default is a MUTABLE dict
+    cache[value] = value ** 2
+    return cache
+</pre>
+This is one of Python's most famous traps. The default value <code>{}</code> is created <em>once</em>, when the function is <em>defined</em> — not fresh on each call. So <em>every</em> call that does not pass its own <code>cache</code> shares the <em>same</em> dict, and it accumulates across calls:
+<pre>
+accumulate(2)   # {2: 4}
+accumulate(3)   # {2: 4, 3: 9}   <-- the 2 from last time is STILL there!
+</pre>
+Two unrelated calls quietly contaminate each other. In a simulator this surfaces as results from one run leaking into the next.</div>
+
+<div class="step"><strong>The fix — default to <code>None</code>, create inside.</strong>
+<pre>
+def accumulate(value, cache=None):
+    if cache is None:
+        cache = {}                   # a FRESH dict on every call that omits it
+    cache[value] = value ** 2
+    return cache
+</pre>
+Now each call with no <code>cache</code> gets its own empty dict, so calls are independent.</div>
+
+<div class="check"><strong>Check.</strong> <code>accumulate(2)</code> → <code>{2: 4}</code>; <code>accumulate(3)</code> → <code>{3: 9}</code>, with no leftover <code>2</code>. The same fix applies to any mutable default — list <code>[]</code>, set, dict: default to <code>None</code> and build it inside. ✓</div>
+</div>
+
+<h4>3.12 &nbsp; Why a small pure function beats a big mutating method</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). What is a <em>side effect</em>, and why does a method that mutates <code>self</code> have one?</div>
+<div class="answer">A side effect is any change a function makes beyond returning a value — writing a global, touching the disk, or <em>mutating its arguments or <code>self</code></em>. A method like <code>cell.recompute()</code> that overwrites <code>self.isc</code>, <code>self.vmp</code>, … has a side effect: its <em>effect</em> is the hidden mutation of the object, not a returned value. To know what it did you must know which attributes it touched, and after it runs the object is in a new, possibly surprising state.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (build up). What can go wrong specifically with returning a <em>6-tuple</em> like <code>(model, config, isc, imp, vmp, voc)</code>?</div>
+<div class="answer">Position becomes load-bearing and invisible. The caller must remember that <code>vmp</code> is element 4 and <code>voc</code> is element 5 — and nothing checks them. Swap two fields of the same type and the bug is silent: <code>result[3]</code> still returns a float, just the <em>wrong</em> one. Add a seventh field at the front and every index downstream shifts by one. There is no autocomplete, no type check, no name — only a count you must get right every single time.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (why). Why is a small <em>pure</em> function so much easier to test than that big mutating method?</div>
+<div class="answer">Because a pure function's output depends only on its inputs and it touches nothing else, the entire test is "call with inputs, assert on output" — no fixtures, no mocks, no building an object into the right state first, no fishing for mutated attributes afterward, and no worry that a previous test left state behind. Same input, same output, every time. The mutating method needs you to construct a <code>cell</code>, call it, then inspect several attributes, and its result can depend on whatever happened to the object earlier — so the test is bigger, slower, and more fragile.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (deep — the target). So <em>why is a small pure function with a dataclass result easier to trust than a big method that mutates <code>self</code> and returns a tuple?</em> And what do a type hint or a dataclass catch early?</div>
+<div class="answer">Put the rungs together. The pure function has <strong>no side effects</strong> (Q&middot;a), so reading it tells you everything it does and testing it is trivial (Q&middot;c) — nothing hidden can change its answer. Its <strong>dataclass result</strong> replaces the position-counting and silent mis-indexing of the tuple (Q&middot;b) with named fields the reader and the tools both understand. And the <strong>type hint / dataclass catch mistakes early</strong>: a hint like <code>-&gt; CellResult</code> lets the checker flag a caller that tries to unpack the result as a tuple or pass a string where a float was meant — <em>before</em> the code runs — and a dataclass turns a typo'd field (<code>r.vmpp</code>) into an <code>AttributeError</code> at the access site instead of a wrong number three functions later. The big mutating method offers none of this: its effect is hidden in <code>self</code>, its tuple is a mis-index trap, and its errors surface far from their cause. <strong>We trust the small pure function because there is simply less that can go wrong, and what does go wrong is caught early and located precisely.</strong></div>
+</div>
+</div>
+
+<h4>3.13 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice D3-1.</strong> Spot and fix the bug in this snippet, and say in one line <em>why</em> it misbehaves:
+<pre>
+def append_reading(x, log=[]):
+    log.append(x)
+    return log
+</pre>
+Rewrite it so that two separate calls do not share state. (Hint: what is created once, at definition time?)
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D3-2.</strong> The function below returns a 4-tuple. Rewrite it to return a <code>@dataclass</code> instead, and show one call site reading a field by name. State one concrete bug the dataclass version makes impossible.
+<pre>
+def iv_points(cell, t):
+    isc = cell.isc_ref * (1 + 0.0005 * (t - 25))
+    imp = isc * 0.95
+    vmp = cell.vmp_ref * (1 - 0.003 * (t - 25))
+    voc = vmp * 1.18
+    return (isc, imp, vmp, voc)
+</pre>
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D3-3.</strong> Here is a method copied from legacy code. Find <em>two</em> separate problems with it (one is a hard error, one is a bad practice), and rewrite it cleanly with a docstring, type hints, early validation, and a PEP 8 name:
+<pre>
+class Panel:
+    def calcT(self, self, p):
+        try:
+            self.T = p / self.k
+        except:
+            pass
+</pre>
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> Write functions that do <strong>one thing</strong>, named with a <em>verb for actions</em> (<code>compute_isc</code>) or a <em>noun for values</em>, with <em>few parameters</em>, that <strong>return a value</strong> rather than mutating hidden state. A <strong>pure function</strong> (output depends only on inputs, no <strong>side effects</strong>) plus small size is the easiest thing to test and trust. Follow <strong>PEP 8</strong> (Python Enhancement Proposal; PEP 8 = the style guide): <code>snake_case</code> functions/variables, <code>CapWords</code> classes, <code>UPPER_CASE</code> constants, descriptive and consistent, no cryptic abbreviations. Document with a <strong>docstring</strong> (what it does, parameters with units, returns) and <strong>type hints</strong> (optional but valuable in a float-heavy scientific codebase — they let tools catch mistakes early). Bundle related fields in a <strong>dataclass</strong> (<code>Environment</code>, <code>Substrate</code>) instead of a positional 6-tuple <code>(model, config, isc, imp, vmp, voc)</code> or a stringly-keyed dict. Handle errors by <em>validating early</em> and <em>raising clear <strong>exceptions</strong></em> — <strong>fail loudly, not silently</strong>; never a bare <code>except: pass</code> (PowerPy's ngspice wrapper does this) — catch <em>specific</em> exceptions and log. Comment the <em>WHY</em>, not the <em>WHAT</em>; prefer clear names over comments. The two bugs to recognise on sight: the duplicated <code>self</code> in a signature, and the mutable default argument (<code>cache={}</code> → default <code>None</code>, create inside).
+</div>

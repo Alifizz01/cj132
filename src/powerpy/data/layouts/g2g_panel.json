@@ -1,0 +1,14 @@
+{
+    "_comment": "Panel layout INPUT for the thermal analysis. 'C' = SCA (solar cell), '.' = bare section (no cell). Cell optics come from the cell JSON; bare optics from the substrate JSON. The bare block is a no-SCA region (e.g. a cut-out / instrument keep-out) that runs hotter and warms its neighbours.",
+    "name": "G2G panel (cells + bare keep-out)",
+    "pitch_mm": 84.0,
+    "layout": [
+        "C C C C C C C C C C C C C C",
+        "C C C C C C C C C C C C C C",
+        "C C C C . . . . C C C C C C",
+        "C C C C . . . . C C C C C C",
+        "C C C C . . . . C C C C C C",
+        "C C C C C C C C C C C C C C",
+        "C C C C C C C C C C C C C C"
+    ]
+}

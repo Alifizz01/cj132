@@ -1,0 +1,350 @@
+<h3><span class="sec-num">7</span> How hot does it get? The space thermal environment and the 2-node model</h3>
+
+<p class="lede">A solar cell's behaviour is not fixed — it depends on how hot the cell is. Section&nbsp;3 showed that temperature <em>slides the whole IV curve</em> (the current–voltage characteristic of a cell), so the power a panel makes is a function of its temperature. But the temperature is itself a function of the power: every watt the cell pulls out as electricity is a watt that no longer heats the panel. Power needs temperature; temperature needs power. The two are locked together, and you cannot solve one without the other. On top of that, Section&nbsp;6's hot-spot was fundamentally a <em>thermal</em> failure — a melt. So PowerPy cannot ignore heat; it has to model it. This section builds the space thermal picture from first principles — why there is no air to carry heat away, how a panel gains and loses energy by radiation alone, the Stefan–Boltzmann law that governs the loss, and the <strong>2-node energy-balance model</strong> PowerPy actually solves — then closes with the orbit and eclipse that make temperature a story unfolding in <em>time</em>.</p>
+
+<div class="keyidea">
+<span class="lbl">Key idea</span>
+<p>In space there is <strong>no air</strong>, so there is no convection — a panel can only exchange heat by <strong>radiation</strong> (to and from the Sun, the planet, and deep space) and by <strong>conduction</strong> through its own material. The temperature settles at <span class="term">thermal equilibrium</span>: the one temperature where <em>heat&nbsp;in&nbsp;=&nbsp;heat&nbsp;out</em>. Because the panel has a hot front face and a cooler rear face, PowerPy treats it as <strong>two nodes</strong> — a front and a rear — writes one "energy in = energy out" equation for each, and solves the pair together.</p>
+</div>
+
+<h4>7.1 Why temperature matters at all</h4>
+
+<p>It is worth being precise about <em>why</em> a power simulator must drag temperature into the story, because at first glance the two seem like separate subjects. They are not separable here, for two distinct reasons.</p>
+
+<ul>
+<li><strong>Temperature moves the IV curve.</strong> The term <span class="term">IV curve</span> (current–voltage curve) is the graph of how much current a cell delivers at each voltage; it is the cell's entire electrical personality (Section&nbsp;3). Heat shifts it — broadly, a hotter silicon-type cell loses a little voltage. So the same cell, in the same sunlight, makes <em>different</em> power at 0&nbsp;°C and at 80&nbsp;°C. You literally cannot read the power off the curve until you know which curve you are on, and that is set by temperature.</li>
+<li><strong>A hot-spot is a thermal failure.</strong> Section&nbsp;6 showed a reverse-biased cell turning into a heater. Whether that heater melts the substrate is a question about <em>temperature</em>. To answer "does this failure cause a melt?" PowerPy must be able to compute how hot a patch of panel actually gets.</li>
+</ul>
+
+<div class="callout">
+<span class="lbl">The chicken-and-egg, stated once</span>
+<p>Temperature → sets the IV curve → sets the operating point → sets the electrical power extracted → which changes how much absorbed energy is left to heat the panel → which changes the temperature. It is a loop. PowerPy resolves it by <em>iteration</em> (Section&nbsp;7.7): guess a temperature, work all the way round the loop, and repeat until the guess stops changing. Hold this loop in mind — it is the spine of the whole section.</p>
+</div>
+
+<h4>7.2 Heat in a vacuum: radiation is the only game in town</h4>
+
+<p>On Earth a hot object sheds heat three ways: <strong>conduction</strong> (touching something cooler), <strong>convection</strong> (warm air or water flowing past and carrying heat off), and <strong>radiation</strong> (glowing — emitting electromagnetic waves). Step into orbit and one of those vanishes entirely.</p>
+
+<div class="keyidea">
+<span class="lbl">No air → no convection</span>
+<p>Space is very nearly a vacuum. With essentially no gas around the panel, there is <strong>nothing to convect heat away</strong> — the cooling breeze that keeps a laptop or a rooftop solar panel in check simply does not exist. A space panel can shed heat in only two ways:</p>
+<ol>
+<li><strong>Radiation</strong> — it glows in the infrared, sending energy out as electromagnetic waves to whatever is around it (the planet, deep space). This also works in reverse: the Sun, the planet, and reflected sunlight <em>radiate onto</em> the panel and heat it.</li>
+<li><strong>Conduction</strong> — heat flows through the panel's own solid material, e.g. from the hot front face through the board to the cooler rear face.</li>
+</ol>
+</div>
+
+<p>That is the entire toolkit. Every term in the model below is one of these two mechanisms. Let us inventory the inputs and the one big output.</p>
+
+<h4>7.3 The heat inputs — three ways the environment warms the panel</h4>
+
+<p>Three separate streams of energy arrive at the panel from outside. Define each carefully, because the model treats them differently depending on which face they hit and which surface property absorbs them.</p>
+
+<div class="term">
+<span class="lbl">Term — α (alpha), solar absorptivity</span>
+<p><strong>α</strong> is the fraction of incident <em>sunlight</em> a surface absorbs (a pure number between 0 and 1). α&nbsp;=&nbsp;0.97 means the surface soaks up 97% of the sunlight that lands on it and reflects 3%. The front face's absorbed solar power is</p>
+<div class="formula">
+<span class="eqn">P<sub>in,sun</sub> = α · S · A · tilt</span>
+<div class="where">S = incident solar flux (W/m²); A = area (m²); tilt = a geometric factor (0–1) for how squarely the face meets the Sun — face-on is 1, edge-on is 0.</div>
+</div>
+</div>
+
+<div class="term">
+<span class="lbl">Term — albedo (P<sub>Albedo</sub>)</span>
+<p><strong>Albedo</strong> is sunlight that bounces off the <em>planet</em> and lands on the panel — second-hand sunshine. It is a fraction of the direct sunlight, expressed by PowerPy as a flux <strong>P<sub>Albedo</sub></strong> (W/m²) hitting the facing side. Because albedo is reflected <em>sunlight</em> (short-wavelength), it is absorbed through the same solar property <strong>α</strong> as direct sun.</p>
+</div>
+
+<div class="term">
+<span class="lbl">Term — planetary infrared, IR (P<sub>IR</sub>)</span>
+<p><strong>IR</strong> stands for <strong>infrared</strong> — light just beyond the red end of the visible band, the kind warm objects emit. The planet itself is warm, so it <em>glows</em> in the infrared; the panel's facing side absorbs some of this, a flux <strong>P<sub>IR</sub></strong> (W/m²). Crucially, planetary IR is <em>long-wavelength</em> thermal radiation, so it is absorbed through the surface's <strong>emissivity ε</strong>, not through α.</p>
+</div>
+
+<div class="callout">
+<span class="lbl">Why albedo uses α but planetary IR uses ε <span class="badge hot">EXAM-HOT</span></span>
+<p>This split confuses everyone, and the reason is a real physical law (Kirchhoff's law of thermal radiation): <em>a surface absorbs and emits equally well at any given wavelength.</em> So a surface has effectively two separate "absorb numbers": one for sunlight's short wavelengths (we call it <strong>α</strong>) and one for thermal long wavelengths (we call it <strong>ε</strong>, the same number that governs how well it <em>emits</em>). <strong>Albedo is reflected sunlight</strong> → short-wavelength → absorbed by <strong>α</strong>. <strong>Planetary IR is the warm planet's own glow</strong> → long-wavelength → absorbed by <strong>ε</strong>. Same photons-in, but different parts of the spectrum, so different surface property does the absorbing. This is exactly why spacecraft engineers obsess over the <em>ratio</em> α/ε: it sets whether a surface runs hot or cold (we prove this in Worked&nbsp;7A).</p>
+</div>
+
+<h4>7.4 The heat output — the Stefan–Boltzmann law</h4>
+
+<p>Now the dominant way a panel <em>loses</em> heat: it glows. Any surface above absolute zero radiates electromagnetic energy, and the amount is governed by one of the most important equations in this whole subject.</p>
+
+<div class="formula">
+<span class="eqn">P<sub>rad</sub> = ε · σ · A · T<sup>4</sup></span>
+<div class="where">ε (epsilon) = <strong>emissivity</strong>, 0–1, how good a radiator the surface is (1 = a perfect "black-body" emitter); σ (sigma) = the <strong>Stefan–Boltzmann constant</strong> = 5.670&nbsp;×&nbsp;10<sup>−8</sup>&nbsp;W/m²K⁴; A = radiating area (m²); T = <strong>absolute temperature in KELVIN</strong>.</div>
+</div>
+
+<div class="term">
+<span class="lbl">Term — emissivity ε</span>
+<p><strong>ε</strong> measures how efficiently a surface radiates heat compared with a perfect black-body at the same temperature. ε&nbsp;=&nbsp;0.9 means the surface sheds 90% of the heat a perfect radiator would. A high-ε surface is a good radiator — it dumps heat to space easily and therefore runs <em>cooler</em>. (Note ε is also the property that absorbs incoming long-wavelength planetary IR — §7.3 — because, by Kirchhoff, a good emitter is an equally good absorber at that wavelength.)</p>
+</div>
+
+<div class="keyidea">
+<span class="lbl">Two facts to burn in: KELVIN, and the fourth power <span class="badge hot">EXAM-HOT</span></span>
+<p><strong>Why Kelvin?</strong> The law is built on <em>absolute</em> temperature — the true amount of thermal energy, measured from absolute zero. Plugging in °C would be nonsense: 0&nbsp;°C is not "no thermal radiation," it is a balmy 273&nbsp;K of glow. PowerPy stores temperatures in °C and converts with a constant <strong>T<sub>0</sub>&nbsp;=&nbsp;−273.15</strong>, so that <strong>T<sub>Kelvin</sub>&nbsp;=&nbsp;T<sub>°C</sub>&nbsp;−&nbsp;T<sub>0</sub></strong> (which is just T<sub>°C</sub>&nbsp;+&nbsp;273.15). Forgetting this conversion is the single most destructive mistake in the section (Pitfall&nbsp;7.10).</p>
+<p><strong>Why the fourth power?</strong> Radiated power grows as T⁴, not T. That steepness matters enormously: a surface that gets a little hotter sheds a <em>lot</em> more heat. Double the absolute temperature and you radiate 2⁴&nbsp;=&nbsp;16× as much. This is precisely what makes equilibrium <em>stable</em> — if a panel overheats, the T⁴ term ramps up fast and claws the temperature back down.</p>
+</div>
+
+<p><strong>Both faces radiate.</strong> The front and the rear each glow outward, each against the brutal cold of <span class="term">deep space</span> — a background temperature of only <strong>T<sub>Space</sub>&nbsp;=&nbsp;2.7&nbsp;K</strong> (the residual cold of the universe). Because 2.7&nbsp;K is so close to absolute zero, space radiates almost nothing back, so each face sheds heat as ε·σ·A·(T⁴&nbsp;−&nbsp;T<sub>Space</sub>⁴) — essentially full-bore radiation outward with a tiny correction for what little comes back.</p>
+
+<h4>7.5 Two more energy flows: electrical extraction and front↔rear conduction</h4>
+
+<p>Two terms remain, and the first contains the most important physical insight in the section.</p>
+
+<div class="callout">
+<span class="lbl">Electrical power leaves as electricity — so it does NOT heat the panel</span>
+<p>When the cell delivers electrical power <strong>P<sub>elec</sub></strong>, that energy walks out down the wires. It is absorbed sunlight that became <em>electricity</em> instead of <em>heat</em>. So in the energy balance, P<sub>elec</sub> is <strong>subtracted</strong> at the front node — it is one more exit door for energy, alongside radiation.</p>
+<p><strong>The crucial link to Section&nbsp;6:</strong> a healthy cell has positive P<sub>elec</sub> and so <em>removes</em> heat. But a <em>reverse-biased, failed</em> cell has <strong>negative</strong> P<sub>elec</sub> — it absorbs electrical power rather than delivering it. A negative number being subtracted is a positive being <em>added</em>: the failed cell <strong>adds heat</strong> to the panel. That sign flip is the mathematical heart of the hot-spot.</p>
+</div>
+
+<div class="term">
+<span class="lbl">Term — conduction coefficient C (front↔rear)</span>
+<p>Heat also flows <em>through</em> the board, from the hotter face to the cooler one. PowerPy bundles the material into a single <strong>conduction coefficient</strong></p>
+<div class="formula">
+<span class="eqn">C = conductivity / thickness</span>
+<div class="where">conductivity (W/m·K) is how readily the substrate material passes heat; thickness (m) is the board's depth. C has units <strong>W/m²K</strong>.</div>
+</div>
+<p>The conductive power flowing into the front node from the rear is then <strong>C·A·(T<sub>2</sub>&nbsp;−&nbsp;T<sub>1</sub>)</strong> — proportional to the temperature <em>difference</em> between the faces (T₂ = rear, T₁ = front). If the rear is hotter, heat flows forward (positive into the front); if the front is hotter, the same expression is negative and heat flows backward. One expression, both directions handled by its sign.</p>
+</div>
+
+<h4>7.6 The 2-node model: two coupled equations</h4>
+
+<p>We now have every ingredient. PowerPy models the panel as <strong>two thermal nodes</strong> — a front node at temperature <strong>T<sub>1</sub></strong> and a rear node at temperature <strong>T<sub>2</sub></strong> (both in Kelvin) — and writes a single "everything in − everything out = 0" equation for each. At equilibrium each node is neither warming nor cooling, so each balance equals zero.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 220" xmlns="http://www.w3.org/2000/svg" font-size="10.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .node{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.8} .arin{stroke:#b9851a;stroke-width:2;fill:none} .arout{stroke:#9a3b3b;stroke-width:2;fill:none}</style>
+<circle class="node" cx="170" cy="60" r="30"/><text class="tx" x="170" y="64" text-anchor="middle">T1 front</text>
+<circle class="node" cx="170" cy="165" r="30"/><text class="tx" x="170" y="169" text-anchor="middle">T2 rear</text>
+<line stroke="#0b3d63" stroke-width="6" x1="170" y1="90" x2="170" y2="135" opacity=".5"/><text class="tx" x="182" y="116" font-size="9">C·A·(T2−T1)</text>
+<!-- front inputs/outputs -->
+<line class="arin" x1="60" y1="20" x2="150" y2="48"/><polygon points="150,48 140,44 144,54" fill="#b9851a"/><text class="tx" x="40" y="20" fill="#b9851a" font-size="9">α_F·P_Sun·tilt</text>
+<line class="arout" x1="200" y1="40" x2="300" y2="20"/><polygon points="300,20 290,20 296,28" fill="#9a3b3b"/><text class="tx" x="305" y="20" fill="#9a3b3b" font-size="9">ε_F·σ·T1⁴</text>
+<line class="arout" x1="200" y1="60" x2="300" y2="60"/><polygon points="300,60 291,56 291,64" fill="#9a3b3b"/><text class="tx" x="305" y="63" fill="#444" font-size="9">P_elec (out)</text>
+<!-- rear inputs/outputs -->
+<line class="arin" x1="60" y1="200" x2="150" y2="178"/><polygon points="150,178 140,178 145,187" fill="#b9851a"/><text class="tx" x="20" y="205" fill="#b9851a" font-size="9">α_R·P_Alb + ε_R·P_IR</text>
+<line class="arout" x1="200" y1="178" x2="300" y2="200"/><polygon points="300,200 290,196 292,205" fill="#9a3b3b"/><text class="tx" x="305" y="203" fill="#9a3b3b" font-size="9">ε_R·σ·T2⁴</text>
+<text class="tx" x="350" y="120" fill="#5d6b79" font-size="9">balance: in − out = 0</text>
+</svg>
+<figcaption>Figure 7.1 — The two-node thermal model: absorbed fluxes in (amber), radiated emission and extracted electrical power out (red), conduction between front and rear.</figcaption></figure>
+
+<div class="formula">
+<span class="lbl">Front node (T<sub>1</sub>)</span>
+<span class="eqn">α<sub>F</sub>·A·P<sub>Sun</sub>·tilt &nbsp;−&nbsp; ε<sub>F</sub>·A·σ·(T<sub>1</sub>⁴ − T<sub>Space</sub>⁴) &nbsp;−&nbsp; P<sub>elec</sub> &nbsp;+&nbsp; C·A·(T<sub>2</sub> − T<sub>1</sub>) &nbsp;=&nbsp; 0</span>
+</div>
+
+<div class="formula">
+<span class="lbl">Rear node (T<sub>2</sub>)</span>
+<span class="eqn">(α<sub>R</sub>·P<sub>Albedo</sub> + ε<sub>R</sub>·P<sub>IR</sub>)·A·tilt &nbsp;−&nbsp; ε<sub>R</sub>·A·σ·(T<sub>2</sub>⁴ − T<sub>Space</sub>⁴) &nbsp;−&nbsp; C·A·(T<sub>2</sub> − T<sub>1</sub>) &nbsp;=&nbsp; 0</span>
+</div>
+
+<p>Read each term aloud — the equations are just the bookkeeping of §§7.3–7.5:</p>
+
+<div class="worked">
+<span class="lbl">Every term in words</span>
+<div class="step"><strong>α<sub>F</sub>·A·P<sub>Sun</sub>·tilt</strong> &nbsp;(front, IN): direct sunlight absorbed by the front face — its solar absorptivity α<sub>F</sub> times the solar flux P<sub>Sun</sub>, over area A, scaled by the tilt geometry.</div>
+<div class="step"><strong>− ε<sub>F</sub>·A·σ·(T<sub>1</sub>⁴ − T<sub>Space</sub>⁴)</strong> &nbsp;(front, OUT): Stefan–Boltzmann radiation from the front face to deep space. Subtracted because it leaves.</div>
+<div class="step"><strong>− P<sub>elec</sub></strong> &nbsp;(front, OUT): the electrical power extracted, leaving as electricity. Subtracted. <em>Negative for a failed cell → becomes heat IN.</em></div>
+<div class="step"><strong>+ C·A·(T<sub>2</sub> − T<sub>1</sub>)</strong> &nbsp;(front, conduction): heat conducted from the rear into the front. Positive if the rear is hotter.</div>
+<div class="step"><strong>(α<sub>R</sub>·P<sub>Albedo</sub> + ε<sub>R</sub>·P<sub>IR</sub>)·A·tilt</strong> &nbsp;(rear, IN): the rear's environment heat — reflected sunlight (albedo, via α<sub>R</sub>) plus the planet's IR glow (via ε<sub>R</sub>).</div>
+<div class="step"><strong>− ε<sub>R</sub>·A·σ·(T<sub>2</sub>⁴ − T<sub>Space</sub>⁴)</strong> &nbsp;(rear, OUT): Stefan–Boltzmann radiation from the rear face to deep space.</div>
+<div class="step"><strong>− C·A·(T<sub>2</sub> − T<sub>1</sub>)</strong> &nbsp;(rear, conduction): the <em>same</em> conductive flux, with the opposite sign — what leaves the rear is exactly what enters the front. Energy is conserved across the link.</div>
+<div class="check">Notice the conduction term appears with a <strong>+</strong> on the front and a <strong>−</strong> on the rear: it is one flow of heat, counted as a gain for whichever node receives it and a loss for the one that gives it up. The two signs <em>must</em> be opposite or energy would be created from nothing. ✓</div>
+</div>
+
+<div class="keyidea">
+<span class="lbl">Why this needs a numerical solver — and why it is the bottleneck</span>
+<p>The two equations are <strong>coupled</strong> (T₁ appears in the rear equation's conduction term and T₂ in the front's, so you cannot solve one without the other) and <strong>nonlinear</strong> (the T⁴ terms — you cannot rearrange a T⁴ into a tidy closed-form solution). So PowerPy hands the pair to a numerical <strong>root-finder</strong>, <code>scipy.fsolve</code> <span class="badge api">scipy.fsolve</span>, which hunts for the (T₁, T₂) that drive both balances to zero. Critically, it does this <strong>one panel/cell at a time</strong>, in a Python loop. <span class="badge hot">EXAM-HOT</span> That per-item loop is the <strong>performance bottleneck</strong> of the whole simulator: looping over thousands of cells, each with its own <code>fsolve</code> call, is slow. <strong>Chapter&nbsp;2 replaces it with a single VECTORized solve</strong> that handles all cells at once.</p>
+</div>
+
+<h4>7.7 Where the material properties come from: the substrate file</h4>
+
+<p>The numbers α<sub>F</sub>, ε<sub>R</sub>, C and so on are not invented per run — they describe a real panel material and live in a data file.</p>
+
+<div class="callout">
+<span class="lbl">The substrate JSON &nbsp;<span class="badge api">getSubstrateData</span></span>
+<p>Each material is a file <code>data/substrates/NAME.json</code>, loaded by <code>getSubstrateData</code>. Its keys are: <code>name</code>, <code>alpha_front</code>, <code>alpha_rear</code>, <code>epsilon_front</code>, <code>epsilon_rear</code>, <code>conductivity</code>, <code>thickness</code>. Then <code>panel.prepareParameters()</code> <span class="badge api">prepareParameters</span> reads this file, builds two property dictionaries — <code>front_side</code> and <code>rear_side</code> — and computes the conduction coefficient <strong>C = conductivity / thickness</strong>.</p>
+</div>
+
+<div class="worked">
+<span class="lbl">Example substrate — "SRP MSRO Case 2"</span>
+<pre>{
+  "name":          "SRP MSRO Case 2",
+  "alpha_front":    0.970,
+  "alpha_rear":     0.930,
+  "epsilon_front":  0.9,
+  "epsilon_rear":   0.89,
+  "conductivity":   10,      // W/m·K
+  "thickness":      0.01     // m
+}</pre>
+<div class="step"><strong>Compute C:</strong> &nbsp; C = conductivity / thickness = 10&nbsp;W/m·K ÷ 0.01&nbsp;m.</div>
+<div class="step"><strong>Result:</strong> &nbsp; C = <strong>1000&nbsp;W/m²K</strong>. (Units: (W/m·K) ÷ m = W/m²K. ✓)</div>
+<div class="check">A high C (1000&nbsp;W/m²K) means the board passes heat front-to-rear very readily, so the two faces will sit at <em>nearly the same</em> temperature. A thin, conductive board ties the nodes tightly together; a thick, insulating one lets them drift apart. ✓</div>
+</div>
+
+<h4>7.8 Closing the loop: electro-thermal coupling</h4>
+
+<p>Now we can state precisely how PowerPy resolves the chicken-and-egg of §7.1. The coupling is a loop, and the loop is solved by iteration.</p>
+
+<div class="callout">
+<span class="lbl">The electro-thermal loop &nbsp;<span class="badge api">thermalEquilibrium</span></span>
+<p>PowerPy's <code>panel.thermalEquilibrium(voltage, season, P_Albedo, P_IR)</code> drives this cycle:</p>
+<ol>
+<li><strong>Guess a temperature T.</strong></li>
+<li><strong>Build the cells at T</strong> — i.e. fix the IV curve for that temperature (Section&nbsp;3).</li>
+<li><strong>Compute the electrical power</strong> at the requested voltage: P<sub>elec</sub>&nbsp;=&nbsp;<code>currentAtVoltage(V)</code>·V — current drawn at V, times V.</li>
+<li><strong>Solve the thermal balance</strong> (§7.6) with that P<sub>elec</sub> to get a <em>new</em> temperature.</li>
+<li><strong>Repeat</strong> until T stops changing.</li>
+</ol>
+<p>The outer search for the self-consistent T uses <code>scipy.minimize</code> with the <strong>Nelder–Mead</strong> method — a derivative-free "amoeba" optimiser that nudges a guess around until it settles. <span class="badge hot">EXAM-HOT</span> Like the thermal solve itself, this iteration is <strong>slow</strong> — it re-builds the cells and re-solves on every pass, for every item. <strong>Chapter&nbsp;2 vectorizes this too</strong>, removing the per-item iteration.</p>
+</div>
+
+<div class="keyidea">
+<span class="lbl">The loop in one sentence</span>
+<p><strong>Temperature sets the IV curve → the operating point sets P<sub>elec</sub> → P<sub>elec</sub> changes the heat balance → which sets a new temperature.</strong> Round and round until it converges. That self-consistent fixed point is the panel's true operating temperature <em>and</em> its true power, found together because neither can be known alone.</p>
+</div>
+
+<h4>7.9 Worked examples</h4>
+
+<div class="worked">
+<span class="lbl">Worked 7A — one-node sunlit equilibrium (the α/ε result)</span>
+<p><strong>Goal:</strong> find the equilibrium temperature of a sunlit plate, stripped to its essence. <strong>Ignore</strong> albedo, IR, conduction and electrical extraction — just direct sun absorbed, balanced against radiation from one face. (Also take T<sub>Space</sub>⁴ ≈ 0, since 2.7&nbsp;K to the fourth is utterly negligible beside a panel near 400&nbsp;K.)</p>
+<div class="step"><strong>Write the balance — heat in = heat out:</strong> &nbsp; α·S·A = ε·σ·A·T⁴.</div>
+<div class="step"><strong>Area cancels.</strong> &nbsp; A is on both sides (the plate catches and radiates over the same area), so divide it out: &nbsp; α·S = ε·σ·T⁴. <em>Equilibrium temperature does not depend on size.</em></div>
+<div class="step"><strong>Solve for T⁴:</strong> &nbsp; T⁴ = α·S / (ε·σ).</div>
+<div class="step"><strong>Solve for T:</strong> &nbsp; T = [ α·S / (ε·σ) ]<sup>1/4</sup>.</div>
+<div class="step"><strong>Plug in numbers</strong> — take α&nbsp;=&nbsp;0.9, &nbsp;S&nbsp;=&nbsp;1367&nbsp;W/m² (AM0, full sun at 1&nbsp;AU — defined in §7.11), &nbsp;ε&nbsp;=&nbsp;0.85.</div>
+<div class="step"><strong>Numerator:</strong> &nbsp; α·S = 0.9 × 1367&nbsp;W/m² = <strong>1230.3&nbsp;W/m²</strong>.</div>
+<div class="step"><strong>Denominator:</strong> &nbsp; ε·σ = 0.85 × 5.67×10<sup>−8</sup>&nbsp;W/m²K⁴ = <strong>4.82×10<sup>−8</sup>&nbsp;W/m²K⁴</strong>.</div>
+<div class="step"><strong>Divide → T⁴:</strong> &nbsp; T⁴ = 1230.3 / 4.82×10<sup>−8</sup> = <strong>2.553×10<sup>10</sup>&nbsp;K⁴</strong>.</div>
+<div class="step"><strong>Fourth root, done as two square roots</strong> (the step you cannot eyeball): &nbsp; first √(2.553×10<sup>10</sup>&nbsp;K⁴) = <strong>1.598×10<sup>5</sup>&nbsp;K²</strong>; &nbsp; then √(1.598×10<sup>5</sup>&nbsp;K²) = <strong>399.8&nbsp;K</strong>.</div>
+<div class="step"><strong>Convert to °C:</strong> &nbsp; 399.8&nbsp;K + T<sub>0</sub> = 399.8 − 273.15 ≈ <strong>127&nbsp;°C</strong>.</div>
+<div class="check"><strong>Sanity:</strong> a black-ish plate in full, unfiltered sunlight with no air to cool it sitting at ~127&nbsp;°C is exactly the "frying pan in space" you'd expect — far hotter than anything in shade. The order of magnitude is right. ✓</div>
+</div>
+
+<div class="callout">
+<span class="lbl">The punchline — T depends on the RATIO α/ε &nbsp;<span class="badge hot">EXAM-HOT</span></span>
+<p>Factor the result to make the physics jump out:</p>
+<div class="formula">
+<span class="eqn">T = (S/σ)<sup>1/4</sup> · (α/ε)<sup>1/4</sup> = 394.1&nbsp;K · (α/ε)<sup>1/4</sup></span>
+<div class="where">(S/σ)<sup>1/4</sup> = (1367 / 5.67×10<sup>−8</sup>)<sup>1/4</sup> = (2.411×10<sup>10</sup>)<sup>1/4</sup> ≈ 394.1&nbsp;K is fixed by the sunlight alone. Everything about the <em>surface</em> enters only through the single ratio α/ε.</div>
+</div>
+<p>So <strong>T ∝ (α/ε)<sup>1/4</sup></strong>. Only the <em>ratio</em> of solar absorptivity to emissivity matters, not either alone. A surface that drinks sunlight (high α) but radiates poorly (low ε) runs blazing hot; one that reflects sun (low α) yet radiates well (high ε) runs cold. Check our case: (0.9/0.85)<sup>1/4</sup> = 1.0144, and 394.1 × 1.0144 = 399.8&nbsp;K — matching the long calculation exactly. <strong>Raising ε lowers T</strong>: a better radiator sheds heat faster, so equilibrium settles cooler. This α/ε ratio is the master dial of spacecraft thermal design.</p>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 7B — extracting electrical power lowers the temperature</span>
+<p><strong>Goal:</strong> redo 7A but now let the cell pull electrical power out, and show the panel runs <em>cooler</em>. The point: energy that leaves as electricity is energy that no longer has to leave as heat, so less radiation — hence a lower T — is needed to balance the books.</p>
+<p class="small"><strong>Watch the units (this is the trap).</strong> In the front-node equation, every term carries the area A <em>except</em> P<sub>elec</sub>, which is an absolute power in watts. So unlike 7A, <strong>area does NOT cancel</strong> once P<sub>elec</sub> is present — we must keep A explicit. We use one §3/§6 cell: area A&nbsp;=&nbsp;30&nbsp;cm²&nbsp;=&nbsp;0.0030&nbsp;m², operating at 2.35&nbsp;V × 0.48&nbsp;A.</p>
+<div class="step"><strong>Balance with electrical term:</strong> &nbsp; α·S·A − P<sub>elec</sub> = ε·σ·A·T⁴. &nbsp;(Absorbed sun, minus electricity removed, equals what must be radiated.)</div>
+<div class="step"><strong>Absorbed solar power (now an absolute watt figure):</strong> &nbsp; α·S·A = 0.9 × 1367&nbsp;W/m² × 0.0030&nbsp;m² = <strong>3.69&nbsp;W</strong>.</div>
+<div class="step"><strong>Electrical power extracted:</strong> &nbsp; P<sub>elec</sub> = 2.35&nbsp;V × 0.48&nbsp;A = <strong>1.128&nbsp;W</strong>.</div>
+<div class="step"><strong>Power that must be radiated:</strong> &nbsp; ε·σ·A·T⁴ = 3.69&nbsp;W − 1.128&nbsp;W = <strong>2.563&nbsp;W</strong>. (Less than 7A's 3.69&nbsp;W — the electricity carried part of the load away.)</div>
+<div class="step"><strong>Radiative coefficient ε·σ·A:</strong> &nbsp; 0.85 × 5.67×10<sup>−8</sup> × 0.0030 = <strong>1.446×10<sup>−10</sup>&nbsp;W/K⁴</strong>.</div>
+<div class="step"><strong>Solve for T⁴:</strong> &nbsp; T⁴ = 2.563 / 1.446×10<sup>−10</sup> = <strong>1.773×10<sup>10</sup>&nbsp;K⁴</strong>.</div>
+<div class="step"><strong>Fourth root (two square roots):</strong> &nbsp; √(1.773×10<sup>10</sup>) = 1.331×10<sup>5</sup>; &nbsp; √(1.331×10<sup>5</sup>) = <strong>≈ 365&nbsp;K</strong> &nbsp;(≈ 92&nbsp;°C).</div>
+<div class="check"><strong>Compare:</strong> 365&nbsp;K with extraction vs 399.8&nbsp;K without — about <strong>35&nbsp;K cooler</strong>. The argument holds: roughly a third of the absorbed sunlight (1.128 of 3.69&nbsp;W) departed as electricity, so the panel needs less T⁴ radiation to balance, and a lower T⁴ means a lower T. Pulling power out of a panel genuinely cools it. ✓ &nbsp;<em>(And the §6 sign warning: had this been a failed cell with P<sub>elec</sub> = −1.128&nbsp;W, the minus-a-negative would ADD 1.128&nbsp;W, pushing T <strong>up</strong> instead.)</em></div>
+</div>
+
+<h4>7.10 Socratic ladder — the ratio α/ε and the fourth power</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — Why does equilibrium temperature depend on the RATIO α/ε, and why is radiated heat proportional to T⁴ rather than T?</div>
+
+<div class="socratic">
+<div class="q">Q1. In the vacuum of space, with no air, how can a sunlit panel lose heat at all?</div>
+<div class="answer">Only by <strong>radiation</strong> — by glowing, emitting electromagnetic energy out to deep space (and, through the board, by conduction to its other face, but to leave the panel entirely it must ultimately radiate). There is no air, so no convection; there is nothing touching it to conduct into. If it could not radiate, an illuminated panel would heat up without limit.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q2. What law sets how much it radiates, and on what does that depend?</div>
+<div class="answer">The <strong>Stefan–Boltzmann law</strong>, P<sub>rad</sub> = ε·σ·A·T⁴. The radiated power depends on the emissivity ε (how good a radiator the surface is), the area A, the constant σ, and — steeply — the absolute temperature T raised to the <strong>fourth power</strong>.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q3. As the panel heats up, what happens to heat-IN versus heat-OUT, and why does that force a stable equilibrium?</div>
+<div class="answer">Heat-IN (absorbed sunlight, α·S·A) barely changes with temperature — the Sun delivers the same flux regardless of how warm the panel is. But heat-OUT (ε·σ·A·T⁴) <strong>rises sharply</strong> as T climbs, because of the fourth power. So if the panel is too cold, OUT &lt; IN and it warms; if too hot, OUT &gt; IN and it cools. There is exactly one temperature where they match — and the T⁴ steepness makes the system snap back to it firmly. The fourth power is what makes equilibrium <em>stable</em>.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q4. Now set IN = OUT and solve — where does the ratio α/ε appear, and what does it govern?</div>
+<div class="answer">Setting α·S·A = ε·σ·A·T⁴, the <strong>area cancels</strong>, leaving T⁴ = (α/ε)·(S/σ), i.e. <strong>T = (S/σ)<sup>1/4</sup>·(α/ε)<sup>1/4</sup></strong>. The two surface properties never appear alone — only as the <em>ratio</em> α/ε, and even that under a fourth root. Physically: α controls how much sunlight comes IN, ε controls how readily heat goes OUT, so it is their <em>balance</em> that sets the temperature. Want a cooler surface? Lower α/ε — reflect more sun or radiate better. That single ratio is the spacecraft thermal designer's master control, and Worked&nbsp;7A is its proof.</div>
+</div>
+</div>
+
+<h4>7.11 Orbit and eclipse — why temperature is really a time series</h4>
+
+<p>Everything so far found <em>one</em> equilibrium temperature for <em>one</em> set of conditions. But a satellite orbits, and its surroundings change continuously as it goes — so the real answer is not a single number but a <strong>curve in time</strong>.</p>
+
+<div class="keyidea">
+<span class="lbl">The environment changes around the orbit</span>
+<p>In <strong>sunlight</strong> the array is hot (full solar input) and making power. Then the satellite swings behind the planet into <strong>eclipse</strong> — the planet blocks the Sun — and abruptly there is <em>no solar input</em>: the array cools fast and makes no power. Albedo and IR also vary with where the satellite is over the planet (above bright cloud vs dark ocean, day side vs night side). So temperature and power are genuinely <strong>time series</strong> traced out over each orbit, not constants.</p>
+</div>
+
+<div class="callout">
+<span class="lbl">Solar intensity falls with distance from the Sun</span>
+<p>The Sun's light spreads over an ever-bigger sphere as it travels outward, so the flux dilutes with distance:</p>
+<div class="formula">
+<span class="eqn">flux = L<sub>Sun</sub> / (4π·d²)</span>
+<div class="where">L<sub>Sun</sub> = the Sun's luminosity (total power output, W); d = distance from the Sun (m); 4π·d² = the surface area of a sphere of radius d.</div>
+</div>
+<p>The term <span class="term">AM0</span> ("Air Mass Zero") is the solar spectrum in space with <em>no atmosphere</em> in the way — its intensity is <strong>1367&nbsp;W/m² at 1&nbsp;AU</strong> (one <strong>AU</strong>, Astronomical Unit, = the Earth–Sun distance, ≈1.496×10<sup>11</sup>&nbsp;m). The 1/d² law is exactly why this value differs elsewhere: at Mars (≈1.52&nbsp;AU) the flux is only 1367 / 1.52² ≈ <strong>591&nbsp;W/m²</strong> — under half of Earth's — which is why a Mars array must be correspondingly larger.</p>
+</div>
+
+<div class="term">
+<span class="lbl">Term — umbra and penumbra</span>
+<p>The planet's shadow has two parts. The <strong>umbra</strong> is the region of <em>full</em> shadow — the Sun is completely blocked, total eclipse. The <strong>penumbra</strong> is the <em>partial</em> shadow ringing it, where the planet blocks only <em>part</em> of the Sun's disc, so a fraction of sunlight still gets through. A satellite passing through experiences a brief penumbral dimming, then full umbral darkness, then dimming again on the way out.</p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 200" xmlns="http://www.w3.org/2000/svg" font-size="10.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<circle cx="40" cy="100" r="22" fill="#c9a227"/><text class="tx" x="22" y="138" fill="#b9851a">Sun</text>
+<circle cx="250" cy="100" r="40" fill="#6b8fb5" stroke="#0b3d63"/><text class="tx" x="250" y="104" text-anchor="middle" fill="#fff">planet</text>
+<polygon points="250,62 250,138 460,118 460,82" fill="#33415588"/><text class="tx" x="360" y="104" fill="#1d2733" font-size="9">umbra (eclipse)</text>
+<ellipse cx="250" cy="100" rx="95" ry="78" fill="none" stroke="#5d6b79" stroke-dasharray="4 3"/>
+<circle cx="345" cy="100" r="6" fill="#1f6a6a"/><text class="tx" x="335" y="86" font-size="9" fill="#1f6a6a">sat (in shadow)</text>
+<circle cx="155" cy="100" r="6" fill="#1f6a6a"/><text class="tx" x="120" y="86" font-size="9" fill="#1f6a6a">sat (sunlit)</text>
+<line stroke="#b9851a" stroke-width="1.6" x1="64" y1="92" x2="150" y2="98"/><line stroke="#b9851a" stroke-width="1.6" x1="64" y1="108" x2="150" y2="102"/>
+<line stroke="#9a3b3b" stroke-width="1.2" x1="210" y1="80" x2="160" y2="96"/><text class="tx" x="196" y="74" font-size="8" fill="#9a3b3b">albedo/IR</text>
+</svg>
+<figcaption>Figure 7.2 — Around the orbit the array passes through the planet's umbra (eclipse) where the Sun is blocked; albedo and infrared come from the planet.</figcaption></figure>
+
+<div class="callout">
+<span class="lbl">How PowerPy finds eclipses &nbsp;<span class="badge api">eclipse.py</span></span>
+<p><code>eclipse.py</code> propagates (steps forward in time) the satellite's orbit and the Sun/planet positions, then works out the intervals when the satellite is inside the umbra — i.e. when it is eclipsed. It currently does this with the <strong>poliastro</strong>/<strong>astropy</strong> astronomy libraries. <span class="badge hot">EXAM-HOT</span> <strong>Chapter&nbsp;2 replaces this with the maintained <code>hapsira</code> library</strong> (poliastro is no longer maintained), which additionally lets PowerPy compute the albedo and IR fluxes properly rather than approximating them.</p>
+</div>
+
+<h4>7.12 Pitfalls</h4>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — forgetting to convert °C to KELVIN before the T⁴ term <span class="badge hot">EXAM-HOT</span></span>
+<p>The Stefan–Boltzmann law demands <strong>absolute</strong> temperature. If you leave T in °C, the error is colossal — not a few percent but orders of magnitude. A panel at 27&nbsp;°C radiates as 300&nbsp;K, i.e. ∝&nbsp;300⁴&nbsp;=&nbsp;8.1×10<sup>9</sup>; plug in "27" and you get 27⁴&nbsp;=&nbsp;5.3×10<sup>5</sup> — wrong by a factor of about <strong>15,000</strong>. And near 0&nbsp;°C it is catastrophic: 0&nbsp;°C is 273&nbsp;K (huge radiation), but "0"⁴&nbsp;=&nbsp;0 (claims the panel radiates nothing). <strong>Always</strong> apply T<sub>Kelvin</sub>&nbsp;=&nbsp;T<sub>°C</sub>&nbsp;−&nbsp;T<sub>0</sub> (= T<sub>°C</sub>&nbsp;+&nbsp;273.15) before raising to the fourth power. This is why PowerPy stores °C but converts to Kelvin inside the balance.</p>
+</div>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — forgetting that a failed cell's negative P<sub>elec</sub> ADDS heat <span class="badge hot">EXAM-HOT</span></span>
+<p>In the front-node equation P<sub>elec</sub> is <em>subtracted</em>, which for a healthy cell correctly removes heat. But a reverse-biased failed cell (Section&nbsp;6) has <strong>negative</strong> P<sub>elec</sub>. Subtracting a negative <em>adds</em>: the term flips from cooling to heating, and the failed cell becomes a heat source in the balance. Forget this sign and you will predict a failed cell <em>cooling</em> the panel, when it is in fact the hot-spot melting it. The same equation describes both regimes — only the sign of P<sub>elec</sub> changes.</p>
+</div>
+
+<h4>7.13 Practice</h4>
+
+<div class="practice">
+<span class="lbl">Practice 7-1 — equilibrium T for a different α/ε</span>
+<p>A surface has solar absorptivity α&nbsp;=&nbsp;0.30 and emissivity ε&nbsp;=&nbsp;0.80, in full AM0 sun (S&nbsp;=&nbsp;1367&nbsp;W/m²). Ignore albedo, IR, conduction and electrical power. &nbsp;(a) Using T = (S/σ)<sup>1/4</sup>·(α/ε)<sup>1/4</sup> with (S/σ)<sup>1/4</sup>&nbsp;=&nbsp;394.1&nbsp;K, find the equilibrium temperature in K and °C. &nbsp;(b) Is this surface hotter or cooler than the α=0.9, ε=0.85 panel of Worked&nbsp;7A, and in one sentence say why in terms of the α/ε ratio. &nbsp;(c) What kind of coating (sun-reflecting or sun-absorbing?) gives this low α/ε, and why would you put it on a radiator panel?</p>
+<div class="answerspace lines-7"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 7-2 — compute C from a substrate file</span>
+<p>A substrate JSON lists <code>conductivity</code>&nbsp;=&nbsp;25&nbsp;W/m·K and <code>thickness</code>&nbsp;=&nbsp;0.005&nbsp;m. &nbsp;(a) Compute the conduction coefficient C that <code>prepareParameters()</code> would store, with units. &nbsp;(b) Compared with the SRP MSRO Case&nbsp;2 board (C&nbsp;=&nbsp;1000&nbsp;W/m²K), does this board tie its front and rear faces <em>more</em> or <em>less</em> tightly together in temperature? &nbsp;(c) In one line, which file and which function pair are responsible for supplying these numbers to the model?</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 7-3 — what happens to T entering eclipse</span>
+<p>A satellite passes from sunlight into the planet's umbra. &nbsp;(a) In the front-node energy balance, which single input term goes to zero the instant the satellite is fully eclipsed, and what does that do to the balance? &nbsp;(b) Explain in two or three sentences why the panel temperature then <em>falls</em>, referring to the Stefan–Boltzmann radiation term and the fact that it keeps glowing even with no Sun. &nbsp;(c) Why does this make temperature a <em>time series</em> rather than a single number, and what does the array's electrical output do during eclipse?</p>
+<div class="answerspace lines-7"></div>
+</div>
+
+<hr class="sep">
+<p class="small">Looking ahead: §7 modelled heat for one item at one instant — a coupled, nonlinear balance solved by <code>fsolve</code>, wrapped in a Nelder–Mead electro-thermal iteration, repeated cell-by-cell and instant-by-instant around the orbit. Every one of those loops is a place Chapter&nbsp;2 speeds up: the per-cell thermal solve and the electro-thermal iteration both become a single <em>vectorized</em> calculation over all cells at once, and the poliastro/astropy eclipse machinery is replaced by the maintained <code>hapsira</code> library that also delivers albedo and IR properly. Same physics — built to run fast.</p>

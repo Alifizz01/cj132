@@ -1,0 +1,906 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>PowerPy — Plain-Language Companion · Chapter 3</title>
+<link rel="stylesheet" href="print-base.css">
+<link rel="stylesheet" href="design.css">
+<style>
+/* a few gentle extras just for this plain-language companion */
+.analogy{ background:#eef6f1; border-left:4px solid #2f8f6b; border-radius:6px; padding:.7em 1em; margin:.9em 0; }
+.analogy .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#2f8f6b; }
+.bridge{ background:#fff7ec; border:1px dashed #d8b46a; border-radius:6px; padding:.6em 1em; margin:.9em 0; font-size:10pt; }
+.bridge .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.25em; color:#a9772a; }
+.twocol{ display:flex; gap:5mm; } .twocol > div{ flex:1; }
+.bigq{ font-family:"Segoe UI",sans-serif; color:#0b3d63; font-weight:700; font-size:11pt; margin:.2em 0 .3em; }
+.mini{ font-size:9.2pt; color:#5d6b79; }
+.recap{ background:#f3f6fa; border:1px solid #d6dde4; border-radius:6px; padding:.6em 1em; margin:1em 0; }
+.recap .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#0b3d63; }
+</style>
+</head><body>
+
+<section class="chapter-opener">
+<div class="booktitle">PowerPy · A Solar-Array Engineer's Handbook</div>
+<h1>Chapter 3<br>Explain It Like I'm New</h1>
+<div class="subtitle">The same ideas as Chapter 2 — reverse bias, hot-spots, "no iteration", vectorising,
+Newton's method, Monte-Carlo, the two-node heat model, fluxes and albedo — but built from zero, with
+everyday pictures and a long ladder of small questions before every hard one.</div>
+<p class="lede">You said you understood about 40% of the implementation notes. That's not a you-problem —
+Chapter 2 assumed you already spoke "engineer". This chapter assumes you speak <em>nothing</em>. We
+start from "what is electricity even doing here", and we never take a step without a picture you
+already have in your head: water pipes, a tug-of-war, a bathtub, a thermostat, a game of hot-and-cold.
+Every hard idea is broken into the smallest pieces that still make sense, and every "why" question is
+the <em>top</em> of a ladder — we ask the baby questions first.</p>
+<p>Read this one first. Then Chapter 2 will read like a recap instead of a wall.</p>
+<div class="meta">Generated for izzuwan · Plain-language companion to <code>Chapter2_New_Implementation.pdf</code>.
+No prior engineering assumed. Print on A4.</div>
+</section>
+
+<section class="toc"><h2>Contents</h2><ol>
+<li><strong>Words you need first</strong> — said in kitchen English</li>
+<li><span class="sec-num">1</span> Electricity as water (volts, amps, watts)</li>
+<li><span class="sec-num">2</span> A solar cell, and what "failing" means</li>
+<li><span class="sec-num">3</span> Series &amp; parallel — cells working as a team</li>
+<li><span class="sec-num">4</span> Reverse bias — how a dead cell becomes a heater</li>
+<li><span class="sec-num">5</span> Hot-spots — why a heater can melt the panel</li>
+<li><span class="sec-num">6</span> Heat as a bathtub — energy in, energy out</li>
+<li><span class="sec-num">7</span> Two temperatures — the front/rear model</li>
+<li><span class="sec-num">8</span> The chicken-and-egg — why we must "solve", not just compute</li>
+<li><span class="sec-num">9</span> Newton's method — clever guessing</li>
+<li><span class="sec-num">10</span> "No iteration" &amp; vectorising — the part that confused you</li>
+<li><span class="sec-num">11</span> Electro-thermal coupling — the thermostat loop</li>
+<li><span class="sec-num">12</span> Monte-Carlo — answering with dice</li>
+<li><span class="sec-num">13</span> Sun, earthshine &amp; albedo — the fluxes</li>
+<li><strong>Glossary</strong> · <strong>Worked solutions</strong></li>
+</ol></section>
+
+<!-- ====================================================== WORDS FIRST -->
+<section class="page-break sec">
+<h2>Words You Need First</h2>
+<p class="lede">Meet these once, in plain words. Every one is explained properly later — this is just
+so no sentence ahead of you contains a word that's still fog. They're all in the Glossary too.</p>
+
+<div class="term"><span class="lbl">Voltage (volts, V)</span> The <em>push</em>. How hard the electricity is being shoved.
+Think water pressure. Higher voltage = harder shove.</div>
+<div class="term"><span class="lbl">Current (amps, A)</span> The <em>flow</em>. How much electricity is actually moving past a point each
+second. Think litres of water per second through a pipe.</div>
+<div class="term"><span class="lbl">Power (watts, W)</span> How much <em>work per second</em> is being done. Power = push × flow =
+volts × amps. A 10&nbsp;W bulb turns 10 joules of energy into light+heat every second.</div>
+<div class="term"><span class="lbl">Solar cell</span> A flat wafer that turns sunlight into electricity. One cell makes a small push
+(a couple of volts). We wire many together to get a useful amount.</div>
+<div class="term"><span class="lbl">Series</span> Devices connected in a <em>line</em>, one after another, so the same flow goes through
+all of them and their pushes add up. (Cells in series → more volts.)</div>
+<div class="term"><span class="lbl">Parallel</span> Devices connected <em>side by side</em>, sharing the same two end-points, so their flows
+add up but the push stays the same. (Cells in parallel → more amps.)</div>
+<div class="term"><span class="lbl">Bias</span> Which way the voltage is pushing a device. <em>Forward</em> bias = pushed the way it likes
+(it makes power). <em>Reverse</em> bias = pushed backwards (bad — it eats power as heat).</div>
+<div class="term"><span class="lbl">Hot-spot</span> One small place that gets dangerously hotter than everything around it. A failed
+cell being pushed backwards becomes a hot-spot.</div>
+<div class="term"><span class="lbl">Substrate</span> The board the cells are glued to. Here it's an aluminium honeycomb panel — light and
+stiff, but it softens and melts if a hot-spot cooks it.</div>
+<div class="term"><span class="lbl">Flux</span> Just "how much energy per second lands on each square metre" of a surface. Sunlight is a
+flux; the Earth glowing below you is another flux.</div>
+<div class="term"><span class="lbl">Albedo</span> The fraction of sunlight a planet <em>bounces back</em>. Earth's albedo ≈ 0.3 → about 30% of
+the sun hitting Earth reflects back up and can warm your panel from below.</div>
+<div class="term"><span class="lbl">Iterate / iteration</span> To repeat a step over and over. Two very different meanings hide in this
+word — Section 10 untangles them, because that's exactly what tripped you up.</div>
+<div class="term"><span class="lbl">Vectorise</span> To do the same sum on a whole list of numbers in one fast go, instead of looping
+through them one at a time. Section 10.</div>
+</section>
+
+<!-- ====================================================== 1 WATER -->
+<section class="page-break sec">
+<h2><span class="sec-num">1</span>Electricity as Water</h2>
+<p class="lede">Almost every confusing thing later is really a statement about electricity. If you carry one
+picture the whole way, carry this one: <strong>electricity is water in pipes.</strong></p>
+
+<div class="analogy"><span class="lbl">The picture</span>
+<strong>Voltage = water pressure</strong> (how hard it's pushed). <strong>Current = flow rate</strong> (how much
+moves per second). <strong>Power = pressure × flow</strong> (how much actual work the water can do — spin a
+wheel, lift a bucket). A tall water tower gives high pressure (voltage); a fat open pipe gives high flow
+(current). To get a lot of work done you want both.</div>
+
+<figure class="fig-frame"><svg width="430" height="180" viewBox="0 0 430 180" xmlns="http://www.w3.org/2000/svg">
+<rect x="20" y="20" width="40" height="90" fill="#bcd6ef" stroke="#0b3d63"/>
+<text x="40" y="15" font-size="9" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">tank</text>
+<text x="40" y="128" font-size="8" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">height = voltage (push)</text>
+<rect x="60" y="95" width="300" height="14" fill="#bcd6ef" stroke="#0b3d63"/>
+<polygon points="360,95 380,102 360,109" fill="#0b3d63"/>
+<text x="210" y="125" font-size="8" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">pipe thickness ↔ how much flows = current</text>
+<circle cx="395" cy="102" r="16" fill="none" stroke="#b9851a" stroke-width="2"/>
+<line x1="395" y1="86" x2="395" y2="118" stroke="#b9851a"/><line x1="379" y1="102" x2="411" y2="102" stroke="#b9851a"/>
+<text x="395" y="140" font-size="8" text-anchor="middle" fill="#b9851a" font-family="Segoe UI">wheel = the work (power)</text>
+</svg><figcaption>Voltage is the height that pushes the water; current is how much actually flows; power is
+the wheel it can turn. Power = voltage × current.</figcaption></figure>
+
+<div class="formula">Power&nbsp; <var>P</var> = <var>V</var> × <var>I</var>
+<div class="where"><var>P</var> = power in watts (W) · <var>V</var> = voltage in volts (V) · <var>I</var> = current in amps (A)</div></div>
+
+<div class="worked"><span class="lbl">Worked example — a single cell making power</span>
+<div class="step">A healthy cell pushes at <var>V</var> = 2.3&nbsp;V and flows <var>I</var> = 0.48&nbsp;A.</div>
+<div class="step">Power = 2.3 × 0.48 = <strong>1.1&nbsp;W</strong>. So this one cell delivers about 1.1 joules of energy every second. </div>
+<div class="check">Check: both numbers are positive (push and flow point the same way), so the power is
+<em>positive</em> — the cell is a <em>giver</em> of energy. Good. Remember the sign; in Section 4 it flips.</div></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · getting the three words solid</div>
+<div class="socratic"><div class="q">Q1. If voltage is "push" and current is "flow", which one is litres-per-second?</div>
+<div class="answer">Current. Flow = how much moves per second = amps. Voltage is the pressure behind it.</div></div>
+<div class="socratic"><div class="q">Q2. I double the voltage but the current stays the same. What happens to the power?</div>
+<div class="answer">Power = V × I, so doubling V doubles the power. Twice the push, same flow → twice the work.</div></div>
+<div class="socratic"><div class="q">Q3. A device has lots of voltage across it but <em>zero</em> current flowing. How much power?</div>
+<div class="answer">Zero. P = V × 0 = 0. A pressure with nothing flowing does no work — like a capped pipe under
+pressure: nothing moves, nothing gets done.</div></div>
+<div class="socratic"><div class="q">Q4. Now the hard one: the voltage across a device is <em>negative</em> (pushing backwards) while current
+still flows forward. Is the device giving power or eating it?</div>
+<div class="answer">Eating it. P = V × I with V negative gives a negative number. Negative "given" power means it's
+actually <em>absorbing</em> energy — taking energy out of the circuit and turning it into heat. Hold this
+thought: it is the whole reason a dead solar cell becomes a heater (Section 4).</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 1</span> A cell runs at <var>V</var> = 2.0&nbsp;V and <var>I</var> = 0.50&nbsp;A.
+(a) What is its power? (b) Is it giving or eating energy?
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ====================================================== 2 SOLAR CELL -->
+<section class="page-break sec">
+<h2><span class="sec-num">2</span>A Solar Cell, and What "Failing" Means</h2>
+<p class="lede">A solar cell is a one-way energy door. Light comes in; electricity comes out. To use it we
+must know two things: how it behaves when healthy, and what "failed" actually does to it.</p>
+
+<div class="term"><span class="lbl">Solar cell</span> A flat wafer that, when light hits it, pushes electricity out one
+terminal and pulls it in the other. One of these triple-junction space cells pushes about 2.3–2.6&nbsp;V.
+On its own that's tiny — a single AA battery is 1.5&nbsp;V — so we wire many together (Section 3).</div>
+
+<div class="analogy"><span class="lbl">The picture</span> Think of each cell as one person on a rowing team. Healthy, they pull their
+oar and add to the boat's speed. But a cell can <em>fail</em>: crack from a micro-meteorite, lose its
+connection, or just die of old radiation damage. A failed cell is a rower who has stopped pulling. The
+problem isn't only that the boat loses one rower — it's what happens when the <em>others keep pulling and
+drag the dead one along backwards</em>. That backward drag is the villain of this whole story.</div>
+
+<div class="bridge"><span class="lbl">Why we care</span> A satellite can't be repaired. So before launch we want to predict:
+if a cell dies <em>here</em> versus <em>there</em>, how bad is it? Does it just lose a little power, or does it cook a
+hole in the panel? That prediction is what the whole new code is for.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · what "healthy" and "failed" mean</div>
+<div class="socratic"><div class="q">Q1. A healthy cell in sunlight — is it <em>giving</em> energy to the circuit or <em>taking</em> it?</div>
+<div class="answer">Giving. Light energy goes in, electrical energy comes out. Its power (V × I) is positive.</div></div>
+<div class="socratic"><div class="q">Q2. A cell "fails open" (its wire breaks). Can current still flow <em>through</em> it?</div>
+<div class="answer">No — an open wire is a cut pipe. No path, no flow. But the cells <em>around</em> it are still
+pushing, and that push has to go somewhere…</div></div>
+<div class="socratic"><div class="q">Q3. A cell sits in the shade while its neighbours are in full sun. It can't make its own push.
+What do the bright neighbours do to it?</div>
+<div class="answer">They push current <em>through</em> it the wrong way — backwards. The shaded/dead cell becomes a
+roadblock the others shove against. We'll see in Section 4 that "shoved backwards" = reverse bias = heat.</div></div>
+<div class="socratic"><div class="q">Q4. So which is worse for the panel: a cell that makes <em>less</em> power, or a cell that gets <em>pushed
+backwards</em>?</div>
+<div class="answer">Pushed backwards, by far. Less power is just a smaller giver. Pushed backwards turns the cell
+from a giver into an <em>eater</em> — and everything it eats becomes heat in one tiny spot. That's the hot-spot.</div></div>
+</div>
+</section>
+
+<!-- ====================================================== 3 SERIES PARALLEL -->
+<section class="page-break sec">
+<h2><span class="sec-num">3</span>Series &amp; Parallel — Cells Working as a Team</h2>
+<p class="lede">One cell is too weak. So we connect many. There are exactly two ways to connect them, and
+the difference between them is the difference between "add the push" and "add the flow".</p>
+
+<figure class="fig-frame"><svg width="440" height="180" viewBox="0 0 440 180" xmlns="http://www.w3.org/2000/svg">
+<text x="110" y="16" font-size="10" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI" font-weight="bold">SERIES (in a line)</text>
+<g transform="translate(20,30)">
+<rect x="0" y="20" width="34" height="22" fill="#cfe3f6" stroke="#0b3d63"/><rect x="50" y="20" width="34" height="22" fill="#cfe3f6" stroke="#0b3d63"/><rect x="100" y="20" width="34" height="22" fill="#cfe3f6" stroke="#0b3d63"/>
+<line x1="34" y1="31" x2="50" y2="31" stroke="#0b3d63"/><line x1="84" y1="31" x2="100" y2="31" stroke="#0b3d63"/>
+<text x="67" y="64" font-size="8" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">same flow through all · pushes ADD</text>
+<text x="67" y="78" font-size="9" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI">2.3 + 2.3 + 2.3 = 6.9 V</text>
+</g>
+<line x1="225" y1="20" x2="225" y2="160" stroke="#d6dde4"/>
+<text x="335" y="16" font-size="10" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI" font-weight="bold">PARALLEL (side by side)</text>
+<g transform="translate(255,28)">
+<line x1="0" y1="10" x2="150" y2="10" stroke="#0b3d63"/><line x1="0" y1="90" x2="150" y2="90" stroke="#0b3d63"/>
+<rect x="20" y="34" width="34" height="22" fill="#cfe3f6" stroke="#0b3d63"/><rect x="95" y="34" width="34" height="22" fill="#cfe3f6" stroke="#0b3d63"/>
+<line x1="37" y1="10" x2="37" y2="34" stroke="#0b3d63"/><line x1="37" y1="56" x2="37" y2="90" stroke="#0b3d63"/>
+<line x1="112" y1="10" x2="112" y2="34" stroke="#0b3d63"/><line x1="112" y1="56" x2="112" y2="90" stroke="#0b3d63"/>
+<text x="75" y="112" font-size="8" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">same push · flows ADD</text>
+<text x="75" y="126" font-size="9" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI">0.48 + 0.48 = 0.96 A</text>
+</g>
+</svg><figcaption>Series stacks the voltage (more push, same flow). Parallel stacks the current (more flow,
+same push). Our array does both: cells in series make a line; lines in parallel make a module.</figcaption></figure>
+
+<div class="analogy"><span class="lbl">The picture</span> <strong>Series</strong> = people standing in a line, each pushing the
+person in front. One person's shove plus the next plus the next — the pushes <em>add up</em>, but the same
+single line of motion runs through everyone. <strong>Parallel</strong> = several people pushing the same heavy
+cart side-by-side. They all push at the same one "pressure", but together they move <em>more cart per
+second</em> — the flows add.</div>
+
+<div class="keyidea"><span class="lbl">Remember</span> <strong>Series adds voltage. Parallel adds current.</strong> That's the entire
+electrical rule of this chapter. Everything the <code>Circuit</code> class does is repeat this rule at four
+levels: cells→line (series), lines→module (parallel), modules→block (series), blocks→array (parallel).</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · build up to "why one dead cell hurts a whole line"</div>
+<div class="socratic"><div class="q">Q1. Ten cells in series, each pushing 2.3&nbsp;V. Total push?</div>
+<div class="answer">10 × 2.3 = 23&nbsp;V. Series adds the voltages.</div></div>
+<div class="socratic"><div class="q">Q2. In that line of ten, how much current flows through cell #1 versus cell #7?</div>
+<div class="answer">Exactly the same. In a series line there is only one path, so one single current runs through
+every cell. (This is the key fact for the next rung.)</div></div>
+<div class="socratic"><div class="q">Q3. Cell #7 dies and stops making its push, but the other nine are still pushing 2.3&nbsp;V each. The
+current still wants to flow through the whole line (Q2). What must happen at cell #7?</div>
+<div class="answer">The nine live cells force the line's current <em>through</em> the dead cell #7. But #7 isn't pushing
+that way anymore — so the current is being shoved through it backwards. #7 is now reverse-biased.</div></div>
+<div class="socratic"><div class="q">Q4. The nine good cells together push about 9 × 2.3 ≈ 21&nbsp;V. If almost all of that lands across the
+one dead cell, what is the voltage across cell #7 — and which sign?</div>
+<div class="answer">Around <strong>−20&nbsp;V</strong> (negative = backwards). One little cell now has the whole line's push
+dumped across it, the wrong way. Next section: that negative voltage, times the current still flowing,
+is a big <em>negative</em> power — i.e. a big heater.</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 2</span> A "module" is 2 lines in parallel; each line is 5 cells in series at 2.3&nbsp;V
+and 0.48&nbsp;A per cell. (a) Voltage of one line? (b) Voltage of the module? (c) Current of the module?
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ====================================================== 4 REVERSE BIAS -->
+<section class="page-break sec">
+<h2><span class="sec-num">4</span>Reverse Bias — How a Dead Cell Becomes a Heater</h2>
+<p class="lede">This is the heart of the whole project, and it's just the sign-flip from Section 1 made real.
+Let's earn it slowly.</p>
+
+<div class="term"><span class="lbl">Reverse bias</span> A device is reverse-biased when the voltage across it points the
+<em>opposite</em> way to the direction it normally pushes. For a solar cell, forward = "making power"; reverse
+= "having power forced into it". Same word "bias" you met up front — it just means "which way it's pushed".</div>
+
+<figure class="fig-frame"><svg width="440" height="150" viewBox="0 0 440 150" xmlns="http://www.w3.org/2000/svg">
+<text x="220" y="16" font-size="9" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">A line of cells — one is dead</text>
+<g transform="translate(20,40)">
+<rect x="0" y="20" width="40" height="26" fill="#cfe3f6" stroke="#0b3d63"/><text x="20" y="37" font-size="8" text-anchor="middle">+</text>
+<rect x="60" y="20" width="40" height="26" fill="#cfe3f6" stroke="#0b3d63"/><text x="80" y="37" font-size="8" text-anchor="middle">+</text>
+<rect x="120" y="20" width="40" height="26" fill="#9a3b3b" stroke="#5a1f1f"/><text x="140" y="38" font-size="9" fill="#fff" text-anchor="middle">DEAD</text>
+<rect x="180" y="20" width="40" height="26" fill="#cfe3f6" stroke="#0b3d63"/><text x="200" y="37" font-size="8" text-anchor="middle">+</text>
+<rect x="240" y="20" width="40" height="26" fill="#cfe3f6" stroke="#0b3d63"/><text x="260" y="37" font-size="8" text-anchor="middle">+</text>
+<line x1="40" y1="33" x2="60" y2="33" stroke="#0b3d63"/><line x1="100" y1="33" x2="120" y2="33" stroke="#0b3d63"/>
+<line x1="160" y1="33" x2="180" y2="33" stroke="#0b3d63"/><line x1="220" y1="33" x2="240" y2="33" stroke="#0b3d63"/>
+<polygon points="295,28 320,33 295,38" fill="#b9851a"/><text x="300" y="20" font-size="8" fill="#b9851a" font-family="Segoe UI">current still flows →</text>
+<text x="140" y="74" font-size="8.5" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI">≈ −20 V forced across the dead cell, backwards</text>
+<text x="140" y="88" font-size="9" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI" font-weight="bold">P = (−20 V) × (0.48 A) ≈ −9.6 W → 9.6 W of HEAT here</text>
+</g>
+</svg><figcaption>The live cells push the line current through the dead cell backwards. Negative voltage ×
+forward current = a big negative power: ~9.6 W dumped as heat in one cell-sized spot.</figcaption></figure>
+
+<div class="worked"><span class="lbl">Worked example — the cell turns from giver to heater</span>
+<div class="step"><strong>Healthy:</strong> V = +2.3&nbsp;V, I = 0.48&nbsp;A → P = +1.1&nbsp;W. Positive = it <em>gives</em> 1.1&nbsp;W to the circuit. Light in, electricity out.</div>
+<div class="step"><strong>Dead &amp; reverse-biased:</strong> the line forces V = −20&nbsp;V across it while I = 0.48&nbsp;A still flows.</div>
+<div class="step">P = (−20) × (0.48) = <strong>−9.6&nbsp;W</strong>.</div>
+<div class="step">The minus sign means it is no longer giving — it is <em>absorbing</em> 9.6&nbsp;W. Energy can't vanish, so where does it go? Into <strong>heat</strong>, right there in the wafer.</div>
+<div class="check">Check the size: 9.6&nbsp;W in a thumbnail-sized cell is like pressing a 10&nbsp;W soldering-iron tip
+onto the panel and leaving it. That is exactly why it can melt things.</div></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · from "negative number" to "physical heater"</div>
+<div class="socratic"><div class="q">Q1. Power came out negative. Numbers don't burn anything — what does a negative power physically mean?</div>
+<div class="answer">Our sign convention is "positive = the cell gives energy out". So negative = the cell <em>receives</em>
+energy from the rest of the circuit instead of giving it.</div></div>
+<div class="socratic"><div class="q">Q2. The cell receives 9.6&nbsp;W of electrical energy every second. It isn't storing it (it's not a
+battery) and it isn't making light. By conservation of energy, where must it go?</div>
+<div class="answer">It must come back out as some other form. The only option for a resistor-like lump of silicon is
+<strong>heat</strong>. Electrical energy in with nowhere to go → temperature up.</div></div>
+<div class="socratic"><div class="q">Q3. Why is reverse-bias heat so much worse than the cell simply making 1.1&nbsp;W less?</div>
+<div class="answer">Two reasons. (1) The <em>magnitude</em>: −9.6&nbsp;W is nearly 9× bigger than the 1.1&nbsp;W it used to give. (2)
+The <em>concentration</em>: a whole line's worth of energy is dumped into one cell-sized spot instead of spread
+out. Big energy, tiny area = very high temperature.</div></div>
+<div class="socratic"><div class="q">Q4. The reverse voltage was about −20&nbsp;V. Where did that exact number come from?</div>
+<div class="answer">From Section 3, Q4: the other ~9 live cells in the line each push ~2.3&nbsp;V, and with the dead cell
+being the only "gap", nearly the whole stacked push (≈21&nbsp;V) lands across it. More cells in the line →
+more reverse voltage available → a worse hot-spot. <em>That's a layout lever we can design with.</em></div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 3</span> A dead cell is forced to −15&nbsp;V while 0.50&nbsp;A flows through it.
+(a) Its power? (b) Is it giving or absorbing? (c) How many watts of heat does it produce?
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ====================================================== 5 HOTSPOT -->
+<section class="page-break sec">
+<h2><span class="sec-num">5</span>Hot-Spots — Why a Heater Can Melt the Panel</h2>
+<p class="lede">We now have a 9.6&nbsp;W heater stuck on the back of a satellite. Why is that a catastrophe and not
+just a warm patch? Because of <em>where</em> the heat is and what it's sitting on.</p>
+
+<div class="term"><span class="lbl">Honeycomb substrate</span> The cells are glued onto a panel built like a honeycomb of thin
+aluminium walls sandwiched between two skins — incredibly light and stiff, which is why spacecraft use it.
+But aluminium softens around 400–600&nbsp;°C and the glue/adhesive gives up far sooner. Concentrate enough
+heat and you get a melted pit, a delaminated cell, even a hole.</div>
+
+<div class="analogy"><span class="lbl">The picture</span> Spreading 9.6&nbsp;W over a whole dinner plate barely warms it. Putting
+the same 9.6&nbsp;W under a single coin makes that coin scorching. The reverse-biased cell is the coin: small
+area, big power, and in space there's no air to carry the heat away — it can only radiate. So the
+temperature climbs until the cell glows enough to shed 9.6&nbsp;W. In the model, that lands near
+<strong>187&nbsp;°C</strong> — hot enough to threaten the adhesive and the honeycomb.</div>
+
+<div class="recap"><span class="lbl">Where we are</span> Dead cell → forced backwards (reverse bias, Section 4) → absorbs
+~9.6&nbsp;W → all of it becomes heat in a tiny spot (this section) → temperature soars → can melt the
+honeycomb. The rest of the chapter is about <em>predicting that temperature number</em>, because the temperature
+is what tells us "safe" vs "melted".</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · why "watts" alone don't tell you if it melts</div>
+<div class="socratic"><div class="q">Q1. Two heaters both dump 9.6&nbsp;W. One is spread over 1&nbsp;m², the other over 1&nbsp;cm². Which gets hotter?</div>
+<div class="answer">The 1&nbsp;cm² one, dramatically. Same total power, far less area to get rid of it through → it must
+reach a much higher temperature to shed the same energy.</div></div>
+<div class="socratic"><div class="q">Q2. On Earth a hot panel is cooled by air blowing past. In orbit there's no air. So how does a cell in
+space get rid of heat at all?</div>
+<div class="answer">Only by <em>radiating</em> — glowing it away as infrared light. No conduction to air, no convection. This
+is slow, so the cell has to get quite hot before it can radiate the heat away as fast as it's made.</div></div>
+<div class="socratic"><div class="q">Q3. Why does "it can only radiate" make the temperature go <em>up</em>?</div>
+<div class="answer">Because radiating faster requires being hotter (hot things glow more — Section 6). The cell heats up
+until its glow finally carries away 9.6&nbsp;W per second. If that balance point is above the melt limit, the
+panel is damaged before it ever reaches balance.</div></div>
+<div class="socratic"><div class="q">Q4. So what's the single number that decides "safe" vs "melted"?</div>
+<div class="answer">The cell's <em>balance temperature</em> — the temperature at which heat-out equals heat-in. Compute it,
+compare it to the melt limit. Computing that number for every cell is exactly what the thermal solver does.</div></div>
+</div>
+</section>
+
+<!-- ====================================================== 6 BATHTUB -->
+<section class="page-break sec">
+<h2><span class="sec-num">6</span>Heat as a Bathtub — Energy In, Energy Out</h2>
+<p class="lede">To find that balance temperature we need one idea: <strong>in steady state, heat-in equals
+heat-out.</strong> The bathtub makes it obvious.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> A bathtub with the tap running and the drain open. If water pours in
+faster than it drains, the level rises. If it drains faster than it pours, the level falls. The level sits
+<em>still</em> only when in-rate = out-rate. Temperature is the water level. Heat flowing in (sunlight, the
+reverse-bias heat) is the tap. Heat radiated away is the drain. The cell's temperature climbs or falls
+until in = out, then holds. That holding value is the balance temperature.</div>
+
+<figure class="fig-frame"><svg width="360" height="170" viewBox="0 0 360 170" xmlns="http://www.w3.org/2000/svg">
+<line x1="120" y1="10" x2="120" y2="45" stroke="#0b3d63" stroke-width="3"/><line x1="120" y1="45" x2="150" y2="45" stroke="#0b3d63" stroke-width="3"/>
+<text x="100" y="22" font-size="8" fill="#0b3d63" font-family="Segoe UI">heat IN (tap)</text>
+<line x1="150" y1="48" x2="150" y2="58" stroke="#3b78c4" stroke-dasharray="2 2"/>
+<path d="M70 60 L70 140 L250 140 L250 60" fill="none" stroke="#0b3d63" stroke-width="2"/>
+<rect x="72" y="95" width="176" height="44" fill="#cfe3f6"/>
+<text x="160" y="120" font-size="9" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">level = temperature</text>
+<line x1="250" y1="120" x2="290" y2="120" stroke="#9a3b3b" stroke-width="3"/><polygon points="290,114 305,120 290,126" fill="#9a3b3b"/>
+<text x="300" y="112" font-size="8" fill="#9a3b3b" font-family="Segoe UI" text-anchor="end">heat OUT (drain = glow)</text>
+<text x="160" y="162" font-size="8.5" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">steady when tap-rate = drain-rate → that fixes the temperature</text>
+</svg><figcaption>Steady-state heat balance: temperature settles where heat-in equals heat-out, exactly like a
+tub level settling where tap-rate equals drain-rate.</figcaption></figure>
+
+<div class="term"><span class="lbl">The Stefan–Boltzmann law (the "drain")</span> A warm surface radiates heat away at a
+rate proportional to its temperature to the <em>fourth power</em>: <span class="eqn">heat-out ∝ T⁴</span>. The T⁴ is
+why the drain is a gentle trickle when cold and a torrent when hot — double the (absolute) temperature and
+the glow jumps 16-fold. <em>This</em> is the "hot things shed heat much faster" fact we kept leaning on.</div>
+
+<div class="formula">heat radiated per second = ε · σ · A · T⁴
+<div class="where">ε = emissivity (how good a glower the surface is, 0–1) · σ = a fixed constant of nature
+(5.67×10⁻⁸) · A = area · T = <em>absolute</em> temperature in kelvin (°C + 273.15)</div></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · the bathtub, then the T⁴ twist</div>
+<div class="socratic"><div class="q">Q1. Tap pours 5 litres/min, drain removes 5 litres/min. Is the level rising, falling, or still?</div>
+<div class="answer">Still. In equals out, so nothing changes. This "still" state is what we mean by steady state /
+equilibrium / balance.</div></div>
+<div class="socratic"><div class="q">Q2. Translate that to heat: what is true about heat-in and heat-out when the temperature has stopped
+changing?</div>
+<div class="answer">They're equal. Heat-in = heat-out. Solving the thermal problem just means: find the temperature
+that makes that equation true.</div></div>
+<div class="socratic"><div class="q">Q3. The drain depends on temperature (T⁴): hotter cell → faster drain. If we suddenly turn the tap up
+(more heat in), what does the cell do?</div>
+<div class="answer">It warms up — which speeds the drain — until the faster drain again matches the bigger tap. It
+finds a <em>new, higher</em> balance temperature. More heat in → hotter equilibrium.</div></div>
+<div class="socratic"><div class="q">Q4. Why is the T⁴ (not just T) actually good news for the cell's survival?</div>
+<div class="answer">Because the drain ramps up so steeply with temperature that even a big tap is matched without the
+temperature running away to infinity. A small temperature rise buys a large increase in heat shed. It's a
+self-limiting brake — the reason a 9.6&nbsp;W hot-spot lands at ~187&nbsp;°C and not 5000&nbsp;°C.</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 4</span> In words (no arithmetic): a cell is sitting at its balance temperature.
+You add a second, smaller heat source on it. Describe what happens to its temperature and why it doesn't
+rise forever.
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ====================================================== 7 TWO NODE -->
+<section class="page-break sec">
+<h2><span class="sec-num">7</span>Two Temperatures — the Front/Rear Model</h2>
+<p class="lede">A real cell-on-panel isn't one temperature — the sunlit <em>front</em> and the shaded <em>rear</em> differ.
+So the model tracks two temperatures and lets heat trickle between them. That's the "two-node" model.</p>
+
+<div class="term"><span class="lbl">Node</span> Just "a point we track a temperature at". Two nodes = two points: the front
+face (T₁) and the rear face (T₂). It's the simplest model richer than "one lump".</div>
+
+<div class="analogy"><span class="lbl">The picture</span> A house wall on a sunny day. The outside is hot, the inside is cooler,
+and heat seeps through the wall from hot side to cool side. Front face = outside (sun hits it, it glows to
+space). Rear face = inside (it glows toward Earth/space behind). The panel between them lets heat
+<em>conduct</em> through — fast if the panel conducts well, slow if it insulates.</div>
+
+<figure class="fig-frame"><svg width="400" height="170" viewBox="0 0 400 170" xmlns="http://www.w3.org/2000/svg">
+<text x="60" y="22" font-size="9" fill="#b9851a" font-family="Segoe UI">☀ sun in</text>
+<polygon points="55,28 95,28 80,52 70,52" fill="#f0c75a"/>
+<rect x="150" y="30" width="22" height="110" fill="#cfe3f6" stroke="#0b3d63"/><text x="161" y="158" font-size="8" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">FRONT T₁</text>
+<rect x="172" y="30" width="40" height="110" fill="#e9e2cf" stroke="#9a8a5a"/><text x="192" y="90" font-size="7.5" text-anchor="middle" fill="#7a6a3a" font-family="Segoe UI">panel</text>
+<rect x="212" y="30" width="22" height="110" fill="#cfe3f6" stroke="#0b3d63"/><text x="223" y="158" font-size="8" text-anchor="middle" fill="#0b3d63" font-family="Segoe UI">REAR T₂</text>
+<text x="192" y="22" font-size="7.5" text-anchor="middle" fill="#9a8a5a" font-family="Segoe UI">heat conducts →</text>
+<polygon points="178,80 200,76 200,84" fill="#9a3b3b"/>
+<line x1="150" y1="46" x2="120" y2="40" stroke="#9a3b3b"/><polygon points="120,36 108,40 120,44" fill="#9a3b3b"/><text x="108" y="34" font-size="7.5" fill="#9a3b3b" font-family="Segoe UI" text-anchor="end">front glows to space</text>
+<line x1="234" y1="100" x2="270" y2="106" stroke="#9a3b3b"/><polygon points="270,100 284,106 270,112" fill="#9a3b3b"/><text x="288" y="108" font-size="7.5" fill="#9a3b3b" font-family="Segoe UI">rear glows away</text>
+</svg><figcaption>Two nodes: a sunlit front (T₁) and a shaded rear (T₂), with heat conducting through the panel
+between them. Each face also glows its own heat to space.</figcaption></figure>
+
+<div class="bridge"><span class="lbl">Three taps and drains per face</span> For each face the bathtub gets a few inlets/outlets:
+sunlight + earthshine + the electrical/reverse-bias heat are taps; its own glow to space is a drain; and
+the conduction through the panel is a pipe connecting the two tubs. The model writes "in = out" for the
+front tub <em>and</em> "in = out" for the rear tub — two balance equations, two unknown temperatures.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · why two, and why they're linked</div>
+<div class="socratic"><div class="q">Q1. Why not just use one temperature for the whole cell?</div>
+<div class="answer">Because the two faces really do differ — the front bakes in sun while the rear faces cold space or
+a dim Earth. One number would hide a difference that matters for where the cell sits thermally.</div></div>
+<div class="socratic"><div class="q">Q2. Heat conducts through the panel from front to rear. Which direction does it flow — and what sets how
+fast?</div>
+<div class="answer">From the hotter face to the cooler one (heat always flows "downhill" in temperature). How fast =
+the panel's conductivity divided by its thickness; the code calls this <code>c_cond</code>. Thin, conductive
+panel → fast sharing → the two temperatures stay close.</div></div>
+<div class="socratic"><div class="q">Q3. If the panel conducted heat <em>perfectly</em>, what would happen to T₁ and T₂?</div>
+<div class="answer">They'd become equal — perfect sharing erases the difference, and the two-node model collapses back
+to one temperature. The two-node model matters precisely because real panels share heat imperfectly.</div></div>
+<div class="socratic"><div class="q">Q4. We now have two balance equations (front tub, rear tub) and two unknowns (T₁, T₂), and they're
+tangled together because the conduction term has both. Can we just solve T₁ first, then T₂?</div>
+<div class="answer">No — each equation contains <em>both</em> temperatures, so they must be solved <em>together</em>. And each
+equation has a T⁴ in it, so it's not a simple straight-line equation either. That "two tangled, curved
+equations at once" is what Newton's method (Section 9) is built to crack.</div></div>
+</div>
+</section>
+
+<!-- ====================================================== 8 CHICKEN EGG -->
+<section class="page-break sec">
+<h2><span class="sec-num">8</span>The Chicken-and-Egg — Why We "Solve" Instead of Just Computing</h2>
+<p class="lede">Here's the subtlety that makes this hard, and the reason a loop appears at all. The heat-out
+depends on the temperature — but the temperature is the very thing we're trying to find.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> Imagine a thermostat with no display. You want to know the room's
+final temperature, but the heater's output depends on the room temperature, which depends on the heater's
+output… You can't write the answer in one line because the unknown appears on <em>both</em> sides. You have to
+<em>hunt</em> for the value that's consistent with itself.</div>
+
+<div class="bigq">Why can't we just plug in numbers and get T?</div>
+<p>Because the balance equation looks like &nbsp;<span class="eqn">heat-in = ε·σ·A·<strong>T⁴</strong></span>. To get T out of
+T⁴ you'd take a fourth root — fine if heat-in were a fixed number. But heat-in <em>also</em> contains T (the
+conduction between faces depends on the temperatures, and the electrical heat depends on temperature too).
+So T is on both sides, wrapped inside a fourth power. There is no clean "T = …" you can write down. We must
+solve it numerically — guess, check, improve.</p>
+
+<div class="keyidea"><span class="lbl">This is the iteration you keep hearing about</span> "Iteration" here means: make a guess for
+T, see how wrong it is, nudge it, repeat until it stops changing. That repeating is unavoidable for a
+T-on-both-sides equation. <strong>Hold this thought</strong> — in Section 10 we'll separate this <em>good, necessary</em>
+iteration from the <em>bad, slow</em> kind that we deleted.</p></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · what "solve" even means</div>
+<div class="socratic"><div class="q">Q1. "Compute" vs "solve" — what's the difference?</div>
+<div class="answer">Computing is one-directional: inputs → formula → answer (like 2+2). Solving is for when the unknown
+appears on both sides, so you can't go straight through; you search for the value that makes the equation
+balance.</div></div>
+<div class="socratic"><div class="q">Q2. Why does T appearing on both sides force a search?</div>
+<div class="answer">Because you can't isolate it. Every attempt to move T to one side leaves another T (inside T⁴ or
+inside the conduction term) on the other. No rearrangement frees it, so we test candidate values instead.</div></div>
+<div class="socratic"><div class="q">Q3. A naive search: "try 20&nbsp;°C, too cold; try 200&nbsp;°C, too hot; try 100…". Would that work?</div>
+<div class="answer">Yes, eventually — that's just hot-and-cold guessing (bisection). It works but is slow. We'd like a
+smarter guesser that uses <em>how</em> wrong it was to jump near the answer. That smarter guesser is Newton's
+method.</div></div>
+<div class="socratic"><div class="q">Q4. So is the loop in our thermal solver a sign the code is inefficient?</div>
+<div class="answer">No! The loop is mathematically <em>required</em> by the T-on-both-sides equation; no amount of cleverness
+removes it. What we <em>can</em> remove is a <em>different</em> loop — the one that repeated this whole solve cell-by-cell
+in slow Python. That's the Section 10 distinction, and it's the one that confused you.</div></div>
+</div>
+</section>
+
+<!-- ====================================================== 9 NEWTON -->
+<section class="page-break sec">
+<h2><span class="sec-num">9</span>Newton's Method — Clever Guessing</h2>
+<p class="lede">Newton's method is just hot-and-cold guessing with a brain: instead of blindly halving, it uses
+the <em>slope</em> of the curve to leap almost straight to the answer.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> You're on a hillside in fog, trying to reach the valley floor (where
+the "wrongness" is zero). You can't see the bottom, but you can feel the slope under your feet. Newton's
+trick: look at the slope right where you stand, and step to where that straight slope would hit the floor.
+From there, feel the new slope, step again. For smooth curves you arrive in a handful of steps — the number
+of correct digits roughly <em>doubles</em> each step.</p></div>
+
+<figure class="fig-frame"><svg width="380" height="180" viewBox="0 0 380 180" xmlns="http://www.w3.org/2000/svg">
+<line x1="40" y1="150" x2="350" y2="150" stroke="#888"/><line x1="40" y1="20" x2="40" y2="150" stroke="#888"/>
+<text x="46" y="16" font-size="8" fill="#5d6b79" font-family="Segoe UI" text-anchor="start">wrongness</text>
+<text x="345" y="165" font-size="8" fill="#5d6b79" font-family="Segoe UI" text-anchor="end">guess for T →</text>
+<path d="M60 30 Q170 200 330 95" fill="none" stroke="#0b3d63" stroke-width="2"/>
+<line x1="40" y1="150" x2="350" y2="150" stroke="#9a3b3b" stroke-dasharray="3 3"/>
+<circle cx="95" cy="58" r="3" fill="#b9851a"/><text x="95" y="50" font-size="8" fill="#b9851a" text-anchor="middle">guess 1</text>
+<line x1="95" y1="58" x2="175" y2="150" stroke="#b9851a" stroke-dasharray="2 2"/>
+<circle cx="175" cy="150" r="3" fill="#b9851a"/><text x="175" y="166" font-size="8" fill="#b9851a" text-anchor="middle">guess 2</text>
+<circle cx="235" cy="120" r="3" fill="#2f8f6b"/><line x1="235" y1="120" x2="262" y2="150" stroke="#2f8f6b" stroke-dasharray="2 2"/>
+<circle cx="262" cy="150" r="3" fill="#2f8f6b"/><text x="262" y="166" font-size="8" fill="#2f8f6b" text-anchor="middle">guess 3 ≈ answer</text>
+</svg><figcaption>From each guess, follow the local slope (the tangent line) down to where it crosses zero —
+that's the next, much better guess. A few steps and the wrongness is essentially zero.</figcaption></figure>
+
+<div class="formula">next guess = this guess − (how wrong it is) ÷ (the slope here)
+<div class="where">"how wrong" = the residual <var>f</var>(T) (heat-in minus heat-out); "slope" = the derivative
+<var>f</var>′(T). Dividing by the slope is what turns a big error into the right-sized step.</div></div>
+
+<div class="worked"><span class="lbl">Worked example — feel one Newton step (find √10 by hand)</span>
+<div class="step">Same maths, friendlier numbers. We want T with T² = 10, i.e. drive f(T)=T²−10 to zero. Slope f′(T)=2T.</div>
+<div class="step">Guess T = 3. Wrongness f = 3²−10 = −1 (a bit low). Slope = 2·3 = 6.</div>
+<div class="step">Next = 3 − (−1)/6 = 3 + 0.1667 = <strong>3.1667</strong>.</div>
+<div class="step">Again: f = 3.1667²−10 = 0.0278; slope = 6.333; next = 3.1667 − 0.0278/6.333 = <strong>3.1623</strong>.</div>
+<div class="check">Check: real √10 = 3.16228. Two steps from a rough guess of 3 and we're correct to 5 digits.
+That doubling-of-accuracy is why the thermal solver needs only a handful of steps, not hundreds.</div></div>
+
+<div class="bridge"><span class="lbl">The 2-node twist</span> We have two unknowns (T₁, T₂), so "the slope" becomes a little 2×2
+table of slopes — the <em>Jacobian</em> (just "the slopes of two equations with respect to two unknowns"). The
+code writes that 2×2 by hand and inverts it with the schoolbook formula. Same idea, two dimensions.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · why the slope, and why it's fast</div>
+<div class="socratic"><div class="q">Q1. Why use the slope at all — why not just halve the interval each time (hot/cold)?</div>
+<div class="answer">The slope tells you not just <em>which way</em> you're wrong but roughly <em>how far</em>. Halving ignores the
+"how far" and creeps; the slope lets you leap close in one move.</div></div>
+<div class="socratic"><div class="q">Q2. In "step = wrongness ÷ slope", why divide by the slope?</div>
+<div class="answer">A steep slope means a small move in T changes the wrongness a lot → take a <em>small</em> step. A shallow
+slope means you must move <em>far</em> to fix the same error → big step. Dividing by the slope sizes the step
+automatically.</div></div>
+<div class="socratic"><div class="q">Q3. "The correct digits roughly double each step." Starting from 1 correct digit, how many steps to ~8
+correct digits?</div>
+<div class="answer">1 → 2 → 4 → 8: about three steps. That's why "max 50 iterations" in the code is wild
+over-provision — it almost always finishes in 4–6.</div></div>
+<div class="socratic"><div class="q">Q4. When could Newton misbehave?</div>
+<div class="answer">If the slope is near zero (a flat spot — you'd divide by almost nothing and leap wildly), or if the
+first guess is far off on a wiggly curve. Our heat curve is smooth and steep (thanks to T⁴), and we start
+from a sensible ~28&nbsp;°C, so it behaves. The code still guards the divide just in case.</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 5</span> Use one Newton step to improve a guess for √20. Start at T = 4.
+(f = T²−20, slope = 2T.) Show wrongness, slope, and the next guess.
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ====================================================== 10 NO ITERATION / VECTORISE -->
+<section class="page-break sec">
+<h2><span class="sec-num">10</span>"No Iteration" &amp; Vectorising — the Part That Confused You</h2>
+<p class="lede">You wrote: "I can barely understand why you said there is no iteration, and why we vectorise."
+Totally fair — the notes used "iteration" for two different things. Let's pull them apart cleanly.</p>
+
+<div class="pitfall"><span class="lbl">The trap — one word, two meanings</span>
+<strong>Meaning A — Newton iteration (KEPT):</strong> repeating "guess → correct → guess" until the temperature
+stops changing. This is the necessary math from Section 8. It stays.<br>
+<strong>Meaning B — the per-cell Python loop (REMOVED):</strong> the old code wrapped that whole solve in a slow
+Python <code>for</code>-loop that walked the cells <em>one at a time</em> — solve cell 1, then cell 2, then cell 3…
+<em>This</em> is the "iteration" we deleted. When the notes say "no iteration", they mean <em>this loop</em>, not
+Newton's.</div>
+
+<div class="analogy"><span class="lbl">The picture</span> 1000 exam papers to grade, each needing the same 3-step mark
+scheme. <strong>Old way (Python loop):</strong> one teacher picks up paper 1, does steps 1-2-3, puts it down,
+picks up paper 2… 1000 times. The <em>3 steps</em> are necessary (that's Newton). The <em>"one paper at a time by
+one slow teacher"</em> is the waste. <strong>New way (vectorise):</strong> hand the whole stack to a machine that
+applies step 1 to all 1000 papers at once, then step 2 to all 1000, then step 3. Same 3 steps — but done
+across the entire stack simultaneously. <strong>We didn't remove the steps; we removed the one-at-a-time
+queue.</strong></div>
+
+<figure class="fig-frame"><svg width="430" height="160" viewBox="0 0 430 160" xmlns="http://www.w3.org/2000/svg">
+<text x="105" y="14" font-size="9" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI" font-weight="bold">OLD — Python loop (slow)</text>
+<g font-family="Segoe UI" font-size="7.5" fill="#5d6b79">
+<rect x="20" y="26" width="22" height="16" fill="#f2d6d6" stroke="#9a3b3b"/><text x="31" y="38" text-anchor="middle">c1</text>
+<rect x="20" y="48" width="22" height="16" fill="#f2d6d6" stroke="#9a3b3b"/><text x="31" y="60" text-anchor="middle">c2</text>
+<rect x="20" y="70" width="22" height="16" fill="#f2d6d6" stroke="#9a3b3b"/><text x="31" y="82" text-anchor="middle">c3</text>
+<text x="31" y="104" text-anchor="middle">⋮</text>
+<text x="120" y="60" fill="#9a3b3b">solved one</text><text x="120" y="72" fill="#9a3b3b">after another</text>
+<text x="120" y="92" fill="#9a3b3b">→ N slow trips</text>
+</g>
+<line x1="215" y1="20" x2="215" y2="150" stroke="#d6dde4"/>
+<text x="320" y="14" font-size="9" text-anchor="middle" fill="#2f8f6b" font-family="Segoe UI" font-weight="bold">NEW — vectorised (fast)</text>
+<g font-family="Segoe UI" font-size="7.5">
+<rect x="250" y="30" width="120" height="58" fill="#e0f0e8" stroke="#2f8f6b"/>
+<text x="310" y="54" text-anchor="middle" fill="#2f8f6b">[c1 c2 c3 … cN]</text>
+<text x="310" y="70" text-anchor="middle" fill="#2f8f6b">all at once</text>
+<text x="310" y="110" text-anchor="middle" fill="#2f8f6b">one compiled step</text>
+<text x="310" y="122" text-anchor="middle" fill="#2f8f6b">over the whole array</text>
+</g>
+</svg><figcaption>Same Newton steps either way. The change is doing them across the whole array of cells in one
+compiled numpy operation, instead of looping cell-by-cell in slow Python.</figcaption></figure>
+
+<div class="term"><span class="lbl">Vectorise</span> Put all the cells' numbers into one array (a row of numbers), and apply each
+math step to the whole array at once using numpy — a library that does array arithmetic in fast compiled
+code. One instruction touches a thousand cells. The Python interpreter's slow per-item overhead is paid
+<em>once</em>, not a thousand times.</div>
+
+<div class="bridge"><span class="lbl">Why it's allowed here</span> Vectorising works because the cells are <em>independent</em>: in this
+two-node model there's no sideways heat flow from one cell to its neighbour (only front↔rear within a
+cell). So solving cell 57 doesn't need cell 56's answer — they can all be solved in parallel. If cells were
+coupled to each other, we couldn't just blast them all at once.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · separate the two "iterations", then see the speed-up</div>
+<div class="socratic"><div class="q">Q1. Name the two different things the word "iteration" was used for.</div>
+<div class="answer">(A) Newton's "guess-correct-repeat" until T settles — necessary, kept. (B) The Python for-loop that
+solved cells one-by-one — wasteful, removed. The notes' "no iteration" means (B).</div></div>
+<div class="socratic"><div class="q">Q2. Did vectorising change the physics or the answer?</div>
+<div class="answer">Not at all. Same equations, same Newton steps, same temperatures. Only the <em>bookkeeping</em> changed —
+all cells processed together instead of in a queue. It's a speed change, not a physics change.</div></div>
+<div class="socratic"><div class="q">Q3. Why is the Python one-at-a-time loop slow in the first place?</div>
+<div class="answer">Python checks types and manages each operation individually — fine once, but a huge tax when repeated
+a million times (N cells × many Newton steps). numpy hands the whole array to pre-compiled C that skips that
+per-item tax. Typical result: tens to hundreds of times faster.</div></div>
+<div class="socratic"><div class="q">Q4. Could we vectorise if each cell's temperature depended on its neighbours' temperatures?</div>
+<div class="answer">Not as simply — they'd be tangled together like T₁ and T₂ were, and you'd need to solve a big linked
+system, not N independent little ones. We get the easy win precisely because the model has <em>no</em>
+cell-to-cell heat conduction, so the cells are independent. That independence is the gift that makes
+"solve them all at once" correct.</div></div>
+<div class="socratic"><div class="q">Q5 (top rung). Put it in one sentence: what did we remove and what did we keep?</div>
+<div class="answer">We kept the <em>mathematically required</em> repeat-until-settled (Newton) and removed the <em>only-an-artifact-
+of-slow-code</em> cell-by-cell Python loop, by solving every cell's two-node balance simultaneously with numpy.
+"No iteration" = no slow per-cell loop, <em>not</em> "no Newton".</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 6</span> In your own words (3–4 sentences), explain to a friend the difference between the
+iteration we kept and the iteration we removed, and why removing one didn't change any temperature.
+<div class="answerspace lines-8"></div></div>
+</section>
+
+<!-- ====================================================== 11 COUPLING -->
+<section class="page-break sec">
+<h2><span class="sec-num">11</span>Electro-Thermal Coupling — the Thermostat Loop</h2>
+<p class="lede">One more loop, and it's a <em>different</em> chicken-and-egg from Section 8. Here the electricity and
+the temperature each depend on the other, so we bounce between them until they agree.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> A thermostat-and-heater pair settling down. The heater's output
+depends on the temperature; the temperature depends on the heater's output. You can't know either first —
+so the room <em>hunts</em>: heat a bit, temperature rises, heater eases, temperature settles… After a few swings
+it lands on the one state where both agree. Our cell does the same dance between <em>how much electrical heat
+it makes</em> and <em>how hot it is</em>.</div>
+
+<div class="bigq">Why does electricity depend on temperature, and vice-versa?</div>
+<p>A solar cell's voltage and current shift with temperature (hot cells push a little less). So the
+electrical heat it dumps depends on its temperature. But its temperature (Sections 6-7) depends on how much
+electrical heat it's dumping. Round and round. So we loop: guess a temperature → compute the electricity and
+its heat at that temperature → feed that heat into the thermal solver → get a new temperature → repeat until
+the temperature stops moving.</p>
+
+<div class="term"><span class="lbl">Fixed point</span> The state that maps to itself: put it in, run the model, get the same
+state back out. The loop is searching for that self-consistent "everybody agrees" temperature.</div>
+
+<div class="term"><span class="lbl">Damping (the <code>omega</code> knob)</span> Instead of jumping fully to each new guess (which can
+overshoot and oscillate), we move only <em>part</em> way — a blend of old and new. Like nudging a shower tap
+gently instead of slamming it hot-cold-hot. It trades a few extra loops for a calm, sure landing.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · the loop that makes two things agree</div>
+<div class="socratic"><div class="q">Q1. How is this loop different from the Newton loop in Section 9?</div>
+<div class="answer">Newton solves <em>one</em> equation (the heat balance) for temperature. This outer loop makes <em>two whole
+models</em> — the electrical one and the thermal one — agree with each other. It wraps <em>around</em> the thermal
+solve.</div></div>
+<div class="socratic"><div class="q">Q2. Why can't we compute the electricity once and be done?</div>
+<div class="answer">Because the electricity depends on temperature, and we don't know the final temperature until we
+know the electrical heat, which depends on temperature… the same both-sides knot as Section 8, now between
+two models. So we iterate them to agreement.</div></div>
+<div class="socratic"><div class="q">Q3. What does "the loop has converged" mean in plain words?</div>
+<div class="answer">The temperature came back essentially unchanged after another round (it moved less than a tiny
+tolerance). Both models now agree; nothing more will move; that's the answer.</div></div>
+<div class="socratic"><div class="q">Q4. Why bother damping (moving only part-way each round)? Wouldn't full jumps be faster?</div>
+<div class="answer">Full jumps can overshoot and bounce back and forth forever (hot, cold, hot, cold). A partial,
+blended move kills the bounce so it spirals calmly into the answer. A little slower per step, but it actually
+arrives — and reliably arriving beats fast-but-oscillating.</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 7</span> A colleague says "just compute the cell's power, then compute its temperature, done —
+why loop?" Write a two-sentence reply explaining the chicken-and-egg.
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ====================================================== 12 MONTE CARLO -->
+<section class="page-break sec">
+<h2><span class="sec-num">12</span>Monte-Carlo — Answering With Dice</h2>
+<p class="lede">We want to know which failures are dangerous. But the number of possible failure combinations is
+astronomically large — we can't try them all. So we <em>sample</em>: try many random ones and look at the spread.
+That's Monte-Carlo.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> You want the average height of everyone in a huge city. Measuring all
+million is impossible. So you measure a random few thousand and average them — close enough, and the more
+you measure the closer you get. Monte-Carlo is "ask a random sample instead of everyone." The name is a
+nod to the casino: we're literally rolling dice to pick which cells fail.</div>
+
+<div class="term"><span class="lbl">Monte-Carlo method</span> Estimate an answer about a huge set of possibilities by drawing
+many <em>random</em> samples from it and looking at the results, instead of enumerating every possibility. Here:
+randomly fail some cells, run the thermal model, record the worst temperature; repeat thousands of times;
+see which patterns tend to cook the panel.</div>
+
+<div class="bridge"><span class="lbl">Three ways to choose failures (the "three modes")</span>
+<strong>Position sweep:</strong> fail each single cell in turn — "if exactly this one dies, how bad?" (maps the map).
+<strong>Count sweep:</strong> fail a fixed <em>number</em> of random cells (2, 3, 4…) — "how bad when k cells die?".
+<strong>Random sampling:</strong> each cell fails with some probability — realistic mixed scenarios. Together they
+answer "where", "how many", and "realistically".</div>
+
+<figure class="fig-frame"><svg width="380" height="150" viewBox="0 0 380 150" xmlns="http://www.w3.org/2000/svg">
+<line x1="40" y1="120" x2="350" y2="120" stroke="#888"/><line x1="40" y1="20" x2="40" y2="120" stroke="#888"/>
+<text x="195" y="142" font-size="8" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">worst temperature reached →</text>
+<text x="30" y="24" font-size="8" text-anchor="end" fill="#5d6b79" font-family="Segoe UI"># runs</text>
+<g fill="#0b3d63">
+<rect x="60" y="100" width="18" height="20"/><rect x="80" y="80" width="18" height="40"/><rect x="100" y="55" width="18" height="65"/>
+<rect x="120" y="45" width="18" height="75"/><rect x="140" y="60" width="18" height="60"/><rect x="160" y="85" width="18" height="35"/>
+<rect x="180" y="100" width="18" height="20"/></g>
+<g fill="#9a3b3b">
+<rect x="250" y="112" width="18" height="8"/><rect x="270" y="106" width="18" height="14"/><rect x="290" y="112" width="18" height="8"/></g>
+<text x="300" y="100" font-size="7.5" fill="#9a3b3b" font-family="Segoe UI" text-anchor="middle">rare,</text>
+<text x="300" y="110" font-size="7.5" fill="#9a3b3b" font-family="Segoe UI" text-anchor="middle">dangerous tail</text>
+</svg><figcaption>Each random failure pattern gives one "worst temperature". Thousands of runs build a
+histogram; the dangerous cases live in the hot tail on the right — exactly what we want to find.</figcaption></figure>
+
+<div class="term"><span class="lbl">The 1/√N rule</span> The estimate's wobble shrinks like 1 over the square root of the number of
+runs N. Want half the wobble? Run <em>four</em> times as many. Want a tenth? A <em>hundred</em> times as many. Diminishing
+returns — which is exactly why we estimate how many runs we need rather than running forever.</div>
+
+<div class="worked"><span class="lbl">Worked example — how many runs for a target accuracy</span>
+<div class="step">Suppose one batch of 100 runs gives a spread (standard error) of 8&nbsp;°C, and we want it down to 2&nbsp;°C.</div>
+<div class="step">Accuracy improves like 1/√N, so to cut the wobble by a factor of 4 (8→2), we need 4² = 16× more runs.</div>
+<div class="step">16 × 100 = <strong>1600 runs</strong>. (This is exactly what the code's <code>runs_needed</code> returns.)</div>
+<div class="check">Check: 8/√1600 wobble vs 8/√100 = 8/40 vs 8/10 = 0.2 vs 0.8 — a 4× improvement. ✓</div></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · from "why random" to "how many"</div>
+<div class="socratic"><div class="q">Q1. Why not just test every possible failure combination?</div>
+<div class="answer">There are far too many. Even choosing which 3 of a few hundred cells fail is millions of
+combinations; realistic mixes explode beyond counting. Sampling a random few thousand is feasible and
+nearly as informative.</div></div>
+<div class="socratic"><div class="q">Q2. If we only do a handful of random runs, why might we be misled?</div>
+<div class="answer">Bad luck — a small sample might miss the rare dangerous patterns, or over-represent them. Small
+samples are noisy. More runs average the luck out.</div></div>
+<div class="socratic"><div class="q">Q3. We did 100 runs and the answer still wobbles too much. We quadruple to 400. By how much does the
+wobble shrink?</div>
+<div class="answer">By √4 = 2 — it halves. The 1/√N rule: 4× the runs → 2× tighter. To get 10× tighter you'd need 100×
+the runs.</div></div>
+<div class="socratic"><div class="q">Q4 (top rung). Given that diminishing return, how do we decide when to stop?</div>
+<div class="answer">Pick a target accuracy, measure the wobble from a first batch, and use 1/√N to compute how many runs
+hit the target (the worked example: 1600). Run that many, then stop — more would cost a lot for a tiny extra
+sharpness. That's engineering the sample size instead of guessing it.</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 8</span> A first batch of 50 runs gives a standard error of 6&nbsp;°C. You want 1.5&nbsp;°C.
+How many runs do you need in total? Show the factor and the arithmetic.
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ====================================================== 13 FLUXES -->
+<section class="page-break sec">
+<h2><span class="sec-num">13</span>Sun, Earthshine &amp; Albedo — the Fluxes</h2>
+<p class="lede">The "tap" filling our heat-bathtub isn't only sunlight. In orbit, three different energy streams
+hit the panel. Each is a <em>flux</em> — energy per second per square metre.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> Stand outside near a big sunlit white wall. You feel three warmths:
+the <strong>sun</strong> directly on your face; sunlight <strong>bounced off the bright wall</strong> onto you; and the wall's own
+<strong>warmth glowing</strong> from having been heated. A satellite over Earth feels the same three: direct sun,
+sunlight reflected off Earth (albedo), and Earth's own infrared glow.</div>
+
+<table>
+<thead><tr><th>Flux</th><th>Everyday version</th><th>What sets it</th></tr></thead>
+<tbody>
+<tr><td><strong>Direct sun</strong></td><td>Sun on your face</td><td>≈1367&nbsp;W/m² at Earth's distance; <em>zero in eclipse</em> (Earth's shadow)</td></tr>
+<tr><td><strong>Albedo</strong></td><td>Sun bounced off a white wall</td><td>≈0.3 × the sunlight hitting the Earth below you (0.3 = Earth's reflectivity)</td></tr>
+<tr><td><strong>Planetary IR</strong></td><td>A warm wall glowing at night</td><td>Earth's own heat-glow (~240&nbsp;W/m²), present even in the dark</td></tr>
+</tbody></table>
+
+<div class="term"><span class="lbl">Albedo</span> The fraction of incoming sunlight a surface reflects. Fresh snow ≈ 0.8, dark
+ocean ≈ 0.06, Earth overall ≈ 0.3. So roughly 30% of the sun hitting the Earth beneath the satellite bounces
+back up and adds a second, weaker "sun" from below.</div>
+
+<div class="term"><span class="lbl">Inverse-square &amp; the tilt (cosine) rule</span> Sunlight thins with distance as 1/distance²
+(twice as far → a quarter as strong). And a surface tilted away from the sun catches less: the catch scales
+with the cosine of the tilt angle — face-on (0°) catches all of it, edge-on (90°) catches none. Same reason
+the midday sun warms the ground more than the low evening sun.</div>
+
+<div class="worked"><span class="lbl">Worked example — the albedo flux</span>
+<div class="step">Sunlight reaching the Earth below ≈ 1367&nbsp;W/m². Earth reflects a fraction (albedo) ≈ 0.3 of it.</div>
+<div class="step">But the satellite only "sees" part of that bounce — a visibility factor, say 0.25 for its position.</div>
+<div class="step">Albedo flux ≈ 0.25 × (0.3 × 1367) ≈ 0.25 × 410 ≈ <strong>103&nbsp;W/m²</strong> arriving from below.</div>
+<div class="check">Check: it's a sizeable minority of direct sun — small enough to be a "second sun", big enough that
+ignoring it would mis-predict the temperature. That's why the model includes it.</div></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · the three streams, from simplest up</div>
+<div class="socratic"><div class="q">Q1. What does "flux" mean, in kitchen English?</div>
+<div class="answer">How much energy lands on each square metre each second. Bigger flux = more warming power per patch of
+surface.</div></div>
+<div class="socratic"><div class="q">Q2. The satellite passes into Earth's shadow (eclipse). What happens to the direct-sun flux?</div>
+<div class="answer">It drops to zero — Earth blocks the sun. (The code literally sets sun = 0 in eclipse.) The panel can
+suddenly cool fast, which is its own stress.</div></div>
+<div class="socratic"><div class="q">Q3. In that same eclipse, are albedo and planetary-IR also zero?</div>
+<div class="answer">Albedo yes (no sunlight to bounce). But planetary-IR <em>no</em> — Earth still glows with its own heat in
+the dark, so that stream keeps gently warming the panel even in shadow.</div></div>
+<div class="socratic"><div class="q">Q4. Why does a flat panel tilted 60° away from the sun catch only half the sunlight?</div>
+<div class="answer">Because the catch scales with cos(tilt). cos(60°) = 0.5, so it intercepts half as much as face-on. A
+tilted surface spreads the same beam over more area, so each square metre gets less.</div></div>
+<div class="socratic"><div class="q">Q5 (top rung). Why bother with all three streams plus eclipse and tilt — why not just "use the sun"?</div>
+<div class="answer">Because the cell's balance temperature depends on the <em>total</em> tap, and the extra streams are a real
+chunk of it. Over an orbit the tap swings — full sun + albedo + IR on the day side, only IR in eclipse — so
+the temperature swings too. Predicting hot-spots honestly means feeding the solver the true, time-varying
+tap, which is what the hapsira-driven flux code supplies.</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 9</span> A panel is tilted 45° from the sun. Direct sun is 1367&nbsp;W/m². (a) Roughly what
+direct-sun flux does it catch? (cos45° ≈ 0.707.) (b) Now it enters eclipse — what are its direct-sun and
+albedo fluxes?
+<div class="answerspace lines-6"></div></div>
+</section>
+
+<!-- ====================================================== GLOSSARY -->
+<section class="page-break sec">
+<h2>Glossary — every term, one line each</h2>
+<div class="glossary">
+<div class="glossary-entry"><span class="gt">Albedo</span> Fraction of sunlight a surface reflects; Earth ≈ 0.3.</div>
+<div class="glossary-entry"><span class="gt">Amp (A)</span> Unit of current — how much electricity flows per second.</div>
+<div class="glossary-entry"><span class="gt">Balance / steady-state temperature</span> The temperature where heat-in equals heat-out; it stops changing there.</div>
+<div class="glossary-entry"><span class="gt">Bias</span> Which way voltage pushes a device. Forward = makes power; reverse = absorbs power.</div>
+<div class="glossary-entry"><span class="gt">Conduction (c_cond)</span> Heat seeping through the panel from hot face to cool face; rate = conductivity ÷ thickness.</div>
+<div class="glossary-entry"><span class="gt">Convergence</span> When a loop's value stops changing (within a tiny tolerance) — the answer is found.</div>
+<div class="glossary-entry"><span class="gt">Current (I)</span> The flow of electricity, in amps.</div>
+<div class="glossary-entry"><span class="gt">Damping (omega)</span> Moving only part-way to each new guess so a loop settles instead of oscillating.</div>
+<div class="glossary-entry"><span class="gt">Eclipse</span> Satellite in Earth's shadow; direct sun and albedo drop to zero, IR remains.</div>
+<div class="glossary-entry"><span class="gt">Electro-thermal coupling</span> The loop making the electrical and thermal models agree, since each depends on the other.</div>
+<div class="glossary-entry"><span class="gt">Emissivity (ε)</span> How good a surface is at glowing heat away, 0–1.</div>
+<div class="glossary-entry"><span class="gt">Fixed point</span> A self-consistent state that maps to itself — what the coupling loop hunts for.</div>
+<div class="glossary-entry"><span class="gt">Flux</span> Energy per second per square metre landing on a surface.</div>
+<div class="glossary-entry"><span class="gt">Forward bias</span> Voltage pushing the cell the way it likes; it delivers power.</div>
+<div class="glossary-entry"><span class="gt">Honeycomb substrate</span> Light, stiff aluminium panel the cells sit on; melts/delaminates if a hot-spot cooks it.</div>
+<div class="glossary-entry"><span class="gt">Hot-spot</span> A small region far hotter than its surroundings; here, a reverse-biased dead cell.</div>
+<div class="glossary-entry"><span class="gt">Inverse-square law</span> Sunlight weakens as 1/distance²; twice as far → a quarter as strong.</div>
+<div class="glossary-entry"><span class="gt">Iteration (Newton)</span> Necessary repeat "guess-correct" until a value settles. Kept.</div>
+<div class="glossary-entry"><span class="gt">Iteration (per-cell loop)</span> The slow Python loop over cells one-by-one. Removed by vectorising.</div>
+<div class="glossary-entry"><span class="gt">Jacobian</span> The little table of slopes for several equations in several unknowns — Newton's "slope" in 2-D.</div>
+<div class="glossary-entry"><span class="gt">Monte-Carlo</span> Estimating an answer by drawing many random samples instead of trying every case.</div>
+<div class="glossary-entry"><span class="gt">Newton–Raphson</span> Fast root-finding using the local slope to leap toward where wrongness = 0.</div>
+<div class="glossary-entry"><span class="gt">Node</span> A point at which we track a temperature; this model has two (front, rear).</div>
+<div class="glossary-entry"><span class="gt">Parallel</span> Devices side-by-side: same voltage, currents add.</div>
+<div class="glossary-entry"><span class="gt">Planetary IR</span> Earth's own heat-glow warming the panel, present even in eclipse.</div>
+<div class="glossary-entry"><span class="gt">Power (P = V·I)</span> Work per second, in watts. Positive = giving energy, negative = absorbing it as heat.</div>
+<div class="glossary-entry"><span class="gt">Residual</span> "How wrong a guess is" — the left-over when you write an equation as "something = 0".</div>
+<div class="glossary-entry"><span class="gt">Reverse bias</span> Voltage forced across a cell backwards; turns it from a giver into a heater.</div>
+<div class="glossary-entry"><span class="gt">Series</span> Devices in a line: same current, voltages add.</div>
+<div class="glossary-entry"><span class="gt">Solar cell</span> A wafer that turns light into electricity; ~2.3–2.6&nbsp;V each here.</div>
+<div class="glossary-entry"><span class="gt">Standard error</span> The wobble in a Monte-Carlo estimate; shrinks like 1/√N.</div>
+<div class="glossary-entry"><span class="gt">Stefan–Boltzmann (T⁴)</span> Heat radiated rises with the fourth power of absolute temperature.</div>
+<div class="glossary-entry"><span class="gt">Substrate</span> The board cells are mounted on (here, the honeycomb panel).</div>
+<div class="glossary-entry"><span class="gt">Tilt / cosine rule</span> A surface tilted by an angle catches sunlight ∝ cos(angle); face-on catches most.</div>
+<div class="glossary-entry"><span class="gt">Vectorise</span> Apply a math step to a whole array at once with numpy, instead of looping element-by-element.</div>
+<div class="glossary-entry"><span class="gt">Volt (V)</span> Unit of voltage — the push behind the electricity.</div>
+<div class="glossary-entry"><span class="gt">Watt (W)</span> Unit of power — one joule of energy per second.</div>
+</div>
+</section>
+
+<!-- ====================================================== SOLUTIONS -->
+<section class="solutions">
+<h2>Worked Solutions</h2>
+
+<div class="soln"><span class="sid">Solution 1.</span> (a) P = V × I = 2.0 × 0.50 = <strong>1.0&nbsp;W</strong>.
+(b) Both positive (push and flow same direction) → power positive → the cell is <strong>giving</strong> energy.</div>
+
+<div class="soln"><span class="sid">Solution 2.</span> Series adds voltage, parallel adds current.
+(a) One line = 5 cells in series → 5 × 2.3 = <strong>11.5&nbsp;V</strong>; its current = one cell's = 0.48&nbsp;A.
+(b) Module = 2 lines in parallel → same voltage as one line = <strong>11.5&nbsp;V</strong>.
+(c) Parallel adds current → 0.48 + 0.48 = <strong>0.96&nbsp;A</strong>.</div>
+
+<div class="soln"><span class="sid">Solution 3.</span> (a) P = (−15) × 0.50 = <strong>−7.5&nbsp;W</strong>.
+(b) Negative → <strong>absorbing</strong>. (c) The 7.5&nbsp;W it absorbs has nowhere to go but heat → <strong>7.5&nbsp;W of heat</strong>.</div>
+
+<div class="soln"><span class="sid">Solution 4.</span> Adding a heat source raises the tap rate, so heat-in temporarily
+exceeds heat-out and the temperature rises. But radiated heat-out grows steeply with temperature (T⁴), so as
+the cell warms it sheds heat faster, until heat-out again equals the new, larger heat-in. It settles at a
+<em>new, higher</em> balance temperature rather than climbing forever — the T⁴ drain is a self-limiting brake.</div>
+
+<div class="soln"><span class="sid">Solution 5.</span> f = T²−20, slope = 2T. At T = 4: wrongness f = 16−20 = −4;
+slope = 2×4 = 8; next = 4 − (−4)/8 = 4 + 0.5 = <strong>4.5</strong>. (Check: √20 ≈ 4.472 — one step already very close.)</div>
+
+<div class="soln"><span class="sid">Solution 6.</span> Model answer: "We kept Newton's repeat-until-settled loop because the
+heat-balance equation has the temperature on both sides (inside T⁴), so there's no one-line formula — you
+must guess and correct until it stops moving. We removed a <em>different</em> loop: the old code solved the cells
+one-by-one in slow Python, and we replaced that with numpy doing all cells at once. Removing it changed no
+temperature because it was only bookkeeping (the order/grouping of the arithmetic), not the physics — same
+equations, same Newton steps, same answers, just far faster."</div>
+
+<div class="soln"><span class="sid">Solution 7.</span> Model answer: "The cell's electrical output depends on its
+temperature, and its temperature depends on the electrical heat it makes — each needs the other's answer
+first. So we loop between them, nudging until the temperature and the electricity stop changing and agree
+(a fixed point)."</div>
+
+<div class="soln"><span class="sid">Solution 8.</span> Improve from 6&nbsp;°C to 1.5&nbsp;°C → a factor of 6/1.5 = 4 tighter.
+Accuracy ∝ 1/√N, so N must grow by 4² = 16×. 16 × 50 = <strong>800 runs</strong> total.
+(Check: 6/√800 ≈ 0.21 vs 6/√50 ≈ 0.85 — about 4× tighter. ✓)</div>
+
+<div class="soln"><span class="sid">Solution 9.</span> (a) Catch ≈ cos45° × 1367 ≈ 0.707 × 1367 ≈ <strong>966&nbsp;W/m²</strong>.
+(b) In eclipse Earth blocks the sun: direct-sun flux = <strong>0</strong>, and with no sunlight to reflect, albedo
+flux = <strong>0</strong> too. (Only planetary-IR would remain.)</div>
+</section>
+
+</body></html>

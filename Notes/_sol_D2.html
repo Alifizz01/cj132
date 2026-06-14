@@ -1,0 +1,62 @@
+<!-- ===================================================================
+     SECTION 2 — Worked solutions to the practice questions
+     PowerPy study notes · solutions fragment
+     IDs match _frag_D2.html: D2-1, D2-2, D2-3
+     =================================================================== -->
+
+<div class="soln"><span class="sid">D2-1.</span>
+A flat pile — <code>cell.py</code>, <code>read_json.py</code>, <code>physics.py</code>, <code>plotting.py</code>, <code>report.py</code>, <code>shapes.py</code> — reorganised into a layered package like PowerPy's.
+<br><br>
+<strong>(a) Layered grouping.</strong> Sort each file by the <em>one job</em> it does, then stack the groups so each layer uses only the ones below it:
+<ul>
+  <li><strong><code>schemas/</code></strong> (layer 1, bottom — data shapes): <code>shapes.py</code>. These are the dataclasses; they describe data and do nothing else, so they sit at the bottom and depend on nobody.</li>
+  <li><strong><code>loader/</code></strong> (layer 2 — read files into shapes): <code>read_json.py</code>. Turns JSON on disk into <code>schemas</code> objects; depends only on <code>schemas</code>.</li>
+  <li><strong><code>simulation/</code></strong> (layer 3 — the physics): <code>physics.py</code>, and <code>cell.py</code> if it carries cell-level behaviour. Computes results from loaded data; depends on <code>schemas</code> and <code>loader</code>. <span class="small">(If <code>cell.py</code> is purely a data shape rather than behaviour, it belongs in <code>schemas/</code> instead — judge it by whether it holds data or runs physics.)</span></li>
+  <li><strong><code>render/</code></strong> (layer 4, top — output for humans): <code>plotting.py</code>, <code>report.py</code>. Turns results into figures and a report; may use everything below.</li>
+</ul>
+<strong>(b) Dependency arrows.</strong> All arrows point one way, downward — higher layers depend on lower, never the reverse:
+<br>
+<code>render → simulation → loader → schemas</code>
+<br>
+Read it as: <code>render</code> may import from <code>simulation</code>, <code>loader</code>, <code>schemas</code>; <code>simulation</code> from <code>loader</code> and <code>schemas</code>; <code>loader</code> from <code>schemas</code>; and <code>schemas</code> imports none of them. No arrow ever points up, so there are no cycles — that is exactly what lets you swap <code>read_json.py</code> for a CSV loader without touching the physics.
+<br><br>
+<strong>(c) The latent stdlib-clash risk.</strong> <code>cell.py</code> and the others are safe, but watch the <em>pattern</em>: the risk file in this pile is one whose name matches a standard-library module. Here that is none of the literal names given — <em>unless</em> you were tempted to rename <code>read_json.py</code> to <code>json.py</code> (the obvious "it handles JSON" name). <code>json</code> is a standard-library module, so a local <code>json.py</code> run from inside the folder would shadow it and break any <code>import json</code> elsewhere. <strong>Lesson for the grouping:</strong> keep the descriptive <code>read_json.py</code> (or <code>json_loader.py</code>) precisely <em>because</em> the tidy short name <code>json.py</code> collides with the standard library.
+<br>
+<em>Check:</em> every file landed in exactly one layer, the arrows form a straight downward chain with no cycle, and the one name that would have clashed with the stdlib was kept distinct. ✓
+</div>
+
+<div class="soln"><span class="sid">D2-2.</span>
+A helper named <code>json.py</code> is added inside the package; afterwards <code>import json</code> + <code>json.loads</code> fails with <code>AttributeError</code>, but only when run from the project folder.
+<br><br>
+<strong>(a) What breaks, in terms of <code>sys.path</code> order.</strong> Running Python from inside the project folder puts that folder at <strong><code>sys.path[0]</code></strong> — the first place searched. <code>import json</code> walks <code>sys.path</code> top to bottom and takes the <em>first</em> match, which is now the local <code>json.py</code>, <em>not</em> the standard library's <code>json</code> (which sits further down the list). The local file does not define <code>loads</code>, so <code>json.loads(...)</code> raises <code>AttributeError: module 'json' has no attribute 'loads'</code>. It is launch-directory-dependent because <code>sys.path[0]</code> <em>is</em> the launch directory (the script's folder, or the cwd for the REPL): run from outside the folder and the local <code>json.py</code> is no longer at the front, so the real <code>json</code> is found first and the error disappears. The filename hasn't changed — only its position on the search path has.
+<br><br>
+<strong>(b) Why the stdlib still "has" the real <code>json</code>.</strong> Shadowing is about <em>which file the name resolves to in this process</em>, not about deleting anything. The standard library's <code>json</code> is still installed on disk and still further down <code>sys.path</code>; it is simply never reached, because the search <em>stops at the first match</em> (the local file). Nothing was overwritten — the real module is intact and would load fine the moment the local one is no longer in front of it.
+<br><br>
+<strong>(c) Two independent fixes.</strong>
+<br>• <strong>Filename fix:</strong> rename the helper to something that does not collide with a standard-library module — e.g. <code>json_utils.py</code> or <code>data_io.py</code>. With no local <code>json.py</code>, <code>import json</code> can only find the standard one, wherever you run from.
+<br>• <strong>Run/install fix:</strong> make the package installable (<code>pyproject.toml</code> + <code>pip install -e .</code>) and run from a neutral directory instead of inside the package. Then the package interior is no longer at <code>sys.path[0]</code> ahead of the stdlib, so even a stray same-named file would not sit in front of the real <code>json</code> at launch.
+<br>
+<em>Check:</em> both fixes attack the same mechanism (a local file winning the search) from the two independent angles the question asked for — remove the collision, or remove the package interior from the front of the path. Either alone resolves it. ✓
+</div>
+
+<div class="soln"><span class="sid">D2-3.</span>
+Imports inside the <code>simulation</code> subpackage: <code>ng_sim</code> from a sibling <code>electric.py</code>, and <code>cell</code> from the <code>schemas</code> subpackage one level up.
+<br><br>
+<strong>(a) Relative import for <code>ng_sim</code>.</strong> <code>electric</code> sits <em>beside</em> the current file in the same package, so one leading dot ("my own package"):
+<br>
+<strong><code>from .electric import ng_sim</code></strong>
+<br><br>
+<strong>(b) Absolute import for <code>cell</code>.</strong> Name it by its full path from the top-level package:
+<br>
+<strong><code>from powerpy.schemas.cell import cell</code></strong>
+<br>
+<span class="small">(The equivalent relative form, since <code>schemas</code> is one level up from <code>simulation</code>, would use two dots: <code>from ..schemas.cell import cell</code> — one dot for "my package", a second to climb to the parent <code>powerpy</code>, then down into <code>schemas</code>.)</span>
+<br><br>
+<strong>(c) The <code>from power.cell import cell</code> error.</strong> The fix is <strong>a single character: add the leading dot</strong> (turn the broken absolute reference to a non-existent top-level <code>power</code> package into a relative import). If <code>cell</code> really lives beside the file, the corrected line is
+<br>
+<strong><code>from .cell import cell</code></strong>.
+<br>
+<em>Why it failed:</em> <code>from power.cell …</code> told Python to find a <em>top-level</em> package named <code>power</code>; none exists on <code>sys.path</code>, so it raised <code>ModuleNotFoundError: No module named 'power'</code>. The dot says "look in <em>this</em> package" instead of hunting for a stranger named <code>power</code> — the whole bug was the missing dot.
+<br>
+<em>Check:</em> (a) uses one dot for a sibling, (b) spells the full path from the root for an absolute import, and (c) repairs an absent-package error with the single dot that redirects the search from "top-level <code>power</code>" to "here." ✓
+</div>

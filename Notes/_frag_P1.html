@@ -1,0 +1,635 @@
+<!-- ===================================================================
+     SECTION 1 — Why a solar array, and the four numbers that describe a cell
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     =================================================================== -->
+
+<p class="lede">A satellite is a machine that must keep itself alive in one of the
+most hostile places we know — the vacuum of space — for years at a time, with no
+fuel line, no power cable, and no repair crew. Almost everything it does, from
+firing its radio back to Earth to keeping its own electronics from freezing,
+costs <em>electrical power</em>. That power has to come from somewhere, and for
+the overwhelming majority of spacecraft it comes from sunlight, captured by a
+<strong>solar array</strong>. This section builds your mental model of a solar
+array from the single building block — one tiny solar <em>cell</em> — and
+introduces the four measured numbers an engineer uses to describe it. Everything
+later in PowerPy is built on these four numbers, so we will go slowly and define
+every word the moment it appears.</p>
+
+<h3>1.1 What a solar array is for, and what PowerPy does</h3>
+
+<p>Let us start with the mission, because the numbers only make sense once you
+know what they are protecting. A spacecraft in orbit lives through conditions
+that would destroy ordinary electronics:</p>
+
+<ul>
+  <li><strong>Vacuum.</strong> There is no air. That sounds harmless, but it
+  means there is <em>no convection</em> — no breeze, no air to carry heat away.
+  The only way a satellite can shed heat is by <em>radiating</em> it as infrared
+  light. This is why temperature is such a central concern, as we will see.</li>
+  <li><strong>Radiation.</strong> High-energy particles from the Sun and from
+  deep space steadily damage the semiconductor crystal in each solar cell. Over
+  years this <em>degradation</em> slowly lowers the power the array can produce.</li>
+  <li><strong>Thermal cycling.</strong> Each orbit the spacecraft swings from
+  full sunlight (hot) into the Earth's shadow (cold) and back, sometimes dozens
+  of times a day. The array expands and contracts with every cycle.</li>
+  <li><strong>Eclipses.</strong> When the spacecraft passes behind the Earth, the
+  Sun is blocked and the array produces <em>nothing</em>. The satellite must run
+  on batteries until it comes back into the light.</li>
+</ul>
+
+<p>The engineer's job is to design an array that is big enough to power the
+spacecraft <em>and</em> robust enough to survive all of the above for the whole
+mission. To do that without launching a real satellite to find out, we
+<em>simulate</em> it. That is what PowerPy is.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>PowerPy</strong> — a
+software tool that simulates a satellite solar array. Crucially, it predicts two
+linked things at once: the array's <em>electrical output</em> (how many volts and
+amps, hence how many watts, it delivers) <em>and</em> its <em>temperature</em>.
+Both matter, because — as we will learn — a solar cell's electrical behaviour
+depends strongly on how hot it is. PowerPy lets an engineer <em>size</em> an
+array (choose how many cells, and how to wire them) and <em>verify</em> that it
+keeps working even when something goes wrong (a "fault").</div>
+
+<div class="callout"><span class="lbl">Note</span> A solar cell is fundamentally
+a <em>heat engine living in a fridge that has no door</em>: sunlight pours energy
+in, only ~30&nbsp;% leaves as electricity, and the rest becomes heat that can
+only escape by radiating to cold space. So an electrical model that ignores
+temperature is only half a model. Keep this dual nature in mind — it is the
+reason PowerPy computes both.</div>
+
+<p>A real array is not one cell. It is a hierarchy, assembled from the bottom up.
+You will meet each of these objects by name later in the notes; for now just see
+the ladder so the vocabulary is not a surprise:</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 640 130" xmlns="http://www.w3.org/2000/svg" font-size="12">
+<style>.bx{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.5} .t{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .ar{stroke:#b9851a;stroke-width:2;fill:none} .lab{fill:#5d6b79;font-size:10px;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect class="bx" x="14" y="48" width="58" height="34" rx="4"/><text class="t" x="43" y="69" text-anchor="middle">cell</text>
+<rect class="bx" x="120" y="40" width="118" height="50" rx="4"/>
+<g><rect x="128" y="56" width="14" height="18" fill="#cfe0ef" stroke="#11507a"/><rect x="148" y="56" width="14" height="18" fill="#cfe0ef" stroke="#11507a"/><rect x="168" y="56" width="14" height="18" fill="#cfe0ef" stroke="#11507a"/><rect x="188" y="56" width="14" height="18" fill="#cfe0ef" stroke="#11507a"/><rect x="208" y="56" width="14" height="18" fill="#cfe0ef" stroke="#11507a"/></g><text class="t" x="179" y="103" text-anchor="middle" font-size="11">string (series)</text>
+<rect class="bx" x="286" y="30" width="150" height="70" rx="4"/>
+<g><rect x="294" y="40" width="134" height="13" fill="#cfe0ef" stroke="#11507a"/><rect x="294" y="60" width="134" height="13" fill="#cfe0ef" stroke="#11507a"/><rect x="294" y="80" width="134" height="13" fill="#cfe0ef" stroke="#11507a"/></g><text class="t" x="361" y="113" text-anchor="middle" font-size="11">section (parallel)</text>
+<rect class="bx" x="484" y="24" width="142" height="84" rx="4"/>
+<rect x="496" y="40" width="118" height="56" fill="#fbf4e2" stroke="#c9a227"/>
+<text class="t" x="555" y="120" text-anchor="middle" font-size="11">panel (+substrate)</text>
+<path class="ar" d="M76 65 H114"/><path class="ar" d="M242 65 H282"/><path class="ar" d="M440 65 H480"/>
+<polygon points="114,65 108,61 108,69" fill="#b9851a"/><polygon points="282,65 276,61 276,69" fill="#b9851a"/><polygon points="480,65 474,61 474,69" fill="#b9851a"/>
+<text class="lab" x="95" y="58" text-anchor="middle">series</text><text class="lab" x="262" y="58" text-anchor="middle">parallel</text><text class="lab" x="460" y="58" text-anchor="middle">mount</text>
+</svg>
+<figcaption>Figure 1.1 — From one cell up to a panel: cells in series make a string, strings in parallel make a section, sections mount on a panel.</figcaption></figure>
+
+<div class="term"><span class="lbl">Term</span> <strong>cell → string → section →
+panel</strong> — the four levels of a solar array, smallest to largest. A
+<em>cell</em> is one photovoltaic device (our subject this section). Cells wired
+end-to-end form a <em>string</em>. Strings grouped together form a
+<em>section</em>. Sections mounted on a physical wing form a <em>panel</em>.
+(Each is taught in its own later section — here we only name them so you have the
+map.)</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Master the single
+<em>cell</em> first. A string is just cells in a row, a section is strings
+grouped, a panel is sections mounted — so every higher level is a combination of
+the level below it. If you truly understand one cell's four numbers, the rest of
+the array is bookkeeping built on top of them.</div>
+
+<h3>1.2 How a solar cell makes electricity — the photovoltaic effect</h3>
+
+<p>Before the numbers, the physics — in plain words. The word
+<em>photovoltaic</em> literally splits into <em>photo</em> (light) and
+<em>voltaic</em> (electricity, after Volta): "light&nbsp;→&nbsp;electricity." A
+solar cell turns light directly into electrical current with no moving parts.
+Here is the mechanism, one step at a time.</p>
+
+<p>A solar cell is made of <strong>semiconductor</strong> material — a crystal
+(classically silicon; in space, usually gallium arsenide) whose electrons are
+<em>almost</em> free to move but need a small kick of energy to break loose. The
+cell is built as two layers pressed together:</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>p–n junction</strong> —
+the boundary where a layer of <em>p-type</em> semiconductor (doped so it has a
+shortage of electrons, i.e. spare positive "holes") meets a layer of
+<em>n-type</em> semiconductor (doped so it has spare electrons). At this boundary
+an internal electric field forms, like a one-way ramp. "Junction" simply means
+<em>this boundary</em>. ("Doped" means a tiny, deliberate amount of another
+element has been added to the crystal to give it extra electrons or extra
+holes.)</div>
+
+<p>Now the effect itself, in four micro-steps:</p>
+
+<ol>
+  <li>A particle of light — a <strong>photon</strong> — strikes the cell. A
+  photon is a single packet of light energy; sunlight is a torrent of them.</li>
+  <li>If the photon carries enough energy, it <em>knocks an electron loose</em>
+  from the crystal, leaving behind a hole. Now you have one free negative charge
+  (the electron) and one free positive charge (the hole).</li>
+  <li>The internal field at the p–n junction sweeps the electron one way and the
+  hole the other — the "one-way ramp" separates them so they cannot simply
+  recombine.</li>
+  <li>Connect a wire between the cell's two terminals and the separated electrons
+  flow through it to get back to the holes. That flow of charge <em>is</em> an
+  electric current. Put a load (say, a radio) in that wire and the current does
+  useful work.</li>
+</ol>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Light in, current out, no
+moving parts: a photon frees an electron, the junction's built-in field pushes it
+around an external circuit. More light striking the cell means more electrons
+freed per second, which means more current. Hold on to that last sentence — it is
+exactly why the first of our four numbers depends on sunlight.</div>
+
+<p>Space cells are special. Sunlight contains many colours (energies) of photon,
+and any single semiconductor only efficiently catches a narrow band of them.
+To catch more of the spectrum, space cells stack three sub-cells:</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>triple-junction GaAs
+cell</strong> — a high-performance space solar cell made of gallium arsenide
+(chemical symbol GaAs) built as <em>three</em> stacked sub-cells, one on top of
+another. Each sub-cell is tuned to absorb a different part of the sunlight's
+colour spectrum (roughly: top catches blue, middle catches green, bottom catches
+red). Stacking three means much less sunlight is wasted, which is why these cells
+reach an <strong>efficiency of about 30&nbsp;%</strong> — far higher than the
+~15–20&nbsp;% of an ordinary silicon panel on a house roof.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 460 180" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.s{stroke:#1d2733;stroke-width:1} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<line x1="120" y1="6" x2="110" y2="40" stroke="#c9a227" stroke-width="2"/><polygon points="110,40 106,32 116,34" fill="#c9a227"/><line x1="150" y1="6" x2="140" y2="40" stroke="#c9a227" stroke-width="2"/><polygon points="140,40 136,32 146,34" fill="#c9a227"/><line x1="180" y1="6" x2="170" y2="40" stroke="#c9a227" stroke-width="2"/><polygon points="170,40 166,32 176,34" fill="#c9a227"/><line x1="210" y1="6" x2="200" y2="40" stroke="#c9a227" stroke-width="2"/><polygon points="200,40 196,32 206,34" fill="#c9a227"/>
+<text class="tx" x="60" y="20" fill="#b9851a">Sun</text>
+<rect x="150" y="44" width="180" height="6" fill="#444"/><text class="tx" x="345" y="50" font-size="9" fill="#5d6b79">+ contact (grid)</text>
+<rect x="150" y="52" width="180" height="26" fill="#3b6ea5" class="s"/><text class="tx" x="240" y="69" text-anchor="middle" fill="#fff">top sub-cell — blue</text>
+<rect x="150" y="80" width="180" height="26" fill="#4f9a6b" class="s"/><text class="tx" x="240" y="97" text-anchor="middle" fill="#fff">middle sub-cell — green</text>
+<rect x="150" y="108" width="180" height="26" fill="#a8504b" class="s"/><text class="tx" x="240" y="125" text-anchor="middle" fill="#fff">bottom sub-cell — red</text>
+<rect x="150" y="136" width="180" height="8" fill="#777"/><text class="tx" x="345" y="143" font-size="9" fill="#5d6b79">− contact</text>
+<text class="tx" x="240" y="162" text-anchor="middle" font-size="10" fill="#5d6b79">three junctions in series ≈ 2.6 V, ~30% efficiency</text>
+</svg>
+<figcaption>Figure 1.2 — A triple-junction space cell: three stacked sub-cells in series capture different parts of the spectrum.</figcaption></figure>
+
+<div class="callout"><span class="lbl">Note</span> "Efficiency ~30&nbsp;%" is a
+given property of this cell type — it means about 30&nbsp;% of the sunlight energy
+landing on the cell leaves as electricity. We will <em>not</em> calculate it here,
+because that needs the strength of sunlight as a separate input number, which we
+introduce later. Treat 30&nbsp;% as a stated fact for now.</div>
+
+<p>Throughout this section we will use one concrete, realistic space cell — the
+kind PowerPy models — so that every idea has numbers attached. Memorise this
+little table; we return to it constantly.</p>
+
+<table>
+  <caption>Reference single-cell numbers used throughout Section&nbsp;1
+  (a realistic triple-junction space cell).</caption>
+  <thead>
+    <tr><th>Symbol</th><th>Name</th><th>Value</th><th>Plain meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><var>I</var><sub>sc</sub></td><td>Short-circuit current</td><td>≈ 0.50 A</td><td>Current when terminals are shorted (V = 0)</td></tr>
+    <tr><td><var>V</var><sub>oc</sub></td><td>Open-circuit voltage</td><td>≈ 2.67 V</td><td>Voltage with no load (I = 0)</td></tr>
+    <tr><td><var>V</var><sub>mp</sub></td><td>Max-power voltage</td><td>≈ 2.35 V</td><td>Voltage at the best operating point</td></tr>
+    <tr><td><var>I</var><sub>mp</sub></td><td>Max-power current</td><td>≈ 0.48 A</td><td>Current at the best operating point</td></tr>
+    <tr><td>A</td><td>Cell area</td><td>≈ 30 cm²</td><td>Sunlit area of the cell</td></tr>
+  </tbody>
+</table>
+
+<div class="callout"><span class="lbl">Note</span> Notice the voltages: a single
+space cell gives only about 2.67&nbsp;V — less than a torch battery. That is why
+real arrays wire many cells in <em>series</em> (end-to-end) into strings: to add
+their voltages up to something a spacecraft bus can use (tens of volts). One cell
+is the atom; the bus voltage is the molecule.</div>
+
+<h3>1.3 The four numbers that describe a cell <span class="badge hot">EXAM-HOT</span></h3>
+
+<p>An engineer does not describe a solar cell with a wall of physics. They
+describe it with <strong>four measured numbers</strong>, plus one special
+<em>point</em> those numbers define. Get these four straight and keep them
+distinct — confusing them is the single most common beginner mistake. We will
+define each precisely, with its defining condition.</p>
+
+<h4>Number 1 — Short-circuit current, I<sub>sc</sub></h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>Short-circuit current
+(<var>I</var><sub>sc</sub>)</strong> — the current that flows when you connect the
+two terminals of the cell directly together with a plain wire, so the voltage
+across the cell is <strong>zero</strong> (V = 0). This is the <em>most</em> current
+the cell will ever push. Its value is set by how much sunlight is hitting the cell
+and how big the cell is — more light or more area means more electrons freed per
+second, hence more current. For our cell, <var>I</var><sub>sc</sub> ≈ 0.50 A.</div>
+
+<div class="callout"><span class="lbl">Note</span> "Short circuit" sounds like a
+fault, but for a solar cell it is harmless and is a standard test condition: a
+solar cell is a <em>current source</em>, so shorting it just lets its natural
+current flow with nothing held back. It will not burn out from being shorted the
+way a battery would.</div>
+
+<h4>Number 2 — Open-circuit voltage, V<sub>oc</sub></h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>Open-circuit voltage
+(<var>V</var><sub>oc</sub>)</strong> — the voltage measured across the cell's
+terminals when <em>nothing</em> is connected (the circuit is "open"), so no
+current flows (I = 0). This is the <em>most</em> voltage the cell will ever show.
+Its value is set by the physics of the p–n junction and — very importantly — by
+<strong>temperature</strong>: a hotter cell has a <em>lower</em>
+<var>V</var><sub>oc</sub>. For our cell, <var>V</var><sub>oc</sub> ≈ 2.67 V.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> The two "ends" of a solar
+cell's behaviour are opposites: <var>I</var><sub>sc</sub> is "all current, no
+voltage" (V&nbsp;=&nbsp;0); <var>V</var><sub>oc</sub> is "all voltage, no current"
+(I&nbsp;=&nbsp;0). Sunlight mainly drives <var>I</var><sub>sc</sub>; temperature
+mainly drives <var>V</var><sub>oc</sub>. This split is worth memorising — it
+explains most of what an array does in orbit.</div>
+
+<h4>Numbers 3 &amp; 4 — Max-power voltage and current, V<sub>mp</sub> and I<sub>mp</sub></h4>
+
+<p>Between the two extremes lies the operating point an engineer actually cares
+about. A cell can be operated <em>anywhere</em> along its curve — you choose, by
+choosing the load. At one special place the product of voltage and current
+(which is power) is as large as it gets. The voltage and current <em>at that
+place</em> are our third and fourth numbers.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Max-power voltage and
+current (<var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>)</strong> — the
+voltage and the current the cell delivers when it is operating at the single best
+point on its curve, where output power is greatest. For our cell,
+<var>V</var><sub>mp</sub> ≈ 2.35 V and <var>I</var><sub>mp</sub> ≈ 0.48 A. Notice
+each is a little <em>below</em> its extreme: <var>V</var><sub>mp</sub> &lt;
+<var>V</var><sub>oc</sub> and <var>I</var><sub>mp</sub> &lt;
+<var>I</var><sub>sc</sub>. That "give a little of each" is the whole secret, as we
+will see.</div>
+
+<div class="keyidea"><span class="lbl">Key idea — the count of four</span> The
+<em>four numbers</em> are exactly: <var>I</var><sub>sc</sub>,
+<var>V</var><sub>oc</sub>, <var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>.
+That is all four. The <strong>MPP</strong>, <strong>P<sub>mp</sub></strong> and the
+<strong>Fill Factor</strong> we meet next are <em>not</em> extra members of the
+four — they are <em>derived</em> from these four. Keep the headcount honest: four
+measured numbers, everything else computed from them.</div>
+
+<h4>The point those last two numbers define — the MPP</h4>
+
+<div class="term"><span class="lbl">Term</span> <strong>Maximum Power Point
+(MPP)</strong> — the <em>single</em> point on the cell's curve, located at the
+coordinates (<var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>), where the
+output power <var>P</var> = <var>V</var> · <var>I</var> reaches its largest value.
+The power there is called the <strong>maximum power</strong>,
+<var>P</var><sub>mp</sub> = <var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub>.
+"MPP" is the <em>point</em> (a location on the curve);
+"<var>P</var><sub>mp</sub>" is the <em>number of watts</em> at that point.</div>
+
+<div class="pitfall"><span class="lbl">Pitfall</span> Do not confuse the
+<em>point</em> with the <em>power</em>. The <strong>MPP</strong> is a place
+(a voltage paired with a current). <strong>P<sub>mp</sub></strong> is a single
+number of watts. Saying "the MPP is 1.13&nbsp;W" is sloppy; the MPP is
+<em>at</em> (2.35&nbsp;V, 0.48&nbsp;A), and the power <em>there</em> is
+<var>P</var><sub>mp</sub> ≈ 1.13&nbsp;W. Examiners love this distinction.</div>
+
+<div class="practice"><span class="lbl">Practice P1-1</span> A different space
+cell is quoted as: <var>I</var><sub>sc</sub> = 0.52&nbsp;A,
+<var>V</var><sub>oc</sub> = 2.70&nbsp;V, <var>V</var><sub>mp</sub> = 2.30&nbsp;V,
+<var>I</var><sub>mp</sub> = 0.50&nbsp;A. (a) Write down the coordinates of its MPP.
+(b) Compute <var>P</var><sub>mp</sub> in watts. (c) State, in one sentence each,
+what condition defines <var>I</var><sub>sc</sub> and what condition defines
+<var>V</var><sub>oc</sub>.
+<div class="answerspace lines-6"></div></div>
+
+<h3>1.4 The IV curve and the power curve</h3>
+
+<p>The four numbers are really four landmarks on one continuous picture: the
+cell's <strong>IV curve</strong>. This single graph is the heart of solar-cell
+engineering, so we will read it carefully.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>IV curve</strong> (current–
+voltage curve) — a graph that plots the cell's current <var>I</var> (vertical
+axis) against the voltage <var>V</var> (horizontal axis) for every possible
+operating point. You read it as: "if the cell is held at this voltage, it will
+deliver that current." The curve runs from the point
+(0,&nbsp;<var>I</var><sub>sc</sub>) on the left — zero volts, full current — across
+to (<var>V</var><sub>oc</sub>,&nbsp;0) on the right — full volts, zero current.</div>
+
+<p>The shape between those two endpoints is the cell's signature. Reading
+left to right:</p>
+
+<ul>
+  <li><strong>Flat stretch.</strong> Starting at the left, as voltage rises from
+  zero the current barely drops — the curve runs almost horizontally near
+  <var>I</var><sub>sc</sub>. Across most of its working range the cell behaves
+  like a near-constant current source.</li>
+  <li><strong>The knee.</strong> At a certain voltage the curve bends sharply
+  downward — like the knee of a bent leg. This bend sits right around
+  <var>V</var><sub>mp</sub>.</li>
+  <li><strong>The steep drop.</strong> Past the knee the current falls fast,
+  plunging to zero at <var>V</var><sub>oc</sub>.</li>
+</ul>
+
+<p>Now overlay a second curve: <strong>power</strong>. For every point on the IV
+curve we can compute <var>P</var> = <var>V</var> · <var>I</var> and plot it. This
+<em>power curve</em> is not flat — it is a <strong>hump</strong> that starts at
+zero on the left, rises to a peak, and falls back to zero on the right. The peak
+of the hump sits exactly above the knee of the IV curve, at the MPP.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 175" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.ax{stroke:#1d2733;stroke-width:1.2} .gl{stroke:#cfd7df;stroke-width:.6} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<line class="ax" x1="58" y1="150" x2="420" y2="150"/><line class="ax" x1="58" y1="150" x2="58" y2="18"/>
+<polyline points="58.0,30.0 60.2,30.0 62.3,30.0 64.5,30.0 66.7,30.0 68.9,30.0 71.0,30.0 73.2,30.0 75.4,30.0 77.5,30.0 79.7,30.0 81.9,30.0 84.1,30.0 86.2,30.0 88.4,30.0 90.6,30.0 92.7,30.0 94.9,30.0 97.1,30.0 99.2,30.0 101.4,30.0 103.6,30.0 105.8,30.0 107.9,30.0 110.1,30.0 112.3,30.0 114.4,30.0 116.6,30.0 118.8,30.0 121.0,30.0 123.1,30.0 125.3,30.0 127.5,30.0 129.6,30.0 131.8,30.0 134.0,30.0 136.2,30.0 138.3,30.0 140.5,30.0 142.7,30.0 144.8,30.0 147.0,30.0 149.2,30.0 151.4,30.0 153.5,30.0 155.7,30.0 157.9,30.0 160.0,30.0 162.2,30.0 164.4,30.0 166.6,30.0 168.7,30.0 170.9,30.0 173.1,30.0 175.2,30.0 177.4,30.0 179.6,30.0 181.7,30.0 183.9,30.0 186.1,30.0 188.3,30.0 190.4,30.0 192.6,30.0 194.8,30.0 196.9,30.0 199.1,30.0 201.3,30.0 203.5,30.0 205.6,30.0 207.8,30.0 210.0,30.0 212.1,30.0 214.3,30.0 216.5,30.0 218.7,30.0 220.8,30.0 223.0,30.0 225.2,30.0 227.3,30.0 229.5,30.0 231.7,30.0 233.9,30.0 236.0,30.0 238.2,30.0 240.4,30.0 242.5,30.0 244.7,30.0 246.9,30.0 249.1,30.0 251.2,30.0 253.4,30.0 255.6,30.0 257.7,30.0 259.9,30.0 262.1,30.0 264.2,30.0 266.4,30.0 268.6,30.0 270.8,30.0 272.9,30.0 275.1,30.0 277.3,30.0 279.4,30.0 281.6,30.0 283.8,30.0 286.0,30.0 288.1,30.0 290.3,30.0 292.5,30.0 294.6,30.0 296.8,30.0 299.0,30.0 301.2,30.0 303.3,30.0 305.5,30.1 307.7,30.1 309.8,30.1 312.0,30.1 314.2,30.1 316.4,30.1 318.5,30.1 320.7,30.2 322.9,30.2 325.0,30.2 327.2,30.3 329.4,30.4 331.5,30.4 333.7,30.5 335.9,30.6 338.1,30.7 340.2,30.8 342.4,31.0 344.6,31.2 346.7,31.4 348.9,31.6 351.1,32.0 353.3,32.3 355.4,32.8 357.6,33.3 359.8,33.9 361.9,34.6 364.1,35.5 366.3,36.5 368.5,37.7 370.6,39.2 372.8,40.9 375.0,42.9 377.1,45.3 379.3,48.2 381.5,51.6 383.7,55.6 385.8,60.4 388.0,66.1 390.2,72.9 392.3,80.9 394.5,90.4 396.7,101.7 398.9,115.2 401.0,131.1 403.2,150.0" fill="none" stroke="#0b3d63" stroke-width="2.2"/>
+<polyline points="58.0,150.0 60.2,149.1 62.3,148.2 64.5,147.3 66.7,146.5 68.9,145.6 71.0,144.7 73.2,143.8 75.4,142.9 77.5,142.0 79.7,141.1 81.9,140.2 84.1,139.4 86.2,138.5 88.4,137.6 90.6,136.7 92.7,135.8 94.9,134.9 97.1,134.0 99.2,133.2 101.4,132.3 103.6,131.4 105.8,130.5 107.9,129.6 110.1,128.7 112.3,127.8 114.4,126.9 116.6,126.1 118.8,125.2 121.0,124.3 123.1,123.4 125.3,122.5 127.5,121.6 129.6,120.7 131.8,119.9 134.0,119.0 136.2,118.1 138.3,117.2 140.5,116.3 142.7,115.4 144.8,114.5 147.0,113.6 149.2,112.8 151.4,111.9 153.5,111.0 155.7,110.1 157.9,109.2 160.0,108.3 162.2,107.4 164.4,106.6 166.6,105.7 168.7,104.8 170.9,103.9 173.1,103.0 175.2,102.1 177.4,101.2 179.6,100.3 181.7,99.5 183.9,98.6 186.1,97.7 188.3,96.8 190.4,95.9 192.6,95.0 194.8,94.1 196.9,93.3 199.1,92.4 201.3,91.5 203.5,90.6 205.6,89.7 207.8,88.8 210.0,87.9 212.1,87.0 214.3,86.2 216.5,85.3 218.7,84.4 220.8,83.5 223.0,82.6 225.2,81.7 227.3,80.8 229.5,80.0 231.7,79.1 233.9,78.2 236.0,77.3 238.2,76.4 240.4,75.5 242.5,74.6 244.7,73.7 246.9,72.9 249.1,72.0 251.2,71.1 253.4,70.2 255.6,69.3 257.7,68.4 259.9,67.5 262.1,66.7 264.2,65.8 266.4,64.9 268.6,64.0 270.8,63.1 272.9,62.2 275.1,61.3 277.3,60.5 279.4,59.6 281.6,58.7 283.8,57.8 286.0,56.9 288.1,56.0 290.3,55.1 292.5,54.3 294.6,53.4 296.8,52.5 299.0,51.6 301.2,50.7 303.3,49.8 305.5,49.0 307.7,48.1 309.8,47.2 312.0,46.3 314.2,45.5 316.4,44.6 318.5,43.7 320.7,42.9 322.9,42.0 325.0,41.2 327.2,40.3 329.4,39.5 331.5,38.7 333.7,37.9 335.9,37.1 338.1,36.3 340.2,35.5 342.4,34.8 344.6,34.1 346.7,33.4 348.9,32.8 351.1,32.3 353.3,31.7 355.4,31.3 357.6,31.0 359.8,30.7 361.9,30.6 364.1,30.7 366.3,30.9 368.5,31.4 370.6,32.1 372.8,33.1 375.0,34.5 377.1,36.3 379.3,38.7 381.5,41.7 383.7,45.4 385.8,50.1 388.0,55.8 390.2,62.8 392.3,71.4 394.5,81.8 396.7,94.4 398.9,109.6 401.0,127.9 403.2,150.0" fill="none" stroke="#9a3b3b" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="361.9" cy="30.6" r="4" fill="#9a3b3b"/>
+<circle cx="361.9" cy="34.6" r="3.5" fill="#0b3d63"/>
+<line class="gl" x1="361.9" y1="150" x2="361.9" y2="30.6"/>
+<circle cx="58" cy="30.0" r="3" fill="#0b3d63"/><text class="tx" x="64" y="26.0" font-size="10">Isc</text>
+<circle cx="403.2" cy="150" r="3" fill="#0b3d63"/><text class="tx" x="374.0" y="164" font-size="10">Voc</text>
+<text class="tx" x="367.9" y="26.6" font-size="10" fill="#9a3b3b">MPP (Pmp=1.13 W)</text>
+<text class="tx" x="359.9" y="164" font-size="9" fill='#5d6b79'>Vmp</text>
+<text class="tx" x="210" y="172" text-anchor="middle">Voltage [V]</text>
+<text class="tx" transform="translate(16,90) rotate(-90)" text-anchor="middle">Current [A]</text>
+<text class="tx" x="448" y="90" text-anchor="middle" transform="rotate(90 448 90)" fill="#9a3b3b">Power [W]</text>
+</svg>
+<figcaption>Figure 1.3 — The IV curve (navy) and the power curve P=V·I (red, dashed). Power is zero at Isc and Voc and peaks at the Maximum Power Point.</figcaption></figure>
+
+<figure>
+<svg width="430" height="280" viewBox="0 0 430 280" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">
+  <rect x="0.5" y="0.5" width="429" height="279" fill="#ffffff" stroke="#d6dde4"/>
+  <!-- axes -->
+  <line x1="55" y1="235" x2="405" y2="235" stroke="#333" stroke-width="1.2"/>
+  <line x1="55" y1="235" x2="55" y2="25" stroke="#333" stroke-width="1.2"/>
+  <text x="225" y="266" font-size="11" text-anchor="middle">Voltage  V  [V]</text>
+  <text x="18" y="135" font-size="11" text-anchor="middle" transform="rotate(-90 18 135)">Current I [A]  /  Power P [W]</text>
+  <!-- Isc tick -->
+  <line x1="51" y1="60" x2="55" y2="60" stroke="#333"/>
+  <text x="48" y="64" font-size="9.5" text-anchor="end">Isc</text>
+  <!-- Voc tick -->
+  <text x="372" y="250" font-size="9.5" text-anchor="middle">Voc</text>
+  <!-- IV curve: flat then knee then drop -->
+  <path d="M55,60 L150,63 L240,70 L300,86 L340,140 L362,235"
+        fill="none" stroke="#0b3d63" stroke-width="2.4"/>
+  <text x="120" y="52" font-size="9.5" fill="#0b3d63">IV curve</text>
+  <!-- power hump: zero at both ends, peak above knee -->
+  <path d="M55,235 Q150,205 240,150 T320,150 Q345,175 362,235"
+        fill="none" stroke="#b9851a" stroke-width="2.2" stroke-dasharray="1 0"/>
+  <!-- simpler explicit power hump using points -->
+  <polyline points="55,235 110,212 160,188 210,162 260,140 300,150 330,180 362,235"
+        fill="none" stroke="#b9851a" stroke-width="2.4"/>
+  <text x="300" y="120" font-size="9.5" fill="#b9851a">Power curve  P = V·I</text>
+  <!-- MPP marker -->
+  <line x1="300" y1="86" x2="300" y2="235" stroke="#9a3b3b" stroke-width="0.8" stroke-dasharray="3 3"/>
+  <circle cx="300" cy="86" r="4.5" fill="#9a3b3b"/>
+  <text x="308" y="82" font-size="9.5" fill="#9a3b3b">MPP (Vmp, Imp)</text>
+  <text x="300" y="250" font-size="9" fill="#9a3b3b" text-anchor="middle">Vmp</text>
+  <!-- peak power dot -->
+  <circle cx="260" cy="140" r="3.5" fill="#b9851a"/>
+</svg>
+<figcaption>The IV curve (navy) falls from I<sub>sc</sub> through the knee to
+V<sub>oc</sub>; the power curve (amber) is a hump that is zero at both ends and
+peaks at the MPP. (Schematic; the builder replaces this with the final figure.)</figcaption>
+</figure>
+
+<p>Why is the power curve a hump that touches zero at both ends? Because power is
+the <em>product</em> of two things, and at each end one of them is zero:</p>
+
+<div class="formula">
+<var>P</var> = <var>V</var> · <var>I</var>
+<div class="where">where <var>P</var> is power in watts (W), <var>V</var> is
+voltage in volts (V), and <var>I</var> is current in amperes (A). One volt times
+one amp equals one watt.</div>
+</div>
+
+<div class="keyidea"><span class="lbl">Key idea — why P = 0 at both ends</span>
+At the <em>left</em> end (short circuit) the voltage is zero, so
+<var>P</var> = 0 · <var>I</var><sub>sc</sub> = <strong>0&nbsp;W</strong>: plenty of
+current, but no voltage to push it through, so no power. At the <em>right</em> end
+(open circuit) the current is zero, so
+<var>P</var> = <var>V</var><sub>oc</sub> · 0 = <strong>0&nbsp;W</strong>: plenty of
+voltage, but no current flowing, so no power. A product is zero whenever
+<em>either</em> factor is zero. Real power only appears <em>between</em> the ends,
+where both <var>V</var> and <var>I</var> are sizeable at once — and it is biggest
+where their product peaks, the MPP.</div>
+
+<div class="ladder">
+  <div class="laddertitle">Think it through — climbing to "why not at the ends?"</div>
+  <div class="socratic">
+    <div class="q">Q1. What does the IV curve plot, in one sentence?</div>
+    <div class="answer">The current the cell delivers (vertical axis) at each
+    possible voltage you could hold it at (horizontal axis), from
+    (0,&nbsp;<var>I</var><sub>sc</sub>) on the left to
+    (<var>V</var><sub>oc</sub>,&nbsp;0) on the right.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q2. How do we turn a point on the IV curve into power?</div>
+    <div class="answer">Multiply that point's voltage by its current:
+    <var>P</var> = <var>V</var> · <var>I</var>. Every point on the IV curve has
+    a power, and plotting those powers gives the power curve.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q3. What is the power at the far left end of the curve (V = 0)?</div>
+    <div class="answer">Zero. <var>P</var> = 0 · <var>I</var><sub>sc</sub> = 0&nbsp;W.
+    The current is at its maximum, but with zero voltage there is no power. All
+    flow, no push.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q4. And at the far right end (I = 0, at V<sub>oc</sub>)?</div>
+    <div class="answer">Also zero. <var>P</var> = <var>V</var><sub>oc</sub> · 0 =
+    0&nbsp;W. The voltage is at its maximum, but with zero current there is no
+    power. All push, no flow.</div>
+  </div>
+  <div class="socratic">
+    <div class="q">Q5. So <em>why</em> is the maximum power NOT at
+    V<sub>oc</sub> or I<sub>sc</sub>, but somewhere in between?</div>
+    <div class="answer">Because power needs <em>both</em> a healthy voltage
+    <em>and</em> a healthy current at the same time — it is their product. At each
+    extreme one factor collapses to zero and drags the product to zero. As you
+    move inward from the left, voltage climbs while current stays high, so the
+    product grows; keep going and eventually current starts dropping faster than
+    voltage rises, so the product shrinks again. The best trade — the largest
+    product — sits at the knee, in between. That balance point is the MPP, at
+    (<var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>). You sacrifice a little
+    voltage off <var>V</var><sub>oc</sub> and a little current off
+    <var>I</var><sub>sc</sub> to keep <em>both</em> high together.</div>
+  </div>
+</div>
+
+<h3>1.5 Fill Factor — how "square" the curve is <span class="badge hot">EXAM-HOT</span></h3>
+
+<p>We now have everything we need for the most important <em>derived</em> figure
+of merit in solar engineering: the <strong>Fill Factor</strong>. It answers a
+natural question: an ideal cell would deliver its full <var>I</var><sub>sc</sub>
+right up until its full <var>V</var><sub>oc</sub> — a perfect rectangle of power,
+worth <var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub>. Real cells round off
+at the knee and fall short of that rectangle. How close does a real cell get? That
+ratio is the Fill Factor.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Fill Factor (FF)</strong> —
+a pure number between 0 and 1 that measures how "square" the IV curve is, i.e. how
+close the cell's actual maximum power comes to the ideal rectangle
+<var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub>. It is the ratio of the real
+maximum power to that ideal rectangle. Good space cells score about
+<strong>0.8</strong> (sometimes higher). A higher FF means a squarer curve and a
+better cell.</div>
+
+<div class="formula">
+FF = (<var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub>) /
+(<var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub>) =
+<var>P</var><sub>mp</sub> / (<var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub>)
+<div class="where">where <var>P</var><sub>mp</sub> =
+<var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub> is the real maximum power (W),
+and <var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub> is the "ideal rectangle"
+power (W). The watts cancel, so FF has <em>no units</em> — it is a bare ratio.</div>
+</div>
+
+<div class="callout"><span class="lbl">Note</span> Picture two rectangles drawn
+under the IV curve from the origin. The big one has corners at <var>V</var><sub>oc</sub>
+and <var>I</var><sub>sc</sub> — the ideal. The smaller one has its far corner at the
+MPP, (<var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>) — the real maximum
+power. FF is simply the area of the inner (MPP) rectangle divided by the area of
+the outer (ideal) rectangle. A perfectly square curve would make them equal and
+FF&nbsp;=&nbsp;1.</div>
+
+<div class="worked"><span class="lbl">Worked example</span>
+<strong>(a) Compute P<sub>mp</sub> and the Fill Factor</strong> for our reference
+cell: <var>I</var><sub>sc</sub> = 0.50&nbsp;A, <var>V</var><sub>oc</sub> =
+2.67&nbsp;V, <var>V</var><sub>mp</sub> = 2.35&nbsp;V, <var>I</var><sub>mp</sub> =
+0.48&nbsp;A.
+<div class="step"><strong>Step 1 — maximum power.</strong> The MPP is at
+(2.35&nbsp;V, 0.48&nbsp;A). Multiply:
+<var>P</var><sub>mp</sub> = <var>V</var><sub>mp</sub> · <var>I</var><sub>mp</sub> =
+2.35&nbsp;V × 0.48&nbsp;A = <strong>1.128&nbsp;W</strong>. (Volts × amps = watts.)</div>
+<div class="step"><strong>Step 2 — the ideal rectangle.</strong>
+<var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub> = 2.67&nbsp;V × 0.50&nbsp;A =
+<strong>1.335&nbsp;W</strong>. This is the power the cell would give if its curve
+were a perfect rectangle.</div>
+<div class="step"><strong>Step 3 — divide.</strong>
+FF = <var>P</var><sub>mp</sub> / (<var>V</var><sub>oc</sub> · <var>I</var><sub>sc</sub>)
+= 1.128&nbsp;W / 1.335&nbsp;W = <strong>0.845</strong> (≈ 0.84). The watts cancel,
+so the answer is a bare number with no units, as it must be.</div>
+<div class="check">Check: FF came out 0.845, comfortably inside the legal range
+0–1, and right around the "~0.8" we expect for a good space cell. Both
+sanity tests pass. A value above 1, or with units left on it, would mean an
+arithmetic slip.</div></div>
+
+<div class="worked"><span class="lbl">Worked example</span>
+<strong>(b) Power away from the MPP.</strong> Suppose we read the IV table and
+find that at <var>V</var> = 2.0&nbsp;V the cell delivers <var>I</var> ≈
+0.49&nbsp;A. How much power is that, and how does it compare with
+<var>P</var><sub>mp</sub>?
+<div class="step"><strong>Step 1 — power at this point.</strong>
+<var>P</var> = <var>V</var> · <var>I</var> = 2.0&nbsp;V × 0.49&nbsp;A =
+<strong>0.98&nbsp;W</strong>.</div>
+<div class="step"><strong>Step 2 — compare with the maximum.</strong> From example
+(a), <var>P</var><sub>mp</sub> = 1.128&nbsp;W. So here we get
+0.98&nbsp;W ÷ 1.128&nbsp;W ≈ <strong>0.87</strong>, i.e. about
+<strong>87&nbsp;%</strong> of the maximum.</div>
+<div class="step"><strong>Step 3 — the surprising part.</strong> Look closely: the
+<em>current</em> here (0.49&nbsp;A) is actually <em>higher</em> than the current at
+the MPP (<var>I</var><sub>mp</sub> = 0.48&nbsp;A). Yet the power is <em>lower</em>.
+Why? Because we dropped the voltage from 2.35&nbsp;V to 2.0&nbsp;V — a loss of
+0.35&nbsp;V — to gain only 0.01&nbsp;A of current. The voltage fell by much more
+(in proportion) than the current rose, so the product <var>V</var>·<var>I</var>
+went down.</div>
+<div class="check">Check: 0.98&nbsp;W &lt; 1.128&nbsp;W, so operating off the MPP
+gives <em>less</em> power than the MPP — exactly as it must, since the MPP is by
+definition the maximum. Running at higher current did not help: power is the
+<em>product</em>, and we lost more on voltage than we gained on current. This is
+the IV curve's central lesson in one number.</div></div>
+
+<div class="practice"><span class="lbl">Practice P1-2</span> Using the same
+reference cell (<var>P</var><sub>mp</sub> = 1.128&nbsp;W, ideal rectangle
+1.335&nbsp;W), suppose a manufacturing flaw rounds the knee so the new operating
+point is <var>V</var><sub>mp</sub> = 2.20&nbsp;V, <var>I</var><sub>mp</sub> =
+0.45&nbsp;A, while <var>V</var><sub>oc</sub> and <var>I</var><sub>sc</sub> are
+unchanged. (a) Compute the new <var>P</var><sub>mp</sub>. (b) Compute the new Fill
+Factor. (c) In one line, explain why a <em>higher</em> Fill Factor is better for
+the spacecraft.
+<div class="answerspace lines-6"></div></div>
+
+<h3>1.6 Why the MPP matters in practice</h3>
+
+<p>Why obsess over a single point? Because every watt counts on a spacecraft.
+A solar array is heavy and expensive to launch, so engineers want the
+<em>most</em> power from the <em>fewest</em> cells. That means operating the array
+as close to its MPP as possible.</p>
+
+<ul>
+  <li>Some spacecraft use a dedicated electronic circuit, a <em>maximum power
+  point tracker</em>, that continuously adjusts the load to sit the array right at
+  its MPP — squeezing out the most watts at every moment.</li>
+  <li>Others use a simpler scheme: they hold the array at a <em>fixed bus
+  voltage</em> chosen to be near <var>V</var><sub>mp</sub> under typical
+  conditions. Cheaper, slightly less optimal.</li>
+</ul>
+
+<div class="pitfall"><span class="lbl">Pitfall</span> The MPP is not nailed down —
+it <em>moves</em>. Recall that temperature strongly affects
+<var>V</var><sub>oc</sub> (a hotter cell gives less voltage), and that radiation
+slowly degrades the cell over years. Both shift the whole IV curve, and with it
+the MPP. An array sized for a cold, brand-new cell can fall well short when the
+cell is hot and aged. PowerPy exists precisely to predict these shifts; we study
+how temperature and degradation move the curve in later sections. For now, just
+hold the warning: <em>the MPP you design for is not the MPP you will always
+have.</em></div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Operate near the MPP to get
+the most power per cell — but design with margin, because the MPP drifts with
+temperature and age. "Size for the worst case (hot, old), not the best case (cold,
+new)" is an engineer's habit you will use again and again.</div>
+
+<h3>1.7 Meeting these ideas in PowerPy — the cell API</h3>
+
+<p>Everything above maps onto a handful of PowerPy commands. You do not need to
+run anything now; just connect each command to the concept it computes, so the
+code feels familiar when you reach it.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>API</strong> (Application
+Programming Interface) — the set of named commands a piece of software gives you
+to ask it to do things. PowerPy's cell API is just the list of instructions you
+type to build a cell and ask about it.</div>
+
+<ul>
+  <li><span class="badge api">cell("3G30")</span> — create a cell object. The
+  string <code>"3G30"</code> names the cell type to model (a triple-junction,
+  ~30&nbsp;cm² space cell — the very cell whose numbers we have been using).</li>
+  <li><span class="badge api">cell.calcQuad()</span> — returns the four numbers
+  plus the maximum power, as a bundle:
+  <code>{isc, voc, vmp, imp, pmp}</code>. (Our four landmarks, with
+  <var>P</var><sub>mp</sub> handed to you for free.)</li>
+  <li><span class="badge api">cell.calcMP()</span> — returns the
+  <em>Maximum Power Point</em>: the (<var>V</var><sub>mp</sub>,
+  <var>I</var><sub>mp</sub>) where power peaks.</li>
+  <li><span class="badge api">cell.calcIVCurve(step)</span> — returns the IV
+  <em>table</em>: a list of (<var>V</var>,&nbsp;<var>I</var>) points marching along
+  the curve, where <code>step</code> sets how finely spaced the voltage samples
+  are (a smaller step gives a denser, smoother table).</li>
+  <li><span class="badge api">cell.IVCurve()</span> — plots that table as the
+  picture you saw above: current versus voltage.</li>
+</ul>
+
+<div class="callout"><span class="lbl">Note</span> Two methods sound similar but
+differ: <span class="badge api">cell.calcQuad()</span> hands you the summary
+<em>numbers</em> (the landmarks), whereas <span class="badge api">cell.calcIVCurve(step)</span>
+hands you the whole <em>curve</em> as a table of many points. Use the first when
+you only need <var>I</var><sub>sc</sub>/<var>V</var><sub>oc</sub>/MPP/FF; use the
+second when you need the full shape — for example to find the power at an
+arbitrary voltage, as in worked example (b).</div>
+
+<div class="practice"><span class="lbl">Practice P1-3</span> You type
+<code>c = cell("3G30")</code> and then <code>c.calcQuad()</code>, which returns
+<code>{isc: 0.50, voc: 2.67, vmp: 2.35, imp: 0.48, pmp: 1.13}</code>.
+(a) Which of those five entries are the "four numbers", and which one is
+<em>derived</em>? (b) Using only this returned bundle, compute the Fill Factor.
+(c) If you instead needed the current at exactly <var>V</var> = 1.5&nbsp;V, which
+<em>other</em> API call would you reach for, and why?
+<div class="answerspace lines-6"></div></div>
+
+<hr class="sep">
+
+<div class="keyidea"><span class="lbl">Key idea — section recap</span>
+A satellite runs on sunlight, captured by a solar array built up as
+<em>cell → string → section → panel</em>; PowerPy simulates that array's
+<em>power</em> and <em>temperature</em> so it can be sized and proven to survive
+orbit. One cell is described by <strong>four measured numbers</strong> —
+<var>I</var><sub>sc</sub> (current at V=0), <var>V</var><sub>oc</sub> (voltage at
+I=0), and the operating pair <var>V</var><sub>mp</sub>, <var>I</var><sub>mp</sub>.
+Their product <var>P</var><sub>mp</sub> = <var>V</var><sub>mp</sub>·<var>I</var><sub>mp</sub>
+is the maximum power, located at the <strong>MPP</strong>. The
+<strong>Fill Factor</strong> FF = <var>P</var><sub>mp</sub> /
+(<var>V</var><sub>oc</sub>·<var>I</var><sub>sc</sub>) ≈ 0.8 says how square the
+curve is. Power is zero at both ends of the IV curve (because it is the
+<em>product</em> <var>V</var>·<var>I</var>, and one factor vanishes at each end)
+and peaks in between, at the MPP — the balance point where voltage and current
+are both kept high together.</div>

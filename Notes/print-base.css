@@ -1,0 +1,131 @@
+/* ============================================================================
+   print-base.css  —  synapse:notes
+   The NON-NEGOTIABLE print layer. frontend-design builds the visual identity
+   (type scale, palette, spacing, decorative touches) ON TOP of this. These
+   rules exist because a screen-first design silently breaks when printed:
+   colored panels render as white boxes, callouts split across a page break,
+   the page isn't A4. Keep every rule here; restyle freely, but don't remove
+   the @page size, the color-adjust, the white background, or the break rules.
+
+   Link it FIRST, then your design stylesheet, so your look wins on anything
+   that's purely cosmetic while the print guarantees stay intact.
+   ========================================================================== */
+
+/* --- A4, generous margins for binder/hole-punch, page numbers ------------- */
+@page {
+  size: A4;
+  margin: 18mm 16mm 18mm 18mm;
+}
+
+/* --- WHITE paper. The user prints these — no tinted background ------------- */
+html, body {
+  background: #ffffff !important;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 0;
+}
+
+/* --- Print the colors. Without this, every tinted callout/box prints blank. */
+*, *::before, *::after {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+}
+
+/* --- Print ink economy: NO large dark fills ------------------------------------
+   These pages are printed. A dark/navy code block or a black table-header bar
+   drains a printer's black cartridge fast and is the #1 ink complaint. Force
+   every large dark fill to a LIGHT background with DARK text. This deliberately
+   overrides the design CSS (which may chase a screen/IDE dark aesthetic) — it is
+   linked first but uses !important so it wins. Keep code readable on white with
+   ink-cheap, dark-on-light syntax tints. Small coloured BADGES (e.g. exam-hot)
+   and light callout tints are fine and stay; only big dark areas are flipped. */
+pre, .code, .code-block, .codeblock {
+  background: #f5f6f8 !important;
+  color: #1a1a1a !important;
+  border: 1px solid #d9dde2 !important;
+}
+pre *, .code *, .code-block * { color: #1a1a1a !important; }   /* base: dark ink */
+/* re-tint common syntax classes so highlighting survives, dark-on-light */
+pre .cm, .code .cm { color: #4f7a4f !important; font-style: italic; } /* comment */
+pre .kw, .code .kw { color: #9a4715 !important; font-weight: 600; }   /* keyword  */
+pre .nm, .code .nm { color: #1f6a8c !important; }                     /* number   */
+pre .st, .code .st { color: #7a3b8f !important; }                     /* string   */
+pre .fn, .code .fn { color: #11507a !important; }                     /* function */
+pre .ty, .code .ty { color: #1f6a8c !important; }                     /* type     */
+/* inline code that was white-on-dark → light chip */
+:not(pre) > code { background: #eef0f3 !important; color: #1a1a1a !important; }
+/* dark table-header bars and dark divider bars → light grey, dark text */
+thead th, table th { background: #e9ecf1 !important; color: #1a1a1a !important; }
+.task-divider, .chapter-bar { background: #e9ecf1 !important; color: #1a1a1a !important; }
+
+/* --- Keep atomic blocks whole across page breaks -------------------------- */
+.callout, .note, .pitfall, .hook, .formula, .figure, figure,
+.socratic, .question, .example, .worked, .exercise, table, pre, blockquote,
+.chapter, .chapter-opener,
+.term, .refman, .practice, .code, .glossary-entry {
+  break-inside: avoid;
+  page-break-inside: avoid;          /* legacy alias for older Chrome */
+}
+/* A long question ladder may be taller than a page — keep each RUNG (.socratic)
+   together (above), but let the ladder itself break between rungs so it never
+   forces a big empty gap. */
+.ladder { break-inside: auto; page-break-inside: auto; }
+
+/* A decorative panel must hug its content. A fixed/large height on an empty
+   styled box prints as a "random empty box" — avoid that; size to content. */
+
+/* Headings shouldn't dangle at the bottom of a page */
+h1, h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+
+/* Start a new page for a chapter. Put this class (or break-before) on the
+   chapter WRAPPER, not on a bare <h1> — forcing a break before every <h1>
+   splits any styled container that holds an <h1> (e.g. a bordered chapter
+   opener) across the break, leaving a big empty box. */
+.page-break, .chapter, .chapter-opener {
+  break-before: page; page-break-before: page;
+}
+.no-break-before, .continued { break-before: auto; page-break-before: auto; }
+
+img, svg { max-width: 100%; height: auto; }
+
+/* ============================================================================
+   COMPONENT HOOKS — style these in your design CSS; structure lives here.
+   ========================================================================== */
+
+/* Socratic "think first, then read" — answer is printed INLINE in the Notes.
+   Visually separate the answer so the learner can try before reading down. */
+.socratic            { border-left: 3px solid currentColor; padding: .6em .9em; }
+.socratic .q         { font-weight: 600; }
+.socratic .answer    { margin-top: .55em; padding-top: .5em; border-top: 1px dashed #999; }
+.socratic .answer::before {
+  content: "ANSWER"; display: block;
+  font-size: .68em; letter-spacing: .12em; opacity: .7; margin-bottom: .25em;
+}
+
+/* ---------------------------------------------------------------------------
+   ANSWER SPACE — clean BLANK space under a question for writing the answer by
+   hand on the printout. No ruled lines (they printed sparse/uneven and read as
+   a glitch); just open white space sized by the class below.
+   <div class="answerspace lines-6"></div>
+   --------------------------------------------------------------------------- */
+.answerspace {
+  margin: .5em 0 1.2em;
+}
+.answerspace.lines-2  { height: 16mm; }
+.answerspace.lines-4  { height: 32mm; }
+.answerspace.lines-6  { height: 48mm; }
+.answerspace.lines-8  { height: 64mm; }
+.answerspace.lines-10 { height: 80mm; }
+.answerspace.lines-12 { height: 96mm; }
+
+/* Blank box (for diagrams / derivations the learner draws) */
+.answerbox {
+  border: 1px solid #bdbdbd;
+  margin: .5em 0 1.2em;
+}
+.answerbox.h-40 { height: 40mm; }
+.answerbox.h-60 { height: 60mm; }
+.answerbox.h-90 { height: 90mm; }
+
+/* Worked-solution section at the back of the workbook starts on a new page */
+.solutions { break-before: page; page-break-before: page; }

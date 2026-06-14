@@ -1,0 +1,35 @@
+<div class="soln"><span class="sid">D6-1.</span>
+<strong>The right order: A → C → B.</strong> The rule is "make it run, then test, then optimise" — applied to these three exact issues.
+<ol>
+<li><strong>A — the unbalanced parenthesis (fix first).</strong> It is a <code>SyntaxError</code>, so the file will not import. Nothing else is even possible — you cannot run the slow loop, cannot write a test against the module, cannot profile it — until the code loads. A is a <em>precondition</em> for the other two, so it goes first regardless of how minor it looks. (Priority 1.)</li>
+<li><strong>C — the missing thermal test (second).</strong> Before you dare change the slow loop, you need a way to tell whether your change altered the <em>answer</em>. A thermal test (e.g. a parity check, or a physical-bound assert) pins the current correct behaviour, so that when you rewrite the loop you can prove the result is unchanged. Writing the test before the optimisation is what makes the optimisation safe rather than a gamble. (Priority 2.)</li>
+<li><strong>B — the slow cell-by-cell loop (last).</strong> Now, and only now, optimise: vectorise the loop. With the file importing (A) and the behaviour pinned by a test (C), you can change the loop aggressively and the test tells you instantly if you broke the physics. Optimising first would have meant editing code that might not even run, with no way to confirm the fast version is still correct. (Priority 4 — and ideally you profile first to confirm this loop really is the bottleneck.)</li>
+</ol>
+<strong>One-line justification each:</strong> A first because a <code>SyntaxError</code> blocks everything; C next because you must lock in the right answer <em>before</em> changing the code that produces it; B last because optimisation is only safe once the code runs and a test guards its correctness.
+</div>
+
+<div class="soln"><span class="sid">D6-2.</span>
+<strong>Definition of done for <code>montecarlo.py</code></strong> (the §6.8 checklist made specific to this module):
+<ul>
+<li><strong>Single clear responsibility:</strong> <em>run N independent samples of the array simulation with parameters drawn from their distributions, and collect the results</em> — nothing else. It does not define the physics (it <em>calls</em> the simulation modules), does not parse input files (the loader does), and does not draw plots (render does). Its one reason to change is "how we sample / aggregate runs".</li>
+<li><strong>Type-hinted public functions:</strong> e.g. <code>def run_monte_carlo(config: SimConfig, n_samples: int, seed: int | None = None) -&gt; MonteCarloResult:</code> — the inputs and the returned result type are on the page.</li>
+<li><strong>Docstrings:</strong> the public function states what it does, what <code>n_samples</code> and <code>seed</code> mean, what distribution each sampled parameter follows, and what the returned object contains (with units).</li>
+<li><strong>A test file</strong> (<code>tests/test_montecarlo.py</code>) that asserts: with a fixed <code>seed</code> the results are <em>reproducible</em> (same seed → same output); the output contains exactly <code>n_samples</code> entries; every sampled result obeys the <em>physical bounds</em> (no negative power, efficiency in [0, 1]); and a degenerate run with zero variance returns the deterministic answer.</li>
+<li><strong>No stdlib-name clashes:</strong> the module is <code>montecarlo.py</code> (not <code>random.py</code>, <code>statistics.py</code>, or anything that shadows the standard library).</li>
+<li><strong>No bare excepts:</strong> if one sample fails, it is caught <em>specifically</em>, logged with its sample index and parameters, and either re-raised or recorded as a failed sample — never silently dropped, which would bias the statistics.</li>
+<li><strong>Data via package resources, not hard-coded paths:</strong> the parameter distributions and any reference data come <em>in through the config object</em> (itself loaded via the package), not from a hard-coded <code>C:\...</code> path baked into the module.</li>
+</ul>
+<strong>Returns a typed result, not a bare structure:</strong> it hands back a <code>@dataclass MonteCarloResult</code> (e.g. <code>samples</code>, <code>mean_power</code>, <code>p05</code>, <code>p95</code>, <code>n_failed</code>) so callers read fields by name — consistent with the rest of the modern layer.
+</div>
+
+<div class="soln"><span class="sid">D6-3.</span>
+<strong>What is wrong with the ordering.</strong> The plan is upside-down: it does the exciting, most-dependent work first (vectorising, a new feature) and leaves the <em>foundation</em> — making the code import and adding tests — for "if there's time" on the last day. That is exactly the pitfall of building on sand. On Day 1 you would be vectorising a thermal solve in a module that (per Day 3) does not even import yet, and with no test to prove the fast version still gives the right answer. On Day 2 you would add a new feature on top of that same broken, untested base, compounding the fragility. And tests treated as an optional afterthought usually never get written at all.
+<br><br>
+<strong>The week, reordered:</strong>
+<ul>
+<li><strong>Day 1 — fix the import error and make the package installable.</strong> Nothing can run until it imports. (Priority 1.)</li>
+<li><strong>Day 2 — add the tests</strong>, especially the thermal parity / physical-bound tests, to pin the current correct behaviour. (Priority 2.)</li>
+<li><strong>Day 3 — vectorise the thermal solve</strong> (ideally profile first to confirm it is the bottleneck), checking the Day-2 tests stay green to prove the answer is unchanged. (Priority 4.) <em>Then</em>, on this now-stable base, add <code>environment_orbit.py</code> with its own tests. (Priority 5.)</li>
+</ul>
+In short: <strong>run → test → optimise → extend.</strong> The teammate's plan runs that sequence backwards, so each day's work rests on a foundation that has not been built yet.
+</div>

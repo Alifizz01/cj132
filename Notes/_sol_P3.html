@@ -1,0 +1,14 @@
+<div class="soln"><span class="sid">P3-1.</span> <strong>V<sub>mp</sub> at end of life, hot.</strong> Apply pipeline step 6, &nbsp;vmp = vmp·r<sub>vmp</sub>(dose_v) + vmp_dt(dose_v)·(<var>T</var> − t_ref), then stop (no loss factors).
+<br><strong>Radiation term:</strong> &nbsp;2.35&nbsp;V × 0.93 = <strong>2.1855&nbsp;V</strong>.
+<br><strong>Temperature offset:</strong> &nbsp;Δ<var>T</var> = 65 − 28 = <strong>+37&nbsp;°C</strong>.
+<br><strong>Slope term:</strong> &nbsp;(−5.5×10<sup>−3</sup>&nbsp;V/°C) × (+37&nbsp;°C) = <strong>−0.2035&nbsp;V</strong>. The slope is negative and Δ<var>T</var> is positive, so the term <em>subtracts</em> — being hotter than t_ref pulls the voltage <em>down</em>, as expected.
+<br><strong>Sum:</strong> &nbsp;V<sub>mp</sub> = 2.1855&nbsp;V − 0.2035&nbsp;V = <strong>1.98&nbsp;V</strong> (1.982&nbsp;V).
+<br><em>Sanity:</em> both effects push the same way for V<sub>mp</sub> here — radiation lowers it (2.35→2.19&nbsp;V) and heat lowers it further (→1.98&nbsp;V). Voltage at a hot end-of-life cell is well below the datasheet value; this is why the worst-case voltage check is usually "hot &amp; EOL."</div>
+
+<div class="soln"><span class="sid">P3-2.</span> <strong>Read a remaining-factor curve, then apply it.</strong>
+<br><strong>(a)</strong> The dose argument is in units of 1×10<sup>14</sup>&nbsp;e/cm², so divide the real fluence by 1e14: &nbsp;5×10<sup>14</sup>&nbsp;÷&nbsp;1×10<sup>14</sup> = <strong>5</strong>. You would call <code>cell.setDose(5, …)</code> for the current dose.
+<br><strong>(b)</strong> With Δ<var>T</var> = 0 the temperature term drops out, leaving only the radiation term of step 5: &nbsp;I<sub>mp</sub> = imp·r<sub>imp</sub>(dose_i) = 0.48&nbsp;A × 0.90 = <strong>0.432&nbsp;A</strong>.
+<br><strong>(c)</strong> The temperature term is isc_dt-style slope × (<var>T</var> − t_ref); the cell is held at exactly t_ref, so (<var>T</var> − t_ref) = 0 and the entire slope term is zero regardless of its value. Only the radiation factor remains.</div>
+
+<div class="soln"><span class="sid">P3-3.</span> <strong>Spot the units error.</strong> The <code>setDose</code> argument is <em>pre-scaled</em>: PowerPy multiplies whatever you pass by 1×10<sup>14</sup> internally. By passing the raw fluence <code>2e15</code>, the engineer actually requested 2×10<sup>15</sup>&nbsp;×&nbsp;1×10<sup>14</sup> = <strong>2×10<sup>29</sup>&nbsp;e/cm²</strong> — an absurd dose far past anything physical, so every remaining-factor regressor saturates to ~0 (the modelled cell is "destroyed").
+<br><strong>Fix:</strong> divide the real fluence by 1e14 before passing it: &nbsp;2×10<sup>15</sup>&nbsp;÷&nbsp;1×10<sup>14</sup> = <strong>20</strong>. The correct call is <code>cell.setDose(20, 20)</code> (20 for current, 20 for voltage, since the report gives the same fluence to both).</div>

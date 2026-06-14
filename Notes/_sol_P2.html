@@ -1,0 +1,19 @@
+<div class="soln"><span class="sid">P2-1.</span>
+Extract <code>vt_cell</code> then <code>n</code> for <code>isc = 0.52 A</code>, <code>imp = 0.49 A</code>, <code>vmp = 2.30 V</code>, <code>voc = 2.62 V</code>.<br>
+<strong>Step 1 &mdash; vt_cell.</strong> isc &minus; imp = 0.52 &minus; 0.49 = 0.03 A. Then
+vt_cell = vmp &middot; (isc&minus;imp)/imp = 2.30 V &times; (0.03 A / 0.49 A) = 2.30 &times; 0.061224 = <strong>0.1408 V</strong>.
+The (A/A) ratio is dimensionless, so the result is in volts. ✓<br>
+<strong>Step 2 &mdash; ideality factor.</strong> n = vt_cell / V_T_Spice = 0.1408 V / 0.02585 V = <strong>5.45</strong> (volts cancel &rarr; dimensionless).<br>
+<strong>Comment.</strong> n &asymp; 5.4 is higher than the &asymp;3.79 of the worked example because this curve is "softer" &mdash; imp sits further below isc (gap 0.03 A vs 0.02 A), which enlarges vt_cell and hence n. For a triple-junction stack n in the 3&ndash;5 range is plausible; a value drifting well above that hints at a low-fill-factor or leaky cell where RShuntModel would be the better fit.
+</div>
+
+<div class="soln"><span class="sid">P2-2.</span>
+Why reporting <code>vmp = 2.40 V</code> (instead of 2.35 V) pushes <code>r_cell_high</code> toward or past zero.<br>
+Recall r_cell_high = (vt_cell/imp)&middot;ln((isc&minus;imp)/i0_cell) &minus; vmp/imp, and in example (a) this was 4.91 &minus; 4.90 &asymp; 0.01 &Omega;. The <em>second</em> term, vmp/imp, is directly proportional to vmp, so raising vmp raises it the most: 2.40 V / 0.48 A = 5.00 &Omega; (up from 4.90 &Omega;). The first term moves far less: vt_cell shifts only slightly (vt_cell &prop; vmp gives ~0.0999 V) and it sits inside a logarithm, which barely budges &mdash; the first term stays near 4.9&ndash;5.0 &Omega;. So the second term now roughly equals or exceeds the first, and r_cell_high &asymp; (~5.0) &minus; 5.00 &le; 0, i.e. essentially zero or slightly negative. <strong>What it tells you:</strong> a (near-)negative series resistance is physically impossible, so the four numbers no longer describe one self-consistent curve &mdash; the inflated vmp is the data error to recheck, not something to clamp away.
+</div>
+
+<div class="soln"><span class="sid">P2-3.</span>
+Effect of raising Rs.<br>
+<strong>(i) The knee.</strong> Series resistance subtracts a voltage toll I&middot;Rs from the terminal voltage, and that toll is largest where the current is still high &mdash; right at the knee. So a larger Rs <em>rounds off</em> the sharp corner and pulls the high-current part of the curve to the left (lower voltage). The plateau-to-knee transition becomes a gentler diagonal instead of a crisp bend.<br>
+<strong>(ii) Maximum power.</strong> P<sub>mp</sub> = V<sub>mp</sub>&middot;I<sub>mp</sub> <em>falls</em>, because the knee voltage drops while the current there is essentially unchanged. <strong>Which number moves most:</strong> <code>vmp</code> &mdash; the maximum-power <em>voltage</em> &mdash; is the one pulled down by the I&middot;Rs drop; imp is barely affected since near the knee the current is still close to the light-limited value. (Physically: this is why minimising contact/interconnect resistance is worth real effort &mdash; series resistance is a direct power leak at the operating point.)
+</div>

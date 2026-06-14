@@ -1,0 +1,271 @@
+<h3><span class="sec-num">3</span> How a cell changes over its life: temperature and radiation, and the <code>prepareModel</code> pipeline</h3>
+
+<p class="lede">In Section 2 we treated a solar cell as four fixed numbers feeding an equivalent circuit. That was a convenient lie. The moment you put a cell in orbit, those four numbers start to move — minute by minute as the cell heats and cools, and year by year as space radiation slowly wrecks the crystal. This section is the story of <em>where the four numbers come from at any given instant</em>, and of the small assembly line — PowerPy calls it <code>prepareModel</code> — that builds them from a fixed data file, a temperature, and a radiation dose.</p>
+
+<div class="keyidea">
+<span class="lbl">Key idea</span>
+A space solar cell's four headline numbers — <span class="term">I<sub>sc</sub></span>, <span class="term">I<sub>mp</sub></span>, <span class="term">V<sub>mp</sub></span>, <span class="term">V<sub>oc</sub></span> — are <strong>not constants</strong>. They shift with <strong>temperature</strong> (cold makes a cell push out <em>more</em> voltage; hot makes it push out <em>less</em>) and they <strong>degrade</strong> as the cell soaks up <em>radiation damage</em> over the mission. PowerPy keeps, per cell type, a JSON file holding the room-temperature Beginning-of-Life values <em>plus</em> lookup curves that describe both shifts.</p>
+</div>
+
+<h4>3.1 A one-line reminder of the four numbers</h4>
+
+<p>Before we move them around, recall what they are (Section 2 derived them from the IV curve):</p>
+
+<div class="callout">
+<span class="lbl">Recap — the four operating-point numbers</span>
+<ul>
+<li><span class="term">I<sub>sc</sub></span> — <strong>short-circuit current</strong> (A). The current when the cell's terminals are shorted; the top-left of the IV curve.</li>
+<li><span class="term">V<sub>oc</sub></span> — <strong>open-circuit voltage</strong> (V). The voltage with no load drawn; the bottom-right of the IV curve.</li>
+<li><span class="term">I<sub>mp</sub></span>, <span class="term">V<sub>mp</sub></span> — the current and voltage <strong>at the maximum-power point</strong> (the "knee"), where I·V is largest.</li>
+</ul>
+<p>Everything in this section is about computing these <em>four</em> values for a specific temperature <var>T</var> and a specific accumulated radiation dose, then handing them to the circuit model.</p>
+</div>
+
+<h4>3.2 Beginning of Life and End of Life</h4>
+
+<div class="term">
+<span class="lbl">Term — BOL / EOL</span>
+<p><strong>BOL (Beginning Of Life)</strong> — the cell as it leaves the factory: <em>fresh, undamaged</em>, zero accumulated radiation. The numbers printed on a datasheet are BOL numbers.</p>
+<p><strong>EOL (End Of Life)</strong> — the same cell after it has absorbed the <em>entire mission's</em> radiation dose. Same silicon, same area, but the crystal is now peppered with defects, so it produces less current and less voltage. A mission is sized so that even the weakest, end-of-life array still meets the power budget — so EOL, not BOL, is usually the number that decides whether a satellite survives.</p>
+</div>
+
+<p>The gap between BOL and EOL is the whole reason this section exists. If cells never aged, you would size a solar array once and forget it. Because they do age, the simulator must know <em>how far down</em> each number has drifted by the time the cell reaches the dose your orbit delivers.</p>
+
+<h4>3.3 The cell configuration: what the JSON file holds</h4>
+
+<p>Each cell type ships as a small data file. It records the fixed, measured BOL properties of that cell plus the housekeeping PowerPy needs. The keys are:</p>
+
+<pre><code>{
+  "name":           " exact part name of the cell ",
+  "reference":      " datasheet / source the numbers came from ",
+  "alpha":          0.91,      // solar absorptivity  (thermal: how much sunlight is absorbed)
+  "epsilon":        0.85,      // IR emissivity       (thermal: how readily it radiates heat away)
+  "isc":            0.50,      // short-circuit current        [A]
+  "imp":            0.48,      // current at max-power point   [A]
+  "vmp":            2.35,      // voltage at max-power point   [V]
+  "voc":            2.67,      // open-circuit voltage         [V]
+  "r_interconnect": 0.030,     // series resistance of the cell interconnect [ohm]
+  "t_ref":          28,        // reference temperature the numbers were measured at [degC]
+  "area":           30.18      // cell area [cm^2]
+}</code></pre>
+
+<div class="callout">
+<span class="lbl">Reading the keys</span>
+<ul>
+<li><span class="term">alpha</span> (<strong>solar absorptivity</strong>) and <span class="term">epsilon</span> (<strong>IR emissivity</strong>) are <em>thermal</em>, not electrical. They decide how hot the cell gets: <code>alpha</code> is the fraction of incoming sunlight the cell absorbs (heats it up), <code>epsilon</code> is how efficiently it re-radiates that heat to space (cools it down). A cell's equilibrium temperature is set by the balance of the two. We only need them here to remember that <var>T</var> is itself a computed quantity, not a free knob.</li>
+<li><span class="term">t_ref</span> (<strong>reference temperature</strong>) is the temperature at which <code>isc</code>, <code>imp</code>, <code>vmp</code>, <code>voc</code> were measured — typically <strong>28&nbsp;°C</strong>. Every temperature correction in this section is measured <em>relative to t_ref</em>: the correction is zero exactly at <var>T</var>&nbsp;=&nbsp;t_ref.</li>
+<li><span class="term">r_interconnect</span> is the small series resistance of the metal tab joining cells; it feeds the series-resistance term of the Section-2 circuit.</li>
+<li><span class="term">area</span> lets PowerPy scale a cell up or down (a half-size cell delivers half the current). The base <code>isc</code>/<code>imp</code> belong to this reference area.</li>
+</ul>
+</div>
+
+<h4>3.4 Radiation dose, and why it is one number</h4>
+
+<p>Space is full of <strong>trapped electrons and protons</strong> — charged particles held by the planet's magnetic field (the Van Allen belts are the famous example). When one of these particles slams into the cell, it can knock an atom out of place in the crystal lattice. Each displacement is a new defect that traps charge carriers before they reach the contacts, so a little current and a little voltage are lost. Over years, the damage accumulates.</p>
+
+<p>The awkward part: the particles arrive at a huge range of <em>energies</em>, and a 2&nbsp;MeV proton does not do the same damage as a 0.5&nbsp;MeV electron. Tracking the whole spectrum cell-by-cell would be hopeless. So the field uses a standard trick:</p>
+
+<div class="term">
+<span class="lbl">Term — equivalent 1&nbsp;MeV electron fluence</span>
+<p><strong>Fluence</strong> is the total number of particles that have passed through one square centimetre over the whole mission (units: particles per cm²). The <strong>equivalent 1&nbsp;MeV electron fluence</strong> collapses the entire messy spectrum of electrons and protons of all energies into <em>one single number</em>: "the dose that would have done the same damage if it had all been 1&nbsp;MeV electrons." It is the universal currency of radiation damage — a single scalar standing in for the whole spectrum.</p>
+</div>
+
+<p>PowerPy lets you set this dose, and it does something subtle: it tracks the dose affecting <em>current</em> and the dose affecting <em>voltage</em> <strong>separately</strong>, because current and voltage degrade at different rates under the same radiation.</p>
+
+<div class="formula">
+<span class="badge api">cell.setDose(dose_i, dose_v)</span><br>
+sets the current-degrading dose <code>dose_i</code> and the voltage-degrading dose <code>dose_v</code>.
+<div class="where">Inputs are in <strong>units of 1×10<sup>14</sup> e/cm²</strong>. The code multiplies what you pass by 1e14 internally. So to model a fluence of 1×10<sup>15</sup>&nbsp;e/cm² you pass <code>10</code>, not <code>1e15</code>.</div>
+</div>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — the units-of-1e14 trap <span class="badge hot">EXAM-HOT</span></span>
+<p>The dose argument is <strong>pre-scaled</strong>: PowerPy multiplies it by 1×10<sup>14</sup> for you. If you read a real fluence of <code>1e15</code> e/cm² off a radiation report and type <code>cell.setDose(1e15, 1e15)</code>, you have just asked for 1×10<sup>15</sup>&nbsp;×&nbsp;1×10<sup>14</sup>&nbsp;=&nbsp;1×10<sup>29</sup>&nbsp;e/cm² — a dose that would vaporise the solar system. The crystal "dies" instantly and every remaining factor collapses.</p>
+<p><strong>Right way:</strong> divide the real fluence by 1e14 first. 1×10<sup>15</sup>&nbsp;e/cm² → pass <code>10</code>. 5×10<sup>14</sup> → pass <code>5</code>. 3×10<sup>13</sup> → pass <code>0.3</code>.</p>
+</div>
+
+<h4>3.5 Regressors: turning dose into a number</h4>
+
+<p>How does the simulator know that a dose of, say, 5×10<sup>14</sup>&nbsp;e/cm² leaves 92&nbsp;% of the current intact? It looks it up. For each cell type the JSON file carries a set of curves — PowerPy calls them <strong>regressors</strong> — and each is just an interpolation lookup: hand it a dose, it returns a number.</p>
+
+<div class="term">
+<span class="lbl">Term — regressor</span>
+<p>A <strong>regressor</strong> here is a stored curve, evaluated by interpolation, that maps a radiation dose to a coefficient. Two families exist, and they answer two different questions.</p>
+</div>
+
+<p><strong>Family 1 — remaining factors</strong> &nbsp;<span class="eqn">r<sub>isc</sub>, r<sub>imp</sub>, r<sub>vmp</sub>, r<sub>voc</sub></span>. Each is the <em>fraction of the BOL value still surviving</em> after a given dose. At zero dose every remaining factor is exactly <strong>1.0</strong> (nothing has degraded yet); as dose climbs they fall, reaching roughly <strong>0.8–0.9</strong> at end of life. You multiply the BOL value by its remaining factor to get the radiation-degraded value.</p>
+
+<p><strong>Family 2 — temperature coefficients</strong> &nbsp;<span class="eqn">isc_dt, imp_dt, vmp_dt, voc_dt</span>. Each is a <em>slope</em>: how much the parameter changes per degree Celsius, d(param)/d<var>T</var>. Crucially, these slopes <strong>themselves depend on dose</strong> — a radiation-damaged cell responds to temperature slightly differently — which is why they are stored as regressors too, not as plain constants.</p>
+
+<div class="keyidea">
+<span class="lbl">Signs you must memorise</span>
+<ul>
+<li><span class="eqn">isc_dt</span> is <strong>small and POSITIVE</strong>. Heating a cell raises its current a little — a hot cell absorbs photons slightly more readily (the band gap narrows). Magnitude is tiny, order 10<sup>−4</sup>&nbsp;A/°C.</li>
+<li><span class="eqn">voc_dt</span> and <span class="eqn">vmp_dt</span> are <strong>NEGATIVE and larger in magnitude</strong>. Heating a cell <em>drops</em> its voltage, and this is the effect that dominates. A typical figure is <span class="eqn">voc_dt&nbsp;≈&nbsp;−6&nbsp;mV/°C <em>per junction</em></span> (a multi-junction cell stacks several, so the cell-level number scales up — treat −6&nbsp;mV/°C as an illustrative per-junction scale, not the whole-cell value).</li>
+</ul>
+<p>One sentence to carry the whole section: <strong>cold helps voltage, heat hurts it, and current barely cares.</strong></p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 490 150" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<line stroke="#1d2733" x1="55" y1="118" x2="255" y2="118"/><line stroke="#1d2733" x1="55" y1="118" x2="55" y2="16"/>
+<polyline points="55.0,18.0 58.3,18.5 61.6,19.0 64.9,19.5 68.2,20.0 71.5,20.5 74.8,21.1 78.1,21.6 81.4,22.1 84.7,22.6 88.1,23.1 91.4,23.6 94.7,24.1 98.0,24.6 101.3,25.1 104.6,25.6 107.9,26.1 111.2,26.6 114.5,27.2 117.8,27.7 121.1,28.2 124.4,28.7 127.7,29.2 131.0,29.7 134.3,30.2 137.6,30.7 140.9,31.2 144.2,31.7 147.5,32.2 150.8,32.7 154.2,33.3 157.5,33.8 160.8,34.3 164.1,34.8 167.4,35.3 170.7,35.8 174.0,36.3 177.3,36.8 180.6,37.3 183.9,37.8 187.2,38.3 190.5,38.8 193.8,39.4 197.1,39.9 200.4,40.4 203.7,40.9 207.0,41.4 210.3,41.9 213.6,42.4 216.9,42.9 220.3,43.4 223.6,43.9 226.9,44.4 230.2,44.9 233.5,45.5 236.8,46.0 240.1,46.5 243.4,47.0 246.7,47.5 250.0,48.0" fill="none" stroke="#0b3d63" stroke-width="2"/><polyline points="55.0,18.0 58.3,19.0 61.6,20.0 64.9,21.1 68.2,22.1 71.5,23.1 74.8,24.1 78.1,25.1 81.4,26.1 84.7,27.2 88.1,28.2 91.4,29.2 94.7,30.2 98.0,31.2 101.3,32.2 104.6,33.3 107.9,34.3 111.2,35.3 114.5,36.3 117.8,37.3 121.1,38.3 124.4,39.4 127.7,40.4 131.0,41.4 134.3,42.4 137.6,43.4 140.9,44.4 144.2,45.5 147.5,46.5 150.8,47.5 154.2,48.5 157.5,49.5 160.8,50.5 164.1,51.6 167.4,52.6 170.7,53.6 174.0,54.6 177.3,55.6 180.6,56.6 183.9,57.7 187.2,58.7 190.5,59.7 193.8,60.7 197.1,61.7 200.4,62.7 203.7,63.8 207.0,64.8 210.3,65.8 213.6,66.8 216.9,67.8 220.3,68.8 223.6,69.9 226.9,70.9 230.2,71.9 233.5,72.9 236.8,73.9 240.1,74.9 243.4,76.0 246.7,77.0 250.0,78.0" fill="none" stroke="#9a3b3b" stroke-width="2"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="150" y="135" text-anchor="middle" fill="#1d2733">1 MeV e⁻ dose (log)</text>
+<text font-family="Segoe UI,Arial,sans-serif" transform="translate(18,70) rotate(-90)" text-anchor="middle" fill="#1d2733">remaining factor</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="200" y="40" fill="#0b3d63" font-size="9">r_isc</text><text font-family="Segoe UI,Arial,sans-serif" x="200" y="92" fill="#9a3b3b" font-size="9">r_voc</text>
+<line stroke="#1d2733" x1="310" y1="118" x2="478" y2="118"/><line stroke="#1d2733" x1="310" y1="118" x2="310" y2="16"/>
+<polyline points="310.0,2.2 313.3,4.6 316.5,7.1 319.8,9.5 323.1,12.0 326.3,14.4 329.6,16.9 332.9,19.3 336.1,21.8 339.4,24.2 342.7,26.7 345.9,29.1 349.2,31.6 352.4,34.0 355.7,36.5 359.0,38.9 362.2,41.4 365.5,43.8 368.8,46.3 372.0,48.7 375.3,51.2 378.6,53.6 381.8,56.1 385.1,58.5 388.4,61.0 391.6,63.4 394.9,65.9 398.2,68.3 401.4,70.8 404.7,73.2 408.0,75.7 411.2,78.1 414.5,80.6 417.8,83.0 421.0,85.5 424.3,87.9 427.6,90.4 430.8,92.8 434.1,95.3 437.3,97.7 440.6,100.2 443.9,102.6 447.1,105.1 450.4,107.5 453.7,110.0 456.9,112.4 460.2,114.9 463.5,117.3 466.7,119.8 470.0,122.2" fill="none" stroke="#1f6a6a" stroke-width="2.2"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="394" y="135" text-anchor="middle" fill="#1d2733">temperature (°C)</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="320" y="30" fill="#1f6a6a" font-size="9">Voc rises as T falls</text>
+</svg>
+<figcaption>Figure 3.1 — Left: remaining factors fall with accumulated radiation dose. Right: open-circuit voltage rises as the cell gets colder.</figcaption></figure>
+
+<h4>3.6 The <code>prepareModel</code> pipeline</h4>
+
+<p>Now we can assemble the operating-point numbers. <code>prepareModel</code> is the routine that, given the cell's fixed JSON values, a temperature <var>T</var> (in °C), and the two doses, produces the four numbers <em>at this instant</em>. Read it as an assembly line — each step takes the running value and adjusts it.</p>
+
+<p>Two inputs arrive from elsewhere in the simulator and we simply carry them through:</p>
+
+<div class="worked">
+<span class="lbl">Pipeline — steps 1–2 (pointing &amp; losses, taught in other sections)</span>
+<div class="step"><strong>1. Tilt (pointing).</strong> &nbsp; tilt&nbsp;=&nbsp;cos(angle_alpha&nbsp;+&nbsp;season_angle)&nbsp;·&nbsp;cos(angle_beta). This is how squarely the sun strikes the panel; 1.0 means dead-on. (Geometry section.)</div>
+<div class="step"><strong>2. Combine loss factors.</strong> &nbsp; lossI&nbsp;=&nbsp;product of all current-loss multipliers (including an inherited tilt and season factor); &nbsp; lossV&nbsp;=&nbsp;product of all voltage-loss multipliers. (Losses section.) These are held aside and applied last.</div>
+</div>
+
+<p>Steps 3–7 are the heart of this section — the temperature-and-dose correction of each of the four numbers. Notice carefully which dose keys which parameter: <strong>I<sub>sc</sub> and I<sub>mp</sub> use <code>dose_i</code>; V<sub>mp</sub> and V<sub>oc</sub> use <code>dose_v</code></strong>.</p>
+
+<div class="worked">
+<span class="lbl">Pipeline — steps 3–7 (the dose + temperature correction)</span>
+<div class="step"><strong>3. Look up the slopes.</strong> &nbsp; imp_dt&nbsp;=&nbsp;imp_dt(dose_i), &nbsp; isc_dt&nbsp;=&nbsp;isc_dt(dose_i). <span class="small">(When <var>T</var>&nbsp;&lt;&nbsp;0&nbsp;°C a special low-temperature blend of the slope is used instead, because the response goes slightly non-linear in the deep cold — mentioned for completeness; we will not dwell on it.)</span></div>
+<div class="step"><strong>4. Short-circuit current:</strong> &nbsp; isc&nbsp;=&nbsp;isc·r<sub>isc</sub>(dose_i)&nbsp;+&nbsp;isc_dt(dose_i)·(<var>T</var>&nbsp;−&nbsp;t_ref)</div>
+<div class="step"><strong>5. Max-power current:</strong> &nbsp; imp&nbsp;=&nbsp;imp·r<sub>imp</sub>(dose_i)&nbsp;+&nbsp;imp_dt·(<var>T</var>&nbsp;−&nbsp;t_ref)</div>
+<div class="step"><strong>6. Max-power voltage:</strong> &nbsp; vmp&nbsp;=&nbsp;vmp·r<sub>vmp</sub>(dose_v)&nbsp;+&nbsp;vmp_dt(dose_v)·(<var>T</var>&nbsp;−&nbsp;t_ref)</div>
+<div class="step"><strong>7. Open-circuit voltage:</strong> &nbsp; voc&nbsp;=&nbsp;voc·r<sub>voc</sub>(dose_v)&nbsp;+&nbsp;voc_dt(dose_v)·(<var>T</var>&nbsp;−&nbsp;t_ref)</div>
+<div class="check">Every line has the same shape: <em>(BOL value × remaining factor) + (slope × temperature offset from t_ref)</em>. The first term is the radiation hit; the second term is the temperature shift. At <var>T</var>&nbsp;=&nbsp;t_ref the second term vanishes, and at zero dose every remaining factor is 1.0 — so a fresh cell at its reference temperature returns exactly the datasheet number. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Pipeline — step 8 (apply losses, taught in the losses section)</span>
+<div class="step"><strong>8.</strong> Apply the illumination/season voltage corrections and the loss factors held from step 2:</div>
+<div class="step">isc&nbsp;·=&nbsp;lossI; &nbsp; imp&nbsp;·=&nbsp;lossI; &nbsp; vmp&nbsp;·=&nbsp;lossV·vmp_corr; &nbsp; voc&nbsp;·=&nbsp;lossV·voc_corr</div>
+<div class="check">The result — (isc, imp, vmp, voc) at <em>this</em> temperature and <em>this</em> dose — is exactly the four-number set that the Section-2 equivalent-circuit model consumes to draw the IV curve. The pipeline's whole job is to feed that model honest, life-stage-correct numbers. ✓</div>
+</div>
+
+<div class="callout">
+<span class="lbl">Mental model</span>
+<p>Steps 4–7 move each number to the right place for the cell's age and temperature. Step 8 then shaves off the optical and wiring losses that the rest of the system imposes. The worked examples that follow stop at the end of step 7 — at the bare dose-and-temperature operating point — because the loss factors are a separate downstream multiply taught elsewhere. Do not apply lossI/lossV to them.</p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 640 120" xmlns="http://www.w3.org/2000/svg">
+<rect x="8" y="40" width="92" height="50" rx="5" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="54.0" y="58" text-anchor="middle" font-size="10" fill="#1d2733">base numbers</text><text font-family="Segoe UI,Arial,sans-serif" x="54.0" y="73" text-anchor="middle" font-size="10" fill="#1d2733">isc imp vmp voc</text>
+<rect x="150" y="40" width="92" height="50" rx="5" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="196.0" y="58" text-anchor="middle" font-size="10" fill="#1d2733">× remaining</text><text font-family="Segoe UI,Arial,sans-serif" x="196.0" y="73" text-anchor="middle" font-size="10" fill="#1d2733">r(dose)</text>
+<rect x="292" y="40" width="92" height="50" rx="5" fill="#eef5fb" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="338.0" y="58" text-anchor="middle" font-size="10" fill="#1d2733">+ temp coeff</text><text font-family="Segoe UI,Arial,sans-serif" x="338.0" y="73" text-anchor="middle" font-size="10" fill="#1d2733">·(T − t_ref)</text>
+<rect x="434" y="40" width="92" height="50" rx="5" fill="#fbf4e2" stroke="#c9a227"/><text font-family="Segoe UI,Arial,sans-serif" x="480.0" y="58" text-anchor="middle" font-size="10" fill="#1d2733">× losses,</text><text font-family="Segoe UI,Arial,sans-serif" x="480.0" y="73" text-anchor="middle" font-size="10" fill="#1d2733">season corr.</text>
+<rect x="560" y="40" width="74" height="50" rx="5" fill="#eaf2f0" stroke="#1f6a6a"/><text font-family="Segoe UI,Arial,sans-serif" x="597" y="60" text-anchor="middle" font-size="10" fill="#1f6a6a">operating</text><text font-family="Segoe UI,Arial,sans-serif" x="597" y="74" text-anchor="middle" font-size="9" fill="#1f6a6a">isc..voc</text>
+<path d="M100 65 H118" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="118,65 112,61 112,69" fill="#b9851a"/><path d="M242 65 H260" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="260,65 254,61 254,69" fill="#b9851a"/><path d="M384 65 H402" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="402,65 396,61 396,69" fill="#b9851a"/><path d="M526 65 H544" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="544,65 538,61 538,69" fill="#b9851a"/>
+</svg>
+<figcaption>Figure 3.2 — The prepareModel pipeline: base numbers are scaled by the dose remaining factor, shifted by temperature, then corrected for losses and season.</figcaption></figure>
+
+<h4>3.7 Worked examples</h4>
+
+<p>These walk steps 4–7 with real numbers and units. They stop <em>before</em> step 8 (no loss factors applied).</p>
+
+<div class="worked">
+<span class="lbl">Worked 3A — V<sub>oc</sub> of a cold cell</span>
+<p><strong>Given:</strong> base voc&nbsp;=&nbsp;2.67&nbsp;V at t_ref&nbsp;=&nbsp;28&nbsp;°C; &nbsp; voc_dt&nbsp;=&nbsp;−6.0×10<sup>−3</sup>&nbsp;V/°C; &nbsp; r<sub>voc</sub>(dose)&nbsp;=&nbsp;0.95; &nbsp; the cell is cold at <var>T</var>&nbsp;=&nbsp;−80&nbsp;°C. Apply step 7.</p>
+<div class="step"><strong>Radiation term:</strong> &nbsp; voc · r<sub>voc</sub> &nbsp;=&nbsp; 2.67&nbsp;V × 0.95 &nbsp;=&nbsp; <strong>2.5365&nbsp;V</strong>. &nbsp;<span class="small">(radiation alone has pulled it down from 2.67 V)</span></div>
+<div class="step"><strong>Temperature offset:</strong> &nbsp; Δ<var>T</var> = <var>T</var> − t_ref = (−80) − (28) = <strong>−108&nbsp;°C</strong>. &nbsp;<span class="small">(the cell is 108 degrees colder than the reference)</span></div>
+<div class="step"><strong>Slope term:</strong> &nbsp; voc_dt · Δ<var>T</var> &nbsp;=&nbsp; (−0.006&nbsp;V/°C) × (−108&nbsp;°C) &nbsp;=&nbsp; <strong>+0.648&nbsp;V</strong>. &nbsp;<span class="small">(negative slope × negative ΔT → a POSITIVE bump: cold adds voltage)</span></div>
+<div class="step"><strong>Sum:</strong> &nbsp; voc = 2.5365&nbsp;V + 0.648&nbsp;V = <strong>3.18&nbsp;V</strong>.</div>
+<div class="check"><strong>Sanity check on the sign.</strong> The cell started at 2.67&nbsp;V; radiation tried to lower it, but the deep cold raised it all the way to 3.18&nbsp;V — <em>above</em> the BOL value. That is exactly right: <strong>going cold RAISES the voltage</strong>, and at −80&nbsp;°C the temperature gain (+0.648&nbsp;V) easily beats the radiation loss (−0.13&nbsp;V). If you had gotten a number below 2.5365 V you would have flipped a sign somewhere. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 3B — I<sub>sc</sub> of a hot cell at EOL</span>
+<p><strong>Given:</strong> base isc&nbsp;=&nbsp;0.50&nbsp;A; &nbsp; r<sub>isc</sub>(dose)&nbsp;=&nbsp;0.97 (end-of-life dose); &nbsp; isc_dt&nbsp;=&nbsp;+0.30×10<sup>−3</sup>&nbsp;A/°C; &nbsp; the cell is hot at <var>T</var>&nbsp;=&nbsp;+70&nbsp;°C. Apply step 4.</p>
+<div class="step"><strong>Radiation term:</strong> &nbsp; isc · r<sub>isc</sub> &nbsp;=&nbsp; 0.50&nbsp;A × 0.97 &nbsp;=&nbsp; <strong>0.485&nbsp;A</strong>. &nbsp;<span class="small">(EOL radiation has knocked the current down from 0.50 A to 0.485 A)</span></div>
+<div class="step"><strong>Temperature offset:</strong> &nbsp; Δ<var>T</var> = 70 − 28 = <strong>+42&nbsp;°C</strong>.</div>
+<div class="step"><strong>Slope term:</strong> &nbsp; isc_dt · Δ<var>T</var> &nbsp;=&nbsp; (+0.0003&nbsp;A/°C) × (+42&nbsp;°C) &nbsp;=&nbsp; <strong>+0.0126&nbsp;A</strong>. &nbsp;<span class="small">(positive slope × positive ΔT → heat adds a little current)</span></div>
+<div class="step"><strong>Sum:</strong> &nbsp; isc = 0.485&nbsp;A + 0.0126&nbsp;A = <strong>0.498&nbsp;A</strong>.</div>
+<div class="check"><strong>Read the reference point carefully.</strong> The current barely moves, and it moves <em>up</em> — but "up" here means relative to the radiation-degraded 0.485&nbsp;A, not the BOL 0.50&nbsp;A. The full story: radiation drops it from 0.50&nbsp;A to 0.485&nbsp;A, then the +70&nbsp;°C heat nudges it back up to 0.498&nbsp;A — still slightly <em>under</em> the BOL value. Current is almost temperature-insensitive (the slope is tiny and positive), which is exactly why isc_dt is the small positive coefficient. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 3C — the formula collapses to the BOL number</span>
+<p><strong>Claim:</strong> at <var>T</var>&nbsp;=&nbsp;t_ref and zero dose, every step 4–7 line returns the original datasheet value. Take V<sub>oc</sub> with base voc&nbsp;=&nbsp;2.67&nbsp;V.</p>
+<div class="step"><strong>Zero dose ⇒ remaining factor = 1.0:</strong> &nbsp; voc · r<sub>voc</sub>(0) = 2.67&nbsp;V × 1.0 = <strong>2.67&nbsp;V</strong>.</div>
+<div class="step"><strong>T = t_ref ⇒ Δ<var>T</var> = 0:</strong> &nbsp; voc_dt · (t_ref − t_ref) = voc_dt × 0 = <strong>0&nbsp;V</strong>, whatever the slope.</div>
+<div class="step"><strong>Sum:</strong> &nbsp; voc = 2.67&nbsp;V + 0&nbsp;V = <strong>2.67&nbsp;V</strong> — the BOL datasheet value, unchanged.</div>
+<div class="check">This is the consistency guarantee: the same one formula that corrects for cold, heat, and radiation reduces to "do nothing" at the conditions where the numbers were measured. A correction that did <em>not</em> vanish at its own reference point would be a bug. ✓</div>
+</div>
+
+<h4>3.8 Why colder means more voltage — a Socratic ladder</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — Why does a solar cell make MORE voltage when it is COLDER?</div>
+
+<div class="socratic">
+<div class="q">Q1. What is a "temperature coefficient" in the first place?</div>
+<div class="answer">It is a <strong>slope</strong>: how much a quantity changes for each 1&nbsp;°C change in temperature, d(param)/d<var>T</var>. For voltage we wrote it <span class="eqn">voc_dt</span>, in volts per °C. Multiply it by how far the temperature is from t_ref and you get the voltage shift. It is the bridge between "temperature changed" and "the number changed."</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q2. What is the SIGN of that coefficient for voltage, and what does the sign mean physically?</div>
+<div class="answer">It is <strong>negative</strong> (e.g. voc_dt&nbsp;≈&nbsp;−6&nbsp;mV/°C per junction). A negative slope means: as <var>T</var> goes <em>up</em>, voltage goes <em>down</em>; and as <var>T</var> goes <em>down</em>, voltage goes <em>up</em>. So <em>cold raises voltage</em> follows directly from the minus sign — exactly what Worked 3A showed numerically (Δ<var>T</var> went negative, and −×− gave a positive bump).</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q3. But WHY is the sign negative? What is actually happening inside the cell?</div>
+<div class="answer">The cell is a diode in the light. Its open-circuit voltage is set by a tug-of-war between the light-generated current and the diode's own <strong>saturation current</strong> <var>I<sub>0</sub></var> — the tiny leakage current that flows backwards through the junction. <var>I<sub>0</sub></var> depends <em>extremely strongly</em> on temperature: it is governed by how many charge carriers have enough thermal energy to cross the band gap, which is an exponential function of temperature. <strong>When the cell gets colder, far fewer carriers have that energy, so <var>I<sub>0</sub></var> plummets.</strong> A smaller <var>I<sub>0</sub></var> means the diode leaks less, so the light current can hold the junction at a <em>higher</em> voltage before the two balance — V<sub>oc</sub> rises. Heat does the reverse: <var>I<sub>0</sub></var> climbs, the junction leaks more, V<sub>oc</sub> sags.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q4. Tie it back to Section 2 — where did we already meet this <var>I<sub>0</sub></var>?</div>
+<div class="answer">It is the <code>i0_cell</code> term in the Section-2 equivalent-circuit model — the diode's reverse saturation current that sets where the IV curve bends down to meet the voltage axis. Temperature does not appear as a separate knob in that circuit; instead, <code>prepareModel</code> bakes the temperature effect into the <em>value of V<sub>oc</sub></em> it hands the circuit (step 7). So the "cold → more voltage" physics and the circuit's <code>i0_cell</code> are two views of one mechanism: cold suppresses <code>i0_cell</code>, which raises V<sub>oc</sub>.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q5. (Trap-spotter) A classmate says: "voltage comes from kT/q, and that term gets <em>smaller</em> when it's cold, so surely cold should LOWER the voltage." Where is the error?</div>
+<div class="answer">The kT/q prefactor does shrink in the cold, taken alone — but it is <em>not</em> the dominant term. V<sub>oc</sub> ≈ (kT/q)·ln(I<sub>light</sub>/<var>I<sub>0</sub></var>&nbsp;+&nbsp;1), and <var>I<sub>0</sub></var> sits inside the logarithm with an <em>exponential</em> temperature dependence. As the cell cools, <var>I<sub>0</sub></var> falls so steeply that the logarithm grows faster than the kT/q prefactor shrinks. The exponential collapse of <var>I<sub>0</sub></var> wins decisively, so V<sub>oc</sub> rises overall. The classmate fixated on the small prefactor and missed the big exponential — the classic student trap.</div>
+</div>
+</div>
+
+<h4>3.9 The API you will actually call</h4>
+
+<div class="callout">
+<span class="lbl">PowerPy cell methods</span>
+<ul>
+<li><span class="badge api">cell.setCell(type)</span> — load a cell type's JSON config (the ten keys of §3.3).</li>
+<li><span class="badge api">cell.setTemperature(T)</span> — set the operating temperature <var>T</var> in °C (drives steps 3–7).</li>
+<li><span class="badge api">cell.setDose(di, dv)</span> — set the current and voltage doses, <em>in units of 1e14 e/cm²</em> (§3.4 pitfall).</li>
+<li><span class="badge api">cell.resizeCell(area)</span> — scale the cell to a new area in cm² (rescales the currents).</li>
+<li><span class="badge api">cell.showTempCoefficients()</span> — print the temperature-coefficient regressors (the isc_dt … voc_dt slopes).</li>
+<li><span class="badge api">cell.showRemainingFactors()</span> — print the remaining-factor regressors (the r<sub>isc</sub> … r<sub>voc</sub> curves).</li>
+</ul>
+<p>A typical setup is: <code>setCell</code> → <code>resizeCell</code> → <code>setTemperature</code> → <code>setDose</code>, after which <code>prepareModel</code> has everything it needs to produce the four operating-point numbers.</p>
+</div>
+
+<h4>3.10 Practice</h4>
+
+<div class="practice">
+<span class="lbl">Practice 3-1 — V<sub>mp</sub> at end of life, hot</span>
+<p>A cell has base vmp&nbsp;=&nbsp;2.35&nbsp;V at t_ref&nbsp;=&nbsp;28&nbsp;°C. At its end-of-life voltage dose, r<sub>vmp</sub>(dose_v)&nbsp;=&nbsp;0.93 and the slope vmp_dt(dose_v)&nbsp;=&nbsp;−5.5×10<sup>−3</sup>&nbsp;V/°C. The cell is hot at <var>T</var>&nbsp;=&nbsp;+65&nbsp;°C. Using pipeline step 6, compute V<sub>mp</sub>. Watch the sign of the slope term — when the cell is hotter than t_ref, does it add or subtract? (Stop at step 6; do not apply any loss factors.)</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 3-2 — read a remaining-factor curve, then apply it</span>
+<p>You are handed the <span class="eqn">r<sub>imp</sub></span> remaining-factor curve (the left-hand figure of §3.5). At a current dose of 5×10<sup>14</sup>&nbsp;e/cm² the curve reads <span class="eqn">r<sub>imp</sub>&nbsp;=&nbsp;0.90</span>.</p>
+<p>(a) What value would you pass to <code>cell.setDose</code> for this dose? &nbsp; (b) With base imp&nbsp;=&nbsp;0.48&nbsp;A and the cell held at exactly t_ref (so the temperature term is zero), what is the radiation-degraded I<sub>mp</sub>? &nbsp; (c) In one sentence, why is the temperature term zero here?</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 3-3 — spot the units error</span>
+<p>An engineer's radiation report says the orbit delivers 2×10<sup>15</sup>&nbsp;e/cm² (1&nbsp;MeV equivalent) to both current and voltage by end of life. They write <code>cell.setDose(2e15, 2e15)</code> and every remaining factor comes back as essentially 0. What did they do wrong, and what two numbers should they have passed instead?</p>
+<div class="answerspace lines-4"></div>
+</div>
+
+<hr class="sep">
+<p class="small">Looking ahead: §3 produced the four operating-point numbers for a single cell at one instant. The next step is to wire many cells into strings and panels and ask how those numbers combine across a whole array — and how the loss factors (steps 2 and 8) are actually built.</p>

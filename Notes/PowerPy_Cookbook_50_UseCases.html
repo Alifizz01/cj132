@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>PowerPy Cookbook -- 50 Use Cases</title>
+<link rel="stylesheet" href="print-base.css">
+<style>
+:root { --accent:#1F5048; --accent2:#9a4715; --ink:#1a1a1a; --sub:#5b6b66; }
+html,body { font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; color:var(--ink); line-height:1.5; }
+h1,h2,h3 { font-family: Georgia, "Times New Roman", serif; }
+.chapter-opener { border:1px solid #d9dde2; border-radius:8px; padding:20mm 16mm; margin-bottom:8mm; }
+.chapter-opener .kicker { color:var(--accent); font-size:.8rem; letter-spacing:.18em; text-transform:uppercase; font-family:"Segoe UI",sans-serif; }
+.chapter-opener h1 { font-size:2.5rem; margin:.3em 0 .2em; color:var(--accent); }
+.chapter-opener p { color:var(--sub); max-width:60ch; }
+.toc { columns:2; column-gap:12mm; font-size:.86rem; list-style:none; padding:0; }
+.toc li { margin:.12em 0; break-inside:avoid; }
+.toc .toccat { font-weight:700; color:var(--accent); margin-top:.7em; font-family:"Segoe UI",sans-serif; }
+.toc .tocn { color:var(--accent2); font-weight:600; font-variant-numeric:tabular-nums; }
+.cathead { color:var(--accent); border-bottom:2px solid var(--accent); padding-bottom:.2em; margin:9mm 0 5mm; font-size:1.5rem; break-after:avoid; }
+.example { border:1px solid #e2e6ea; border-left:4px solid var(--accent); border-radius:6px; padding:5mm 6mm; margin:0 0 6mm; }
+.exhead { display:flex; align-items:baseline; gap:.6em; }
+.exhead .num { background:var(--accent); color:#fff !important; font-family:"Segoe UI",sans-serif; font-weight:700; font-size:.8rem; padding:.15em .5em; border-radius:4px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.exhead h3 { margin:0; font-size:1.12rem; }
+.callout.best { background:#eef3f1; border:1px solid #cfe0da; border-radius:5px; padding:.5em .8em; margin:.6em 0; font-size:.9rem; }
+.bestlabel { display:inline-block; background:var(--accent); color:#fff !important; font-size:.62rem; letter-spacing:.1em; text-transform:uppercase; padding:.12em .5em; border-radius:3px; margin-right:.5em; font-family:"Segoe UI",sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+.codewrap { position:relative; margin:.6em 0; }
+.codelabel { position:absolute; top:0; right:0; font-size:.6rem; letter-spacing:.1em; color:#8a97a0; padding:.2em .5em; font-family:"Segoe UI",sans-serif; }
+pre.code { font-family:"Consolas","SF Mono",Menlo,monospace; font-size:.78rem; line-height:1.45; padding:.8em 1em; border-radius:5px; overflow:hidden; white-space:pre-wrap; }
+.note { font-size:.86rem; color:#33403b; margin:.5em 0 0; }
+.note strong { color:var(--accent2); }
+.legend { font-size:.84rem; color:var(--sub); }
+</style></head>
+<body>
+
+<div class="chapter-opener">
+  <div class="kicker">PowerPy &middot; Solar-Array Analysis Framework</div>
+  <h1>Cookbook: 50 Use Cases</h1>
+  <p>Fifty worked examples of how to drive and customise the framework &mdash; from loading the
+  workbook to electrical I-V, layout, thermal, failure Monte-Carlo, bypass diodes and orbit.
+  Each entry says what it is <em>best for</em>, shows the exact Python (and CLI where it applies),
+  and adds a short note. Pure examples &mdash; copy, adapt, run.</p>
+  <p class="legend"><strong>Setup:</strong> run from the repo root with <code>sys.path.insert(0, "src")</code>
+  (or <code>python run.py</code>); no installation required. Snippets assume <code>md = load_report_data(...)</code>
+  and, where a layout is used, a <code>layout</code> from one of the layout examples.</p>
+</div>
+
+<h2 class="cathead">Contents</h2>
+<ul class="toc">
+<li class="toccat">Setup &amp; loading</li><li><span class="tocn">01</span> Load the whole workbook into one object</li><li><span class="tocn">02</span> Run with zero installation (locked-down laptop)</li><li><span class="tocn">03</span> Inspect the loaded cell / mission / layout data</li><li><span class="tocn">04</span> Validate a workbook on purpose</li><li class="toccat">Cell-level IV</li><li><span class="tocn">05</span> One cell&#x27;s I-V / P-V at an operating point</li><li><span class="tocn">06</span> Build the single-diode curve directly</li><li><span class="tocn">07</span> Operating points (Isc/Imp/Vmp/Voc) at any environment</li><li><span class="tocn">08</span> Compare a BOL vs EOL cell side by side</li><li><span class="tocn">09</span> Switch the I-V engine: analytic vs vendored ngspice</li><li><span class="tocn">10</span> Plot a cell I-V / P-V to PNG</li><li class="toccat">Array &amp; electrical</li><li><span class="tocn">11</span> Assemble the full array from the workbook</li><li><span class="tocn">12</span> Evaluate named mission cases</li><li><span class="tocn">13</span> Resolve a phase into an Environment</li><li><span class="tocn">14</span> Per-section results table</li><li><span class="tocn">15</span> Current / power at the bus voltage</li><li><span class="tocn">16</span> Whole-array I-V / P-V figure</li><li><span class="tocn">17</span> Per-section I-V grid figure</li><li><span class="tocn">18</span> Generate the full electrical PDF report</li><li class="toccat">Layout &amp; placement</li><li><span class="tocn">19</span> Build a panel from an electrical topology</li><li><span class="tocn">20</span> Author a fully-tagged layout JSON</li><li><span class="tocn">21</span> Layout with bare / no-SCA regions</li><li><span class="tocn">22</span> Draw the layout map (cells vs bare vs diode)</li><li><span class="tocn">23</span> Schematic of a panel&#x27;s sections</li><li><span class="tocn">24</span> Get the thermal adjacency a layout implies</li><li><span class="tocn">25</span> Save a layout you built in code</li><li class="toccat">Thermal</li><li><span class="tocn">26</span> Equilibrium temperature of one cell (2-node)</li><li><span class="tocn">27</span> Solve a whole panel (grid) thermally</li><li><span class="tocn">28</span> Solve from a Substrate object</li><li><span class="tocn">29</span> See the effect of lateral conduction</li><li><span class="tocn">30</span> Panel temperature heat-map figure</li><li><span class="tocn">31</span> Full thermal PDF report</li><li><span class="tocn">32</span> Equilibrium temperature per mission phase</li><li><span class="tocn">33</span> Customize the substrate (what-if)</li><li class="toccat">Failure &amp; Monte-Carlo</li><li><span class="tocn">34</span> Inject specific cell failures</li><li><span class="tocn">35</span> Sweep many failure patterns</li><li><span class="tocn">36</span> Greedy worst-case failure cluster</li><li><span class="tocn">37</span> Auto-stopping Monte-Carlo</li><li><span class="tocn">38</span> Full Monte-Carlo failure PDF report</li><li><span class="tocn">39</span> CLI: run / worst / sweep</li><li><span class="tocn">40</span> Single failed-cell hot spot</li><li><span class="tocn">41</span> Tune the reverse-bias dissipation</li><li class="toccat">Bypass diode &amp; voltage</li><li><span class="tocn">42</span> Reverse voltage on a failed cell</li><li><span class="tocn">43</span> Power a failed cell dissipates</li><li><span class="tocn">44</span> Scan bypass-diode spacing</li><li><span class="tocn">45</span> Zero-voltage (reverse-bias cancellation) analysis</li><li class="toccat">Orbit &amp; transient</li><li><span class="tocn">46</span> Orbit period, beta angle, eclipse in one call</li><li><span class="tocn">47</span> Flux-vs-time over one orbit</li><li><span class="tocn">48</span> Transient temperature around an orbit</li><li><span class="tocn">49</span> Coupled electrical &lt;-&gt; thermal solve</li><li><span class="tocn">50</span> Time for a hot spot to reach its limit</li>
+</ul>
+
+<h2 class="cathead" id="cat-Setup-&amp;-loading">Setup &amp; loading</h2>
+<div class="example">
+  <div class="exhead"><span class="num">01</span><h3>Load the whole workbook into one object</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The starting point for every script: turn params.xlsx + the cell/substrate JSONs into a typed, validated ReportMetadata.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">import sys; sys.path.insert(0, &quot;src&quot;)          # run from source, no pip
+from pathlib import Path
+from powerpy.loader.report import load_report_data
+
+md = load_report_data(Path(&quot;params.xlsx&quot;), Path(&quot;src/powerpy/data&quot;))
+print(md.document.doc_number, md.cell.name, len(md.array_layout.physical_sections))</pre></div>
+  <p class="note">Everything downstream (analysis, reports) takes this `md`. Loading fails LOUD on a bad sheet, so a clean load means the workbook is internally consistent.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">02</span><h3>Run with zero installation (locked-down laptop)</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best when you cannot pip install: the framework runs straight from src/.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code"># run.py at the repo root already does this:
+import sys; sys.path.insert(0, &quot;src&quot;)
+from powerpy.app import main
+main()                                          # dispatches the CLI</pre></div>
+  <p class="note">No build step, no site-packages. The only optional native piece is the vendored ngspice; the framework runs fully without it.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">03</span><h3>Inspect the loaded cell / mission / layout data</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Sanity-check what the workbook actually contains before you analyse.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">e = md.cell.electrical
+print(&quot;Isc&quot;, e.isc_bol, &quot;Voc&quot;, e.voc_bol, &quot;alpha&quot;, e.alpha, &quot;area_m2&quot;, e.area_m2)
+print(&quot;sections&quot;, md.array_layout.topology.n_wings, &quot;wings x&quot;,
+      md.array_layout.topology.n_panels_per_wing, &quot;panels&quot;)
+for s in md.array_layout.physical_sections[:3]:
+    print(s.instance_id, s.resistance_ohm, &quot;ohm&quot;)</pre></div>
+  <p class="note">The schema is frozen and self-documenting -- field names carry units (e.g. `area_m2`, `resistance_ohm`).</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">04</span><h3>Validate a workbook on purpose</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Use in CI or before a long run: confirm the workbook loads and the physics invariants hold.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">try:
+    md = load_report_data(Path(&quot;params.xlsx&quot;), Path(&quot;src/powerpy/data&quot;))
+    print(&quot;OK: workbook valid&quot;)
+except ValueError as exc:
+    print(&quot;INVALID:&quot;, exc)                      # e.g. &#x27;sections: none included&#x27;</pre></div>
+  <p class="note">Guards fire loudly: a sheet that filters to zero rows, a missing required document field, or an impossible cell value (negative area, alpha&gt;1) all raise with the sheet/row named.</p>
+</div><h2 class="cathead" id="cat-Cell-level-IV">Cell-level IV</h2>
+<div class="example">
+  <div class="exhead"><span class="num">05</span><h3>One cell&#x27;s I-V / P-V at an operating point</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The leaf of the model: how a single SCA behaves at a given temperature, dose and loss.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.simulation.cell_level import CellModel
+from powerpy.simulation.environment import Environment
+
+cell = CellModel(md.cell)
+cell.apply(Environment(temperature_c=51.1, dose_i=246.0, dose_v=511.0,
+                       current_loss=0.94, voltage_loss=0.97))
+v, i = cell.iv_curve()
+print(&quot;Voc&quot;, v[-1], &quot;Isc&quot;, i[0], &quot;Pmax&quot;, (v * i).max())</pre></div>
+  <p class="note">`Environment` is one operating point. Dose is in 1e14 e/cm^2; losses are pre-multiplied factors in (0,1].</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">06</span><h3>Build the single-diode curve directly</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> When you just want the analytic curve from four datasheet points, no schema.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.simulation.cell_level import fit_rseries, single_diode_iv
+
+params = fit_rseries(isc=1.231, imp=1.184, vmp=2.375, voc=2.679)
+v, i = single_diode_iv(params, step=0.01)
+print(params.rs, params.i0, params.vt)          # series R, sat current, n*kT/q</pre></div>
+  <p class="note">`fit_rseries` is a closed-form fit; `single_diode_iv` solves I(V) with a vectorised Newton step. Pure numpy -- no ngspice.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">07</span><h3>Operating points (Isc/Imp/Vmp/Voc) at any environment</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for tabulating how a cell degrades with temperature and radiation.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">cell.apply(Environment())                       # BOL, 28 C
+print(&quot;BOL&quot;, cell.operating_points())
+cell.apply(Environment(temperature_c=60, dose_i=1000))
+print(&quot;hot+irradiated&quot;, cell.operating_points())</pre></div>
+  <p class="note">Applies temperature coefficients, the radiation remaining-factors and the loss products to the begin-of-life points.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">08</span><h3>Compare a BOL vs EOL cell side by side</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Quantify end-of-life power loss for one cell.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">import numpy as np
+def mpp(env):
+    cell.apply(env); v, i = cell.iv_curve(); return float((v*i).max())
+
+bol = mpp(Environment())
+eol = mpp(Environment(temperature_c=51.1, dose_i=246, dose_v=511,
+                      current_loss=0.94, voltage_loss=0.97))
+print(f&quot;BOL {bol:.2f} W -&gt; EOL {eol:.2f} W  ({100*(1-eol/bol):.0f}% loss)&quot;)</pre></div>
+  <p class="note">A one-cell answer scales to the array because series/parallel composition is linear in count.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">09</span><h3>Switch the I-V engine: analytic vs vendored ngspice</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Use ngspice on the office laptop (real SPICE); analytic everywhere else -- same code.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">cell_a = CellModel(md.cell, iv_engine=&quot;analytic&quot;)   # default, no ngspice
+cell_n = CellModel(md.cell, iv_engine=&quot;ngspice&quot;)    # real SPICE if vendored,
+                                                    # else auto-falls back</pre></div>
+  <p class="note">`iv_engine=&#x27;ngspice&#x27;` warns ONCE and falls back to analytic if the ngspice vendor (psp/ + DLLs) is absent -- so it never breaks a portable copy.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">10</span><h3>Plot a cell I-V / P-V to PNG</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Drop a single-cell curve into a slide or a report.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.figures import iv_pv_figure
+# iv_pv_figure expects an array-like with .iv_curve(); wrap one cell as needed,
+# or use it on a section/array (below). For a quick cell plot:
+import matplotlib.pyplot as plt
+v, i = cell.iv_curve()
+plt.plot(v, i); plt.plot(v, v*i); plt.savefig(&quot;cell.png&quot;, dpi=170)</pre></div>
+  <p class="note">For composed levels (section/array) prefer `iv_pv_figure(level, out)` which marks the MPP and bus voltage.</p>
+</div><h2 class="cathead" id="cat-Array-&amp;-electrical">Array &amp; electrical</h2>
+<div class="example">
+  <div class="exhead"><span class="num">11</span><h3>Assemble the full array from the workbook</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Turn the section list into a cell -&gt; string -&gt; section -&gt; panel -&gt; array tree.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.simulation import build_from_report
+array = build_from_report(md)
+print(array.name, &quot;panels:&quot;, len(array.panels))</pre></div>
+  <p class="note">Per-section harness resistance from the sections sheet is wired in automatically (distance from the yoke).</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">12</span><h3>Evaluate named mission cases</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The standard way to get per-phase power + bus compliance numbers.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.simulation import evaluate, AnalysisCase
+from powerpy.schemas import Phase, LaunchConfig
+
+cases = [AnalysisCase(&quot;EOL single&quot;, Phase.END_OF_LIFE, LaunchConfig.SINGLE, season=0.967),
+         AnalysisCase(&quot;EOL dual&quot;,   Phase.END_OF_LIFE, LaunchConfig.DUAL,   season=0.967)]
+results = evaluate(md, cases)
+for c in results:
+    print(c.case.label, c.results.array.p_mp, &quot;W,  bus&quot;, c.bus.power_w if c.bus else None)</pre></div>
+  <p class="note">`evaluate` builds the array once and runs every case; each `CaseResult` carries the per-level summary and the bus-voltage compliance point.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">13</span><h3>Resolve a phase into an Environment</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> When you want the exact dose/loss/flux the framework uses for a phase.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.simulation.pipeline import environment_for_phase
+env = environment_for_phase(md, phase=Phase.END_OF_LIFE,
+                            launch_config=LaunchConfig.DUAL, season=0.967)
+print(env.temperature_c, env.dose_i, env.current_loss, env.voltage_loss)</pre></div>
+  <p class="note">Pulls temperature from the mission table, dose from radiation_fluxes, and the loss products from the losses sheet -- all for that phase.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">14</span><h3>Per-section results table</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for spotting which section is weakest (harness, position).</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">res = evaluate(md, cases)[0]
+for s in res.results.sections:
+    print(s.name, &quot;Pmp&quot;, round(s.p_mp,1), &quot;Imp&quot;, round(s.i_mp,3))</pre></div>
+  <p class="note">Sections far from the yoke (higher resistance) show a slightly lower MPP -- the harness drop made visible.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">15</span><h3>Current / power at the bus voltage</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The number the EPS cares about: how much the array delivers at the fixed bus.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">array.apply(env)
+i_bus = array.current_at_voltage(101.5)
+print(&quot;at 101.5 V:&quot;, i_bus, &quot;A  -&gt;&quot;, 101.5 * i_bus, &quot;W&quot;)</pre></div>
+  <p class="note">`current_at_voltage` interpolates the array I-V; multiply by V for power. Compare against the requirement for margin.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">16</span><h3>Whole-array I-V / P-V figure</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The headline plot: array curve with MPP, bus point and requirement line.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.figures import iv_pv_figure
+array.apply(env)
+iv_pv_figure(array, &quot;array.png&quot;, bus_voltage_v=101.5, requirement_w=7550.0,
+             title=&quot;Whole-array I-V / P-V&quot;)</pre></div>
+  <p class="note">Twin-axis (current + power). Markers show MPP and the operating point at the bus; horizontal line is the requirement.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">17</span><h3>Per-section I-V grid figure</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> One small I-V per section on a grid -- a quick visual audit of the array.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.figures import sections_grid_figure
+array.apply(env)
+sections_grid_figure(array, &quot;sections.png&quot;, bus_voltage_v=101.5)</pre></div>
+  <p class="note">Best for catching an outlier section (wrong parallel count, huge resistance) at a glance.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">18</span><h3>Generate the full electrical PDF report</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The deliverable: AIRBUS-style PDF straight from the workbook + cases.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render import Report
+pdf = (Report.from_results(md, results, build_array=True, requirement_w=7550.0)
+             .render(&quot;build_report&quot;, audience=&quot;engineer&quot;)
+             .compile_pdf(&quot;reports/Solar_Array_Report.pdf&quot;))</pre></div>
+  <p class="note">Section order, visibility and content come from the `structure` sheet -- edit the workbook, not the template.</p>
+</div><h2 class="cathead" id="cat-Layout-&amp;-placement">Layout &amp; placement</h2>
+<div class="example">
+  <div class="exhead"><span class="num">19</span><h3>Build a panel from an electrical topology</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Fastest way to get a layout: blocks in series, parallel strings, cells in series.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.config.layout import panel_from_topology
+layout = panel_from_topology(n_blocks=3, n_parallel=2, n_series=10)
+print(layout.n_rows, &quot;x&quot;, layout.n_cols, &quot;=&quot;, layout.n_tiles, &quot;cells&quot;)</pre></div>
+  <p class="note">Every tile is auto-tagged `block=&#x27;B1&#x27;`, `string=&#x27;B1S1&#x27;`, so the same object carries the circuit AND the physical grid.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">20</span><h3>Author a fully-tagged layout JSON</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best when placement and wiring must live in one versioned file.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code"># data/layouts/simple_3block.json
+# {&quot;palette&quot;: {&quot;B1S1&quot;: {&quot;is_cell&quot;: true, &quot;block&quot;: &quot;B1&quot;, &quot;string&quot;: &quot;B1S1&quot;,
+#                        &quot;alpha_front&quot;: 0.91, &quot;epsilon_front&quot;: 0.83}, ...},
+#  &quot;layout&quot;: [&quot;B1S1 B1S1 ... B2S1 ...&quot;, &quot;B1S2 ...&quot;]}
+from powerpy.config.layout import load_layout
+layout = load_layout(&quot;src/powerpy/data/layouts/simple_3block.json&quot;)
+print(layout.tile_at(0, 0).block, layout.tile_at(0, 0).string)</pre></div>
+  <p class="note">A tile knows both its seat (row, col) and its team (block/string) -- placement for thermal, wiring for electrical.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">21</span><h3>Layout with bare / no-SCA regions</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Model cut-outs, keep-outs, or missing cells -- they run at substrate optics.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.config.layout import from_dict
+layout = from_dict({&quot;name&quot;: &quot;with cut-out&quot;, &quot;pitch_mm&quot;: 84,
+    &quot;palette&quot;: {&quot;C&quot;: {&quot;is_cell&quot;: True, &quot;alpha_front&quot;: 0.91},
+                &quot;.&quot;: {&quot;is_cell&quot;: False, &quot;alpha_front&quot;: 0.3}},
+    &quot;layout&quot;: [&quot;C C C C&quot;, &quot;C . . C&quot;, &quot;C C C C&quot;]})</pre></div>
+  <p class="note">Bare tiles generate no power (`generates_power == False`) -- they never &#x27;fail&#x27; in a Monte-Carlo and take substrate optics in thermal.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">22</span><h3>Draw the layout map (cells vs bare vs diode)</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> A picture of where cells sit, coloured by block, with the harness bus-bars.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.layout_figures import layout_map_figure
+layout_map_figure(layout, &quot;layout.png&quot;, label_tiles=True,
+                  title=&quot;Panel layout&quot;)</pre></div>
+  <p class="note">Hatched tiles = bare/no-SCA; red lines = inter-block harness/node. Best for a layout-review figure.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">23</span><h3>Schematic of a panel&#x27;s sections</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> A legible block diagram when the real grid is too wide to draw cell-by-cell.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.layout_figures import panel_schematic_figure
+panel_schematic_figure(md.array_layout.section_types, &quot;schematic.png&quot;)</pre></div>
+  <p class="note">Each section becomes a block sized by its parallel-string count; a shorter section shows a hatched no-SCA gap.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">24</span><h3>Get the thermal adjacency a layout implies</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best when you wire your own solver -- the grid gives 4-neighbour pairs.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">pairs = layout.neighbours()                     # [(i, j), ...] flat indices
+props = layout.prop_arrays()                    # alpha/epsilon/is_cell per tile
+print(len(pairs), &quot;edges,&quot;, props[&quot;is_cell&quot;].sum(), &quot;cells&quot;)</pre></div>
+  <p class="note">`neighbours()` is exactly what the lateral-conduction solver consumes for heat spreading.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">25</span><h3>Save a layout you built in code</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Round-trip a programmatic layout back to JSON for reuse.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">import json, dataclasses
+def layout_to_dict(la):
+    return {&quot;name&quot;: la.name, &quot;pitch_mm&quot;: la.pitch_mm,
+            &quot;palette&quot;: {k: dataclasses.asdict(t) for k, t in la.palette.items()},
+            &quot;layout&quot;: [&quot; &quot;.join(r) for r in la.grid]}
+json.dump(layout_to_dict(layout), open(&quot;my_layout.json&quot;, &quot;w&quot;), indent=2)</pre></div>
+  <p class="note">Keeps a generated topology (e.g. from `panel_from_topology`) as an editable input file.</p>
+</div><h2 class="cathead" id="cat-Thermal">Thermal</h2>
+<div class="example">
+  <div class="exhead"><span class="num">26</span><h3>Equilibrium temperature of one cell (2-node)</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The core thermal answer: absorbed sun minus extracted power, radiated away.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.solve.thermal import solve_thermal
+r = solve_thermal(area=0.007075, alpha_front=0.91, alpha_rear=0.48,
+                  epsilon_front=0.83, epsilon_rear=0.76, c_cond=800.0,
+                  p_sun=1322.0, p_albedo=0.0, p_ir=0.0, p_elec=2.2)
+print(&quot;T_front&quot;, r.t_front_c[0], &quot;C&quot;)</pre></div>
+  <p class="note">Radiative balance with sigma*T^4; `p_elec` is the cooling term (power leaving as electricity).</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">27</span><h3>Solve a whole panel (grid) thermally</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Per-cell temperatures across a panel, optionally with heat spreading.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.solve.thermal import solve_panel
+import numpy as np
+res = solve_panel(layout, p_sun=1322.0, p_elec=np.full(layout.n_tiles, 2.2),
+                  c_cond=800.0, g_lat=0.02, area=0.007075)
+print(&quot;hottest cell&quot;, res.t_front_c.max(), &quot;C&quot;)</pre></div>
+  <p class="note">`g_lat &gt; 0` turns on lateral conduction (sparse Newton); `g_lat = 0` is the fast independent-cell path.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">28</span><h3>Solve from a Substrate object</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Convenience: take optics + conduction straight from a substrate JSON.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.config.substrate import load_substrate
+from powerpy.solve.thermal import solve_thermal_for_substrate
+sub = load_substrate(&quot;FSP-SFLA&quot;)
+r = solve_thermal_for_substrate(sub, area=0.007075, p_sun=1322.0,
+                                p_albedo=0.0, p_ir=0.0, p_elec=2.2)</pre></div>
+  <p class="note">`sub.c_cond = conductivity / thickness`. Swap substrates by name to compare thermal designs.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">29</span><h3>See the effect of lateral conduction</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for justifying (or not) a conductive facesheet.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.solve.thermal import lateral_conductance, solve_panel
+import numpy as np
+g = lateral_conductance(k_facesheet=150.0, thickness_m=3e-4,
+                        edge_width_m=0.055, pitch_m=0.055)
+pe = np.full(layout.n_tiles, 2.2); pe[layout.n_tiles//2] = -9.0   # one hot cell
+cold = solve_panel(layout, p_sun=1322, p_elec=pe, c_cond=800, g_lat=0.0,  area=7e-3)
+warm = solve_panel(layout, p_sun=1322, p_elec=pe, c_cond=800, g_lat=g,    area=7e-3)
+print(&quot;hot-spot peak:&quot;, cold.t_front_c.max(), &quot;-&gt;&quot;, warm.t_front_c.max())</pre></div>
+  <p class="note">Conduction lowers a hot-spot peak by sharing heat with neighbours -- but also lets a cluster reinforce itself.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">30</span><h3>Panel temperature heat-map figure</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Turn a solved grid into a coloured map for a report.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.thermal_figures import panel_heatmap_figure
+panel_heatmap_figure(res.t_front_c, &quot;heatmap.png&quot;,
+                     title=&quot;Panel temperature map&quot;)</pre></div>
+  <p class="note">Auto-annotates each cell when the grid is small; guards against a degenerate (uniform) colour range.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">31</span><h3>Full thermal PDF report</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> AIRBUS-style thermal report: inputs, layout, equilibrium temps, hot-spot.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.thermal_report import ThermalReport
+from powerpy.analysis.thermal_report import ThermalCase
+cases = [ThermalCase(&quot;EOL dual&quot;, Phase.END_OF_LIFE, LaunchConfig.DUAL, season=0.967)]
+ThermalReport.from_metadata(md, cases,
+        layout_file=&quot;src/powerpy/data/layouts/g2g_panel.json&quot;
+    ).render(&quot;build_thermal&quot;).compile_pdf(&quot;reports/Thermal_Report.pdf&quot;)</pre></div>
+  <p class="note">Cell optics come from the cell JSON; substrate from the substrate JSON; the panel comes from the layout file (cells vs bare).</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">32</span><h3>Equilibrium temperature per mission phase</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Tabulate the array&#x27;s operating temperature across the mission.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.analysis.thermal_report import run_thermal_report, ThermalCase
+data = run_thermal_report(md, [
+    ThermalCase(&quot;BOL&quot;, Phase.BOL_BC, LaunchConfig.SINGLE, season=1.034),
+    ThermalCase(&quot;EOL&quot;, Phase.END_OF_LIFE, LaunchConfig.DUAL, season=0.967)])
+for p in data.points:
+    print(p.case.label, round(p.t_front_c, 1), &quot;C&quot;)</pre></div>
+  <p class="note">Compare against the mission table&#x27;s expected pva_temperature as a cross-check.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">33</span><h3>Customize the substrate (what-if)</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Try a different facesheet/substrate without touching a file.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.config.substrate import from_dict
+sub = from_dict({&quot;name&quot;: &quot;CFRP test&quot;, &quot;alpha_front&quot;: 0.3, &quot;alpha_rear&quot;: 0.4,
+                 &quot;epsilon_front&quot;: 0.8, &quot;epsilon_rear&quot;: 0.8,
+                 &quot;conductivity&quot;: 5.0, &quot;thickness&quot;: 0.0005})
+print(&quot;c_cond&quot;, sub.c_cond, &quot;W/m2K&quot;)</pre></div>
+  <p class="note">Higher conductivity / thinner substrate -&gt; larger `c_cond` -&gt; front and rear couple more tightly.</p>
+</div><h2 class="cathead" id="cat-Failure-&amp;-Monte-Carlo">Failure &amp; Monte-Carlo</h2>
+<div class="example">
+  <div class="exhead"><span class="num">34</span><h3>Inject specific cell failures</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for a known-failure what-if (e.g. a cracked corner).</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.analysis.study import make_pe
+from powerpy.solve.thermal import solve_panel
+pe = make_pe(layout, failed=[0, 1, 10], healthy_w=2.2, reverse_w=-8.8)
+res = solve_panel(layout, p_elec=pe, p_sun=1322, c_cond=800, g_lat=0.02, area=7e-3)
+print(&quot;peak with 3 failed:&quot;, res.t_front_c.max(), &quot;C&quot;)</pre></div>
+  <p class="note">A failed cell flips from extracting `healthy_w` to dissipating `reverse_w` (negative) -- the reverse-bias hot spot.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">35</span><h3>Sweep many failure patterns</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Rank a set of candidate failure scenarios by peak temperature.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.analysis.study import failure_sweep, rank
+patterns = [[0], [0, 1], [5, 6, 7]]
+recs = failure_sweep(layout, patterns, t_limit_c=150.0,
+                     solve_kwargs=dict(p_sun=1322, c_cond=800, g_lat=0.02, area=7e-3),
+                     workers=4)
+for r in rank(recs)[:3]:
+    print(r[&quot;failed&quot;], &quot;-&gt;&quot;, r[&quot;peak_t_c&quot;], &quot;C,&quot;, r[&quot;n_over_limit&quot;], &quot;over limit&quot;)</pre></div>
+  <p class="note">Patterns run in parallel on a thread pool (numpy releases the GIL during the solve).</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">36</span><h3>Greedy worst-case failure cluster</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Find the single most damaging way K cells could fail -- the design driver.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.analysis.study import worst_case_search
+w = worst_case_search(layout, max_failures=4, t_limit_c=150.0,
+        solve_kwargs=dict(p_sun=1322, c_cond=800, g_lat=0.02, area=7e-3), workers=4)
+print(&quot;worst:&quot;, w[&quot;failed&quot;], &quot;-&gt;&quot;, w[&quot;peak_t_c&quot;], &quot;C&quot;)</pre></div>
+  <p class="note">Lateral conduction lets adjacent failures reinforce one another, so the worst case is usually a CLUSTER, not scattered cells.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">37</span><h3>Auto-stopping Monte-Carlo</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Random failures, sampled until the mean peak temperature is statistically tight.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.analysis.study import auto_monte_carlo
+a = auto_monte_carlo(layout, t_limit_c=150.0,
+        solve_kwargs=dict(p_sun=1322, c_cond=800, g_lat=0.02, area=7e-3),
+        p_fail=0.05, target_se=1.5, max_runs=300, workers=4)
+print(a[&quot;stopped&quot;], a[&quot;n_runs&quot;], &quot;runs, mean peak&quot;, a[&quot;mean_peak_c&quot;], &quot;C&quot;)</pre></div>
+  <p class="note">Standard error shrinks like 1/sqrt(N); it stops at `target_se` instead of a fixed N. Reproducible for a fixed seed.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">38</span><h3>Full Monte-Carlo failure PDF report</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The deliverable: setup, distribution histogram, worst-case cluster + heat-map.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.render.montecarlo_report import MonteCarloReport
+MonteCarloReport.from_metadata(md,
+        panel_layout_file=&quot;src/powerpy/data/layouts/simple_3block.json&quot;,
+        phase=Phase.END_OF_LIFE, launch_config=LaunchConfig.DUAL, season=0.967,
+        t_limit_c=150.0, p_fail=0.08, max_failures=4
+    ).render(&quot;build_mc&quot;).compile_pdf(&quot;reports/MonteCarlo_Report.pdf&quot;)</pre></div>
+  <p class="note">Takes a tagged layout (`panel_layout_file`) or a simple C/. grid (`layout_file`). Bare tiles are excluded from failures automatically.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">39</span><h3>CLI: run / worst / sweep</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for quick checks from a terminal -- no Python script.</div>
+  <div class="codewrap"><span class="codelabel">CLI</span><pre class="code"># solve one layout (+ optional injected failures) and write an HTML heat-map
+powerpy run  layout.json --g-lat 0.02 --fail 0 1 2 --report out.html
+
+# greedy worst-case cluster
+powerpy worst layout.json --max-failures 4 --report worst.html
+
+# auto-stopping Monte-Carlo
+powerpy sweep layout.json --p-fail 0.05 --target-se 1.5 --max-runs 300</pre></div>
+  <p class="note">Also `python -m powerpy &lt;cmd&gt;`. Flags: `--p-sun`, `--albedo`, `--ir`, `--t-limit`, `--healthy-w`, `--reverse-w`, `--workers`, `--substrate`.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">40</span><h3>Single failed-cell hot spot</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The simplest failure case: one open bypass diode, how hot and what margin.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">import numpy as np
+from powerpy.solve.thermal import solve_panel
+pe = np.full(layout.n_tiles, 2.2); pe[layout.n_tiles // 2] = -8.8
+res = solve_panel(layout, p_sun=1322, p_elec=pe, c_cond=800, g_lat=0.02, area=7e-3)
+peak = res.t_front_c.max()
+print(&quot;hot-spot&quot;, round(peak,1), &quot;C, margin to 150 C:&quot;, round(150-peak,1))</pre></div>
+  <p class="note">Margin = limit - peak. Below zero means a cell could exceed its temperature limit.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">41</span><h3>Tune the reverse-bias dissipation</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Make the failure model match your real bypass-diode behaviour.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code"># reverse_w is how much a failed cell dissipates (negative = heat in).
+# Default in run_mc_study is 4x the cell&#x27;s healthy power. Override it:
+from powerpy.analysis.montecarlo_report import run_mc_study
+data = run_mc_study(md, panel_layout_file=&quot;src/powerpy/data/layouts/simple_3block.json&quot;,
+                    dissipation_multiple=6.0, t_limit_c=150.0, max_failures=4)
+print(&quot;worst peak:&quot;, data.worst[&quot;peak_t_c&quot;], &quot;C&quot;)</pre></div>
+  <p class="note">If you have the real reverse I-V / clamp voltage, set `reverse_w` from I*V_reverse instead of a multiple.</p>
+</div><h2 class="cathead" id="cat-Bypass-diode-&amp;-voltage">Bypass diode &amp; voltage</h2>
+<div class="example">
+  <div class="exhead"><span class="num">42</span><h3>Reverse voltage on a failed cell</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for sizing how many cells one bypass diode should protect.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.model.diode import (unprotected_reverse_voltage,
+                                 clamped_reverse_voltage, BypassDiode)
+v_un = unprotected_reverse_voltage(n_series=54, v_cell=2.4)       # whole string
+v_cl = clamped_reverse_voltage(18, v_cell=2.4, diode=BypassDiode(0.6))
+print(&quot;unprotected&quot;, v_un, &quot;V  vs clamped&quot;, v_cl, &quot;V&quot;)</pre></div>
+  <p class="note">A bypass diode clamps the reverse voltage a shaded cell sees -- fewer cells per diode means a gentler reverse stress.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">43</span><h3>Power a failed cell dissipates</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Convert the failure into the `p_elec` the thermal solver needs.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.model.diode import BypassDiode, failed_cell_p_elec
+diode = BypassDiode(v_forward=0.6)
+p = failed_cell_p_elec(i=1.2, n_series=54, v_cell=2.4, diode=diode,
+                       cells_per_diode=18)
+print(&quot;dissipated&quot;, p, &quot;W&quot;)</pre></div>
+  <p class="note">Links the electrical failure (string current x reverse voltage) to the thermal hot spot in one call.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">44</span><h3>Scan bypass-diode spacing</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Find how &#x27;cells per diode&#x27; trades against reverse stress / dissipation.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.model.diode import spacing_scan, BypassDiode
+rows = spacing_scan(1.2, 2.4, 54, BypassDiode(0.6),
+                    cells_per_diode_options=[9, 18, 27, 54])
+for r in rows:
+    print(r)                                    # {cells_per_diode, v_reverse, p_reverse_w}</pre></div>
+  <p class="note">Best for a diode-placement trade study: more diodes = safer but heavier/costlier.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">45</span><h3>Zero-voltage (reverse-bias cancellation) analysis</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The special case where forward and reverse voltages cancel and the panel reads 0 V.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.analysis.voltage import find_zero_voltage_diode, compare_models
+z = find_zero_voltage_diode(n_blocks=3, n_series=54, v_fwd=2.3, v_diode=0.7)
+print(&quot;zero-voltage when&quot;, z)
+print(compare_models(n_blocks=3, n_series=54))   # raw vs diode-protected</pre></div>
+  <p class="note">Explains a confusing 0 V reading: enough reverse-biased blocks exactly offset the forward ones. `compare_models` shows raw vs bypass-protected.</p>
+</div><h2 class="cathead" id="cat-Orbit-&amp;-transient">Orbit &amp; transient</h2>
+<div class="example">
+  <div class="exhead"><span class="num">46</span><h3>Orbit period, beta angle, eclipse in one call</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best first step for any orbit-driven thermal/power case.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.model.orbit import summarize_orbit
+s = summarize_orbit(altitude_km=500, inclination_deg=51.6, raan_deg=0, day_of_year=172)
+print(f&quot;period {s.period_min:.1f} min, beta {s.beta_deg:.1f} deg, &quot;
+      f&quot;eclipse {100*s.eclipse_fraction:.0f}% ({s.eclipse_min:.1f} min)&quot;)</pre></div>
+  <p class="note">Pure numpy -- no astropy/numba/hapsira. GEO at solstice -&gt; ~0% eclipse; low LEO -&gt; ~36%.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">47</span><h3>Flux-vs-time over one orbit</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> The driver for a transient thermal run: sun on the sunlit arc, zero in eclipse.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.model.orbit import orbit_flux_timeline
+flux = orbit_flux_timeline(altitude_km=500, inclination_deg=51.6, raan_deg=0,
+                           day_of_year=172, n_steps=240)
+ecl = sum(f.eclipsed for f in flux)
+print(ecl, &quot;of&quot;, len(flux), &quot;steps in eclipse; p_sun max&quot;, max(f.p_sun for f in flux))</pre></div>
+  <p class="note">Eclipse is flagged from the actual cylindrical-shadow geometry, not a fixed fraction.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">48</span><h3>Transient temperature around an orbit</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> How the array heats in sun and cools in eclipse -- the time-domain answer.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.solve.transient import solve_transient, areal_heat_capacity
+# include the backing&#x27;s thermal mass (a bare cell alone is too light to be stable)
+C = areal_heat_capacity(area=0.007075, rho=2700, cp=900, thickness=0.002)
+flux = orbit_flux_timeline(500, 51.6, 0, 172, 240)
+tr = solve_transient(area=0.007075, alpha_front=0.91, alpha_rear=0.48,
+                     epsilon_front=0.83, epsilon_rear=0.76, c_cond=800.0,
+                     heat_capacity=C, flux_series=flux, p_elec_series=2.2)
+print(&quot;Tmax&quot;, tr.t_front_c.max(), &quot;Tmin&quot;, tr.t_front_c.min())</pre></div>
+  <p class="note">Backward-Euler integration of C dT/dt = (heat in - heat out). `p_elec_series` can be a scalar, per-cell, or a (steps x cells) failure injected mid-orbit.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">49</span><h3>Coupled electrical &lt;-&gt; thermal solve</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best when power and temperature chase each other: a hotter cell makes less power, which changes its heat.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.solve.coupling import couple
+import numpy as np
+# power_fn: per-cell temperature [C] -&gt; per-cell extracted power [W]
+def power_fn(t_c):
+    return np.maximum(0.0, 2.6 - 0.01 * (t_c - 28.0))   # toy temp-derated power
+r = couple(power_fn, area=0.007075, alpha_front=0.91, alpha_rear=0.48,
+           epsilon_front=0.83, epsilon_rear=0.76, c_cond=800.0,
+           p_sun=1322.0, omega=0.5)
+print(&quot;self-consistent T&quot;, r.t_front_c[0], &quot;C, converged&quot;, r.converged)</pre></div>
+  <p class="note">Fixed-point iteration with under-relaxation (`omega`) until temperature and power stop changing -- the physically self-consistent operating point.</p>
+</div>
+<div class="example">
+  <div class="exhead"><span class="num">50</span><h3>Time for a hot spot to reach its limit</h3></div>
+  <div class="callout best"><span class="bestlabel">Best for</span> Best for a thermal-runaway / survival question after a failure.</div>
+  <div class="codewrap"><span class="codelabel">Python</span><pre class="code">from powerpy.solve.transient import time_to_threshold
+t = time_to_threshold(tr, limit_c=150.0, cell=0)
+print(&quot;reaches 150 C after&quot;, t, &quot;s&quot; if t is not None else &quot;(never)&quot;)</pre></div>
+  <p class="note">Returns when cell 0 first crosses the limit -- or None if it stays safe across the whole timeline.</p>
+</div>
+
+<div class="example" style="border-left-color:var(--accent2);">
+  <div class="exhead"><h3>Where each analysis fits</h3></div>
+  <p class="note"><strong>Electrical (Report):</strong> power margin vs requirement, per-section sizing, harness effect. &nbsp;
+  <strong>Thermal (ThermalReport):</strong> operating temperature per phase, hot-spot margin. &nbsp;
+  <strong>Monte-Carlo (MonteCarloReport):</strong> failure risk &mdash; distribution of peak temperature and the worst credible cluster. &nbsp;
+  <strong>Orbit + transient:</strong> time-domain heating/cooling and eclipse survival. &nbsp;
+  Pick the lightest tool that answers the question; escalate to Monte-Carlo only for failure/worst-case work.</p>
+</div>
+
+</body></html>

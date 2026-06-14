@@ -1,0 +1,264 @@
+<h3><span class="sec-num">4</span> Loss factors, seasons, pointing, and the voltage corrections</h3>
+
+<p class="lede">Section 3 produced four honest operating-point numbers for a cell at a given temperature and radiation dose. But the array still has not delivered a single watt to the spacecraft bus, because the real world keeps shaving the numbers down: a sheet of coverglass eats a little light, the wiring drops a little voltage, the calibration of the test lamp is never perfectly known, the Sun is a few percent brighter in January than in July, and the panel is almost never pointed dead-on. This section is the bookkeeping of all those small adjustments — how PowerPy represents each one, how it <em>combines</em> them, and the one genuinely subtle piece: why a brighter Sun nudges the voltage <em>up</em> by a logarithm.</p>
+
+<div class="keyidea">
+<span class="lbl">Key idea</span>
+Everything in this section is a <strong>multiplier</strong> on the bare cell numbers from Section 3 — a fraction near 1.0. A factor of <code>0.98</code> means "2&nbsp;% of this quantity is lost." PowerPy keeps current losses and voltage losses in two separate piles, multiplies each pile down to a single number, and only then scales the operating point. Three different combination rules appear — <strong>simple product</strong> (for certain deductions), <strong>root-sum-square</strong> (for independent uncertainties), and a <strong>cosine</strong> (for pointing) — and knowing which to use when is the whole game.</p>
+</div>
+
+<h4>4.1 Loss factors: a deduction expressed as a multiplier</h4>
+
+<div class="term">
+<span class="lbl">Term — loss factor</span>
+<p>A <strong>loss factor</strong> is a dimensionless multiplier, almost always just below 1.0, that represents a fractional reduction of a current or a voltage. The convention is "fraction <em>surviving</em>", not "fraction lost": <code>0.98</code> means 98&nbsp;% gets through, i.e. 2&nbsp;% is lost. A factor of exactly <code>1.0</code> is a no-op (no loss); the smaller the factor, the bigger the bite.</p>
+</div>
+
+<p>Why does a real array deliver less than the bare cell numbers? A whole catalogue of small effects, each modelled as one factor:</p>
+
+<div class="callout">
+<span class="lbl">Where the losses come from</span>
+<ul>
+<li><strong>Coverglass</strong> — the thin transparent shield bonded over each cell to stop micrometeoroids and radiation reflects and absorbs a little of the incoming light before it reaches the junction.</li>
+<li><strong>Assembly</strong> — bonding, soldering and handling during manufacture cost a fraction of a percent.</li>
+<li><strong>Wiring</strong> — the harness carrying current off the panel has resistance, so a little voltage is dropped on the way to the bus.</li>
+<li><strong>Contamination</strong> — outgassed material and dust deposit on the glass over the mission and dim it slightly.</li>
+<li><strong>UV (ultraviolet) darkening</strong> — ultraviolet sunlight slowly discolours the adhesive and coverglass, costing a little transmission.</li>
+<li><strong>Calibration uncertainty</strong> — the numbers came from a test under a lamp whose absolute intensity is only known to within a percent or two; that uncertainty is itself booked as a loss factor.</li>
+</ul>
+</div>
+
+<p>PowerPy lets you attach these to a cell (and the same calls exist on a string, a section, or a whole panel, where they apply to <em>every</em> cell inside). Each loss is split into the quantity it actually attacks — current or voltage:</p>
+
+<div class="formula">
+<span class="badge api">cell.addLossI(name, factor)</span><br>
+adds a named <strong>current</strong> loss (multiplies the current).<br>
+<span class="badge api">cell.addLossV(name, factor)</span><br>
+adds a named <strong>voltage</strong> loss (multiplies the voltage).<br>
+<span class="badge api">cell.removeLosses()</span><br>
+clears every loss back to none.
+<div class="where">The <code>name</code> is just a label for readability. The <code>factor</code> is the surviving fraction (0.98 = 2&nbsp;% lost). Adding a loss to a string/section/panel applies it to all the cells it contains.</div>
+</div>
+
+<h4>4.2 Combining losses by product</h4>
+
+<p>If a cell carries several current losses, PowerPy combines them into <em>one</em> current-loss factor by <strong>multiplying them all together</strong>; likewise all the voltage losses multiply down to one voltage-loss factor. Multiplication — not addition — is the right model for losses that act <em>in series</em>, each one taking its cut of whatever the previous one left.</p>
+
+<div class="formula">
+lossI<sub>total</sub> = f<sub>1</sub> · f<sub>2</sub> · f<sub>3</sub> · …&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;lossV<sub>total</sub> = g<sub>1</sub> · g<sub>2</sub> · g<sub>3</sub> · …
+<div class="where">Example: a 0.98 loss followed by a 0.97 loss gives 0.98&nbsp;·&nbsp;0.97&nbsp;=&nbsp;<strong>0.9506</strong>, i.e. about 4.94&nbsp;% lost overall — slightly <em>less</em> than the 5&nbsp;% you would get by naively adding "2&nbsp;% + 3&nbsp;%", because the second loss only acts on the 98&nbsp;% the first one left.</div>
+</div>
+
+<div class="callout">
+<span class="lbl">Why multiply, not add</span>
+<p>Picture light passing through two slightly dirty windows. The first lets 98&nbsp;% through. The second lets 97&nbsp;% of <em>what reaches it</em> through — and what reaches it is already only 98&nbsp;% of the original. So the survivor is 0.98&nbsp;·&nbsp;0.97 of the original, never 0.98&nbsp;+&nbsp;0.97&nbsp;−&nbsp;1. Adding the percentages is an approximation that drifts as the losses grow; multiplying is exact for stacked, deterministic deductions.</p>
+</div>
+
+<h4>4.3 RSS loss: combining independent uncertainties</h4>
+
+<p>Sometimes a "loss" is not a known, certain deduction but an <strong>uncertainty</strong> — a "±" you are not sure of the sign of. Calibration uncertainty is the classic case: you do not actually know the lamp was 1.5&nbsp;% too bright; you know it was within ±1.5&nbsp;%. When several such uncertainties are <em>statistically independent</em>, multiplying them treats them as if they all conspire to hit worst-case at once, which is needlessly pessimistic. The honest combination is <strong>root-sum-square (RSS)</strong> — adding them <em>in quadrature</em>.</p>
+
+<div class="term">
+<span class="lbl">Term — RSS (Root-Sum-Square)</span>
+<p>To combine quantities <strong>in quadrature</strong> means to square them, add the squares, and take the square root: <span class="eqn">√(a²&nbsp;+&nbsp;b²&nbsp;+&nbsp;…)</span>. It is the same Pythagorean rule that gives the length of a vector from its components, and it is how <em>independent</em> random errors combine, because their cross-terms average to zero. The result is always smaller than the plain sum a&nbsp;+&nbsp;b&nbsp;+&nbsp;…</p>
+</div>
+
+<div class="formula">
+<span class="badge api">RSS_loss(list)</span> = 1 − √( Σ (1 − loss<sub>k</sub>)² )
+<div class="where">For each loss it takes the <em>lost</em> fraction (1&nbsp;−&nbsp;loss<sub>k</sub>), squares it, sums over all losses, square-roots, and turns the combined lost-fraction back into a surviving factor by subtracting from 1. Input is the list of surviving-fraction factors; output is a single surviving-fraction factor.</div>
+</div>
+
+<div class="keyidea">
+<span class="lbl">Which rule, when <span class="badge hot">EXAM-HOT</span></span>
+<ul>
+<li><strong>Deterministic, known deductions → MULTIPLY.</strong> Coverglass transmission, a wiring drop, an assembly factor: these are real, repeatable, always-present cuts. Stack them by product (§4.2).</li>
+<li><strong>Independent ± uncertainties → RSS.</strong> Calibration uncertainty, measurement scatter: these are error bars, equally likely either way, unlikely to all align. Combine in quadrature (§4.3).</li>
+</ul>
+<p>RSS always gives a <em>larger</em> surviving factor (a <em>smaller</em> total loss) than multiplying the same numbers, because it refuses to assume every uncertainty hits the bad way at once. RSS is <strong>less pessimistic</strong> — appropriate precisely because independent errors partly cancel.</p>
+</div>
+
+<h4>4.4 Worked example — the same three numbers, both ways</h4>
+
+<div class="worked">
+<span class="lbl">Worked 4A — product vs RSS on three losses</span>
+<p><strong>Given</strong> three loss factors: coverglass <code>0.99</code> (1&nbsp;% lost), wiring <code>0.98</code> (2&nbsp;% lost), calibration <code>0.995</code> (0.5&nbsp;% lost). Combine them <em>both</em> ways and decide which is right.</p>
+<div class="step"><strong>Product (treat all as certain deductions):</strong><br>
+0.99 · 0.98 · 0.995 = <strong>0.9653</strong> &nbsp;→ about <strong>3.47&nbsp;% lost</strong>.</div>
+<div class="step"><strong>RSS (treat all as independent uncertainties):</strong> first the lost fractions are<br>
+1&nbsp;−&nbsp;0.99&nbsp;=&nbsp;0.010,&nbsp;&nbsp;1&nbsp;−&nbsp;0.98&nbsp;=&nbsp;0.020,&nbsp;&nbsp;1&nbsp;−&nbsp;0.995&nbsp;=&nbsp;0.005.</div>
+<div class="step"><strong>Square and sum:</strong> &nbsp;0.010²&nbsp;+&nbsp;0.020²&nbsp;+&nbsp;0.005² = 0.0001&nbsp;+&nbsp;0.0004&nbsp;+&nbsp;0.000025 = <strong>0.000525</strong>.</div>
+<div class="step"><strong>Square-root:</strong> &nbsp;√0.000525 = <strong>0.0229</strong>&nbsp;&nbsp;(the combined lost fraction, ≈ 2.29&nbsp;%).</div>
+<div class="step"><strong>Back to a surviving factor:</strong> &nbsp;1&nbsp;−&nbsp;0.0229 = <strong>0.9771</strong> &nbsp;→ about <strong>2.29&nbsp;% lost</strong>.</div>
+<div class="check"><strong>Compare and choose.</strong> Product = 0.965 (3.47&nbsp;% lost); RSS = 0.977 (2.29&nbsp;% lost). RSS is the gentler number — exactly as promised, because it does not assume the three losses all bite worst-case simultaneously. <em>Which is appropriate?</em> It depends on the <em>nature</em> of each loss, not on which answer you prefer. Coverglass and wiring are deterministic, ever-present deductions → they belong in the <strong>product</strong>. Calibration is a genuine ± uncertainty → it belongs in an <strong>RSS</strong> of the uncertain terms. A real budget often does both: multiply the deterministic losses, RSS the uncertainties, then multiply those two results together. Using RSS on a known deduction would flatter the budget; using product on pure uncertainties would over-design the array. ✓</div>
+</div>
+
+<h4>4.5 Seasons: how strong the sunlight is</h4>
+
+<p>A spacecraft in Earth orbit does not see a constant Sun. The Earth's orbit is slightly elliptical, so the Earth–Sun distance changes over the year, and the intensity of sunlight changes with it by a few percent. PowerPy expresses the strength of the sunlight as a number <em>relative to a fixed reference</em> called AM0.</p>
+
+<div class="term">
+<span class="lbl">Term — AM0 (Air Mass Zero), 1 AU, B<sub>0</sub></span>
+<p><strong>AM0 (Air Mass Zero)</strong> is the solar spectrum and intensity in space, above the atmosphere, at the Earth's mean distance from the Sun. "Air Mass Zero" literally means "no atmosphere in the way" — the spectrum a panel in orbit actually sees, unlike the ground-level AM1.5 used for terrestrial panels.</p>
+<p><strong>1 AU (one astronomical unit)</strong> is that mean Earth–Sun distance, about 1.496×10<sup>8</sup>&nbsp;km. At 1&nbsp;AU the AM0 intensity is <strong>1367&nbsp;W/m²</strong> — the "solar constant," stored in PowerPy as <code>B_0</code>. Every season number is a multiplier on this baseline.</p>
+</div>
+
+<p>The method <span class="badge api">cell.setSeason(s)</span> sets that multiplier. Two of the four named seasons <em>also</em> set a pointing angle (the solstices, when the Sun is farthest off the equatorial plane):</p>
+
+<table>
+<caption>Season settings in PowerPy. The multiplier scales irradiance (and hence current); the solstices additionally set a season pointing angle.</caption>
+<tr><th>Argument</th><th>Meaning</th><th>Irradiance multiplier</th><th>Season angle set</th></tr>
+<tr><td><code>"SS"</code></td><td>Summer Solstice</td><td><strong>0.967</strong> (fainter)</td><td>+23.5°</td></tr>
+<tr><td><code>"WS"</code></td><td>Winter Solstice</td><td><strong>1.034</strong> (brighter)</td><td>−23.5°</td></tr>
+<tr><td><code>"VEX"</code></td><td>Vernal (spring) Equinox</td><td>1.008</td><td>— (none)</td></tr>
+<tr><td><code>"AEX"</code></td><td>Autumnal Equinox</td><td>0.993</td><td>— (none)</td></tr>
+<tr><td><code>1</code></td><td>Exactly AM0</td><td>1.000</td><td>—</td></tr>
+<tr><td><code>0</code></td><td><strong>DEAD cell</strong> — no output (failure model)</td><td>0.000</td><td>—</td></tr>
+</table>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — summer is the WEAKER Sun <span class="badge hot">EXAM-HOT</span></span>
+<p>Northern-hemisphere intuition screams that summer should be the <em>strong</em> Sun. It is not. Summer (in the north) happens when the Earth is <em>farther</em> from the Sun, so <strong>Summer Solstice is the fainter sunlight: 0.967</strong> (about 3.3&nbsp;% below AM0). Winter, with the Earth nearer the Sun, is the <em>brighter</em> Sun at <strong>1.034</strong>. The seasons you feel are driven by axial tilt, not distance — the distance effect runs the opposite way. Examiners love this reversal; memorise <em>summer faint, winter bright</em>.</p>
+<p><strong>And <code>setSeason(0)</code> means DEAD</strong>: a zero multiplier kills all output. It is not a season at all but the way you model a <em>failed</em> cell, string, or panel — switch one to 0 and PowerPy reports what the rest of the array can still deliver.</p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 150" xmlns="http://www.w3.org/2000/svg">
+<rect x="70" y="104.7" width="44" height="15.3" fill="#9a3b3b" opacity=".82"/><text font-family="Segoe UI,Arial,sans-serif" x="92" y="135" text-anchor="middle" font-size="10" fill="#1d2733">SS</text><text font-family="Segoe UI,Arial,sans-serif" x="92" y="100.7" text-anchor="middle" font-size="9" fill="#1d2733">0.967</text><rect x="160" y="81.3" width="44" height="38.7" fill="#9a3b3b" opacity=".82"/><text font-family="Segoe UI,Arial,sans-serif" x="182" y="135" text-anchor="middle" font-size="10" fill="#1d2733">AEX</text><text font-family="Segoe UI,Arial,sans-serif" x="182" y="77.3" text-anchor="middle" font-size="9" fill="#1d2733">0.993</text><rect x="250" y="67.8" width="44" height="52.2" fill="#1f6a6a" opacity=".82"/><text font-family="Segoe UI,Arial,sans-serif" x="272" y="135" text-anchor="middle" font-size="10" fill="#1d2733">VEX</text><text font-family="Segoe UI,Arial,sans-serif" x="272" y="63.8" text-anchor="middle" font-size="9" fill="#1d2733">1.008</text><rect x="340" y="44.4" width="44" height="75.6" fill="#1f6a6a" opacity=".82"/><text font-family="Segoe UI,Arial,sans-serif" x="362" y="135" text-anchor="middle" font-size="10" fill="#1d2733">WS</text><text font-family="Segoe UI,Arial,sans-serif" x="362" y="40.4" text-anchor="middle" font-size="9" fill="#1d2733">1.034</text>
+<line x1="50" y1="75.0" x2="450" y2="75.0" stroke="#0b3d63" stroke-dasharray="5 3" stroke-width="1.4"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="455" y="78.0" font-size="10" fill="#0b3d63">AM0 = 1.0 (1367 W/m²)</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="250" y="16" text-anchor="middle" font-size="10" fill="#5d6b79">season irradiance multiplier (note: summer SS is the WEAKER sun)</text>
+</svg>
+<figcaption>Figure 4.1 — The four season multipliers around AM0 = 1.0. Summer Solstice (SS) is the WEAKER sun because Earth is farther away.</figcaption></figure>
+
+<h4>4.6 Pointing and tilt: the cosine of incidence</h4>
+
+<p>The array is rarely square-on to the Sun. When sunlight strikes a panel at an angle, the panel intercepts <em>less</em> of it — the same beam is spread over a larger slice of panel, so the power per unit panel area falls by the <strong>cosine</strong> of the incidence angle. (At grazing incidence, cos → 0 and the panel catches almost nothing; dead-on, cos&nbsp;0°&nbsp;=&nbsp;1 and it catches everything.)</p>
+
+<p>PowerPy describes the geometry with two tilt angles plus the season angle from §4.5:</p>
+
+<div class="formula">
+tilt = cos(alpha + season_angle) · cos(beta)
+<div class="where"><code>alpha</code> and <code>beta</code> are the two panel tilt angles, set by <span class="badge api">cell.setAngles(alpha, beta)</span>; <code>season_angle</code> is set by <span class="badge api">cell.setSeasonAngle(sa)</span> (and is filled in automatically by <code>setSeason("SS")</code>/<code>("WS")</code> as +23.5°/−23.5°). When everything is zero, tilt = cos&nbsp;0°&nbsp;·&nbsp;cos&nbsp;0° = 1&nbsp;·&nbsp;1 = <strong>1</strong>: a perfectly pointed panel loses nothing to geometry.</div>
+</div>
+
+<div class="callout">
+<span class="lbl">How tilt feeds the irradiance</span>
+<p>The light a cell actually captures is the baseline scaled by <em>both</em> the season and the tilt: <span class="eqn">effective irradiance = season · tilt · B<sub>0</sub></span>. The season says how bright the Sun is; the tilt says how much of it the panel faces. Multiply both into the 1367&nbsp;W/m² baseline and you have the irradiance the cell really sees — which is also what scales the photocurrent (more light → more current, near-linearly).</p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 440 190" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="120" y="120" width="200" height="14" fill="#cfe0ef" stroke="#0b3d63" transform="rotate(-12 220 127)"/>
+<text class="tx" x="300" y="150" font-size="10" fill="#5d6b79">array surface</text>
+<line x1="220" y1="127" x2="220" y2="40" stroke="#0b3d63" stroke-width="1.6" stroke-dasharray="4 2"/><text class="tx" x="226" y="50" font-size="10">normal n</text>
+<line x1="220" y1="127" x2="120" y2="40" stroke="#b9851a" stroke-width="2.4"/><polygon points="120,40 130,44 126,52" fill="#b9851a"/><text class="tx" x="96" y="36" fill="#b9851a">Sun</text>
+<path d="M220 80 A48 48 0 0 0 188 64" fill="none" stroke="#9a3b3b" stroke-width="1.4"/><text class="tx" x="186" y="86" fill="#9a3b3b">α</text>
+<text class="tx" x="60" y="175" fill="#1d2733">tilt = cos(α + season_angle) · cos(β)   →   captured light × tilt</text>
+</svg>
+<figcaption>Figure 4.2 — Pointing geometry: only the cosine of the incidence angle reaches the array (the tilt factor).</figcaption></figure>
+
+<h4>4.7 Worked example — effective irradiance with season and tilt</h4>
+
+<div class="worked">
+<span class="lbl">Worked 4B — VEX with a 30° tilt</span>
+<p><strong>Given:</strong> season <code>"VEX"</code> (multiplier 1.008), <code>alpha</code>&nbsp;=&nbsp;30°, <code>beta</code>&nbsp;=&nbsp;0°, <code>season_angle</code>&nbsp;=&nbsp;0° (the vernal equinox sets no season angle). Find the effective irradiance.</p>
+<div class="step"><strong>Tilt:</strong> &nbsp;tilt = cos(alpha + season_angle)·cos(beta) = cos(30° + 0°)·cos(0°) = cos&nbsp;30°&nbsp;·&nbsp;1 = 0.8660&nbsp;·&nbsp;1 = <strong>0.866</strong>.</div>
+<div class="step"><strong>Effective irradiance:</strong> &nbsp;season · tilt · B<sub>0</sub> = 1.008 · 0.866 · 1367&nbsp;W/m².</div>
+<div class="step"><strong>Step the arithmetic:</strong> &nbsp;1.008 · 0.866 = 0.8729; &nbsp;0.8729 · 1367&nbsp;W/m² = <strong>1193&nbsp;W/m²</strong>.</div>
+<div class="check"><strong>Sanity.</strong> 1193&nbsp;W/m² is well below the 1367&nbsp;W/m² baseline even though VEX (1.008) is slightly <em>brighter</em> than AM0 — because the 30° tilt costs about 13.4&nbsp;% on its own, far outweighing the +0.8&nbsp;% season gain. The combined ratio season·tilt = 0.873&nbsp;&lt;&nbsp;1, so on balance the cell sees <em>less</em> than AM0. Hold on to that combined number 0.873 — it is exactly what drives the voltage correction in §4.8. ✓</div>
+</div>
+
+<h4>4.8 The voltage illumination correction — a logarithm</h4>
+
+<p>One last subtlety, and it is the one students misread. A solar cell makes slightly <em>more</em> voltage in brighter light and slightly <em>less</em> in fainter light — but not in proportion. The dependence is <strong>logarithmic</strong>. This is not an arbitrary fudge: it falls straight out of the diode equation from Section 2, where the open-circuit voltage goes like the logarithm of the photocurrent, V<sub>oc</sub>&nbsp;∝&nbsp;ln(I<sub>light</sub>). Double the light and the voltage rises by a fixed step, not a factor.</p>
+
+<p>PowerPy builds two small correction terms from the <em>brightness ratio</em> the cell actually sees — and that ratio is the combined <strong>season·tilt</strong> from §4.6, not the season alone. When the season is non-zero it computes:</p>
+
+<div class="formula">
+vmp_corr = (1 + (isc − imp)/imp) · ln(season · tilt)<br>
+voc_corr = (1 + (vmp/voc)·(isc − imp)/imp) · ln(season · tilt)
+<div class="where">Each is a small dimensionless term applied as a <em>nudge</em> to the corresponding voltage — V<sub>mp</sub>&nbsp;→&nbsp;V<sub>mp</sub>·(1&nbsp;+&nbsp;vmp_corr), V<sub>oc</sub>&nbsp;→&nbsp;V<sub>oc</sub>·(1&nbsp;+&nbsp;voc_corr) — <strong>not</strong> a factor you multiply the voltage by directly. The bracketed coefficient just sets how big the nudge is; the <code>ln(season·tilt)</code> sets its sign and size.</div>
+</div>
+
+<div class="keyidea">
+<span class="lbl">The intuition — read the ln, not the algebra</span>
+<p>Do not get lost in the bracketed coefficients. The whole behaviour lives in <strong>ln(season·tilt)</strong>:</p>
+<ul>
+<li><strong>Exactly at AM0 and square-on</strong> → season·tilt = 1 → ln(1) = <strong>0</strong> → <em>no correction at all</em>. The reference condition leaves the voltage untouched, which is the consistency guarantee (just like the temperature term vanished at t_ref in §3).</li>
+<li><strong>Brighter than AM0</strong> (season·tilt &gt; 1) → ln &gt; 0 → a small voltage <em>gain</em>.</li>
+<li><strong>Fainter than AM0</strong> (season·tilt &lt; 1) → ln &lt; 0 → a small voltage <em>loss</em>.</li>
+</ul>
+<p>The logarithm <em>compresses</em>: it vanishes exactly at AM0 and squashes even large brightness swings into modest voltage moves — doubling the light adds a fixed <em>step</em> of voltage, not a factor. That compression is the signature of the diode's ln(I<sub>light</sub>) law.</p>
+</div>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — it is season·tilt that decides the sign, not season</span>
+<p>A natural mistake: "VEX is 1.008, brighter than AM0, so the voltage rises." Wrong, once the panel is tilted. In Worked 4B the season was 1.008 (brighter) but the 30° tilt pulled the <em>combined</em> ratio to season·tilt = 0.873&nbsp;&lt;&nbsp;1, so ln(0.873)&nbsp;&lt;&nbsp;0 and the voltage correction is a small <em>loss</em>. Always feed the logarithm the <strong>combined</strong> brightness the cell really sees, never the season number on its own.</p>
+</div>
+
+<h4>4.9 Socratic ladder — why multiply, and when to RSS</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — Why are losses MULTIPLIED rather than added, and when should we use RSS instead?</div>
+
+<div class="socratic">
+<div class="q">Q1. (Foundation) What does a single loss factor of 0.98 actually mean?</div>
+<div class="answer">It means 98&nbsp;% of the quantity survives and 2&nbsp;% is lost. It is a <em>surviving fraction</em>, a pure multiplier: take the number, multiply by 0.98, and you have the value after that one loss. "0.98" and "2&nbsp;% lost" are two names for the same thing.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q2. Now apply two losses in succession, 0.98 then 0.97. Why is the answer 0.9506 and not 0.95?</div>
+<div class="answer">The second loss acts on what the first one <em>left</em>, not on the original. After the first, 98&nbsp;% remains; the second keeps 97&nbsp;% <em>of that</em>: 0.97 · 0.98 = 0.9506. Naively adding the losses ("2&nbsp;% + 3&nbsp;% = 5&nbsp;% → 0.95") double-counts, because the 3&nbsp;% would only ever be taken from the 98&nbsp;% that survived, not the full 100&nbsp;%. Stacked deductions <em>compound</em>, and compounding is multiplication. That is why PowerPy multiplies all current losses into one factor and all voltage losses into another.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q3. So multiplication is exact for stacked deductions. When is multiplying the <em>wrong</em> thing to do?</div>
+<div class="answer">When the "losses" are not certain deductions but independent <strong>uncertainties</strong> — error bars, equally likely to push either way. Multiplying them implicitly assumes they <em>all</em> land on the pessimistic side at the same time, which for independent errors is very unlikely. A loss is a <em>certainty</em> when it is always present and repeatable (coverglass transmission, a wiring drop); it is an <em>uncertainty</em> when it is a ± you cannot pin down (calibration of the test lamp, measurement scatter).</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q4. (Why) What does RSS do differently, and why is its answer larger (less pessimistic)?</div>
+<div class="answer">RSS adds the lost fractions <em>in quadrature</em>: 1&nbsp;−&nbsp;√(Σ(1−loss<sub>k</sub>)²). Squaring shrinks the small fractions before they are summed, and the square root brings the total back, but the net result of combining independent errors this way is always <em>smaller</em> than adding them linearly — because their random over- and under-estimates partly cancel rather than reinforce. In Worked 4A the same three numbers gave 0.977 by RSS versus 0.965 by product: a smaller total loss. RSS is the statistically honest combination for things that are genuinely independent and uncertain; product is the honest combination for things that are certain and always there. Use each for what it models — never pick the one that simply gives the prettier number.</div>
+</div>
+</div>
+
+<h4>4.10 The API you will actually call</h4>
+
+<div class="callout">
+<span class="lbl">PowerPy methods and helper for this section</span>
+<ul>
+<li><span class="badge api">cell.addLossI(name, factor)</span> — add a current loss (surviving-fraction multiplier).</li>
+<li><span class="badge api">cell.addLossV(name, factor)</span> — add a voltage loss.</li>
+<li><span class="badge api">cell.removeLosses()</span> — clear all losses. (All three also exist on string/section/panel.)</li>
+<li><span class="badge api">cell.setSeason(s)</span> — set the irradiance multiplier; <code>"SS"/"WS"</code> also set ±23.5° season angle; <code>0</code> = dead.</li>
+<li><span class="badge api">cell.setAngles(alpha, beta)</span> — set the two panel tilt angles.</li>
+<li><span class="badge api">cell.setSeasonAngle(sa)</span> — set the season pointing angle directly.</li>
+<li><span class="badge api">RSS_loss(list)</span> — helper that combines a list of loss factors in quadrature: 1&nbsp;−&nbsp;√(Σ(1−loss<sub>k</sub>)²).</li>
+</ul>
+</div>
+
+<h4>4.11 Practice</h4>
+
+<div class="practice">
+<span class="lbl">Practice 4-1 — combine four losses, both ways</span>
+<p>A panel carries four loss factors: coverglass <code>0.99</code>, assembly <code>0.985</code>, wiring <code>0.97</code>, calibration <code>0.995</code>.</p>
+<p>(a) Combine all four by <strong>product</strong> (the "all certain deductions" assumption). &nbsp; (b) Combine all four by <strong>RSS</strong> using <code>RSS_loss</code>: list the four lost fractions, square and sum them, square-root, and subtract from 1. &nbsp; (c) Which result is larger, and in one sentence say which combination you would actually trust if the wiring and coverglass are deterministic but the calibration is a ± uncertainty.</p>
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 4-2 — effective irradiance at Winter Solstice</span>
+<p>You call <code>cell.setSeason("WS")</code> and leave <code>alpha</code>&nbsp;=&nbsp;0°, <code>beta</code>&nbsp;=&nbsp;0°. Remember that <code>"WS"</code> does <em>two</em> things: it sets the irradiance multiplier to 1.034 <em>and</em> it sets the season angle to −23.5°.</p>
+<p>(a) Compute the tilt = cos(alpha + season_angle)·cos(beta). &nbsp; (b) Compute the effective irradiance season·tilt·B<sub>0</sub> with B<sub>0</sub>&nbsp;=&nbsp;1367&nbsp;W/m². &nbsp; (c) Is the combined ratio season·tilt above or below 1, and would the §4.8 voltage correction therefore be a small gain or a small loss?</p>
+<div class="answerspace lines-7"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 4-3 — what is setSeason(0) for?</span>
+<p>In a fault study an engineer sets one string's season to <code>0</code> with <code>setSeason(0)</code> while leaving the rest of the array at <code>"VEX"</code>. (a) What does a season of 0 do to that string's output? &nbsp; (b) Why is this the natural way to model a <em>failed</em> string, and what question is the engineer asking the simulator? &nbsp; (c) In one line, contrast this with <code>setSeason(1)</code>.</p>
+<div class="answerspace lines-5"></div>
+</div>
+
+<hr class="sep">
+<p class="small">Looking ahead: §4 finished the single-cell picture — bare numbers (Section 3), then losses, season, tilt, and the voltage corrections. Next we wire cells into strings, sections and panels and watch how currents add in parallel, voltages add in series, and a single dead cell (season 0) drags a whole string down.</p>

@@ -1,0 +1,328 @@
+<!-- ===================================================================
+     SECTION D5 — Testing, reproducibility, and trusting your results
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     =================================================================== -->
+
+<h3>5 &nbsp; Testing, reproducibility, and trusting your results</h3>
+
+<p>Everything so far has been about writing code that is <em>clear</em> and <em>fast</em>. This section is about the question that outranks both: <strong>is it right?</strong> A simulator that crashes is annoying; a simulator that quietly returns the wrong number is dangerous, because nothing warns you. You run it, the output looks plausible — a panel temperature of 71&nbsp;°C, a bus current of 4.2&nbsp;A — you drop it in a report, and you have just shipped a wrong answer with full confidence. The defence is not "read the code more carefully" (you will still fool yourself). The defence is to make the machine <em>prove</em> the code works, on cases whose answers you already know, automatically, every time the code changes.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> A scientific result you have not <em>tested</em> is a result you only <em>hope</em> is correct. Testing turns "I think it works" into "I can show it works, repeatably." You do this by feeding each piece of code an input whose correct output you know independently — from a trusted reference, a hand calculation, or a physical bound — and asserting that the code reproduces it. Pin those checks in a <code>tests/</code> folder, run them with <code>pytest</code> on every change, and fix the random seed so a stochastic run repeats exactly. The payoff is enormous: a silent numerical bug, the worst kind, becomes a loud, located test failure instead of a plausible lie in your plot.</p>
+</div>
+
+<p>We will build the vocabulary first — the four <em>kinds</em> of test, then <em>oracle</em>, <em>fixture</em>, <em>deterministic</em>, <em>continuous integration</em> — then make each concrete for PowerPy (a thermal <em>parity</em> test against the legacy <code>fsolve</code>, a hand-worked energy-balance oracle, a 2&times;2 circuit you can check by hand before trusting 600 cells, and cheap physical-sanity bounds). Then a fully narrated <code>pytest</code> example, a Socratic ladder, the classic pitfalls, and woven practice.</p>
+
+<h4>5.1 &nbsp; Why a scientific code needs tests at all</h4>
+
+<p>In ordinary software a bug usually announces itself: the button does nothing, the page 500s, the program throws. In <em>numerical</em> software the most damaging bugs do the opposite — they <strong>succeed</strong>. A sign flipped in a heat-balance term, a Jacobian transposed, an index off by one, kelvin fed where celsius was meant: none of these crash. Each produces a number, and the number is in the right ballpark, so it looks like an answer. You cannot tell a correct 65&nbsp;°C from a buggy 65&nbsp;°C by looking at it.</p>
+
+<p>That is the whole reason testing matters more here than almost anywhere. A test is an <em>independent</em> statement of what the answer should be, written down once and checked forever after. It is the difference between trusting your code because it ran, and trusting it because you can <em>demonstrate</em>, on command, that it reproduces answers you obtained some other way.</p>
+
+<div class="callout">
+<strong>The silent-bug threat model.</strong> Ask of every result: <em>"if this were wrong by 10%, would anything have told me?"</em> If the honest answer is "no" — no crash, no warning, no check — then you are not <em>verifying</em> that number, you are <em>hoping</em> about it. A test is how you convert a hope into a verification.
+</div>
+
+<h4>5.2 &nbsp; The four kinds of test</h4>
+
+<p>"Testing" is not one activity. There are four distinct kinds, each catching a different class of error. Learn the name and the job of each.</p>
+
+<div class="term"><strong>Unit test.</strong> A test that checks <em>one small piece</em> of code — usually a single function — against a <em>known expected output</em>. You give it inputs, you assert the result equals (or is close to) the value you worked out independently. It is the smallest, fastest, most numerous kind of test. In Python you write them with <code>pytest</code>: a plain function named <code>test_&lt;something&gt;</code> containing an <code>assert</code>.
+<pre>
+# a unit test: one function, one known answer
+def test_compute_isc_at_reference():
+    cell = make_reference_cell()       # isc_ref = 0.50 A at 25 °C
+    assert compute_isc(cell, 25.0) == 0.50    # at t_ref, isc == isc_ref exactly
+</pre>
+</div>
+
+<div class="term"><strong>Integration test.</strong> A test that checks several pieces working <em>together</em>, end to end, rather than in isolation. A unit test proves <code>build_circuit</code> and <code>solve_circuit</code> each work alone; an integration test proves that building a small circuit and then solving it produces the right node voltages — that the pieces <em>connect</em> correctly. It catches the bugs that live in the seams between functions, which no single unit test can see.</div>
+
+<div class="term"><strong>Regression test.</strong> A test that <em>pins</em> the current, known-correct output so that a future change cannot silently alter it. You capture today's right answer as the expected value; if a later edit changes it, the test fails and forces you to notice. The name says it: it guards against a <em>regression</em> — a change that makes previously-correct behaviour wrong. ("I refactored the Jacobian and the converged temperature moved by 4&nbsp;°C" should be a red test, not a surprise in next month's plot.)</div>
+
+<div class="term"><strong>Parity test.</strong> A test that checks a <em>new</em> implementation agrees with a <em>trusted existing</em> one on the same input, to within a tolerance. When you rewrite a slow-but-correct routine as a fast one, the old routine becomes your reference: feed both the identical input and assert the outputs match. Parity testing is exactly how you gain confidence that an optimisation (Section&nbsp;4's vectorised thermal solve) did not change the <em>answer</em>, only the speed.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 420 170" xmlns="http://www.w3.org/2000/svg" font-size="9.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<polygon points="210,20 330,60 90,60" fill="#fbe3df" stroke="#9a3b3b"/><text class="tx" x="210" y="48" text-anchor="middle" font-size="9">end-to-end (few)</text>
+<polygon points="90,62 330,62 360,105 60,105" fill="#fbf4e2" stroke="#c9a227"/><text class="tx" x="210" y="90" text-anchor="middle" font-size="9">integration tests</text>
+<polygon points="60,107 360,107 390,150 30,150" fill="#eaf2f0" stroke="#1f6a6a"/><text class="tx" x="210" y="134" text-anchor="middle" font-size="9">many fast unit tests</text>
+<text class="tx" x="210" y="165" text-anchor="middle" font-size="8.5" fill="#5d6b79">base = cheap &amp; numerous; top = few &amp; precious · parity vs hand-worked oracle sits at the base</text>
+</svg>
+<figcaption>Figure 9 — The testing pyramid: many cheap unit tests at the base, a few end-to-end at the top.</figcaption></figure>
+
+<div class="keyidea">
+<strong>The testing pyramid.</strong> A healthy test suite is shaped like a pyramid: a <em>broad base</em> of many fast unit tests (cheap, run constantly), a <em>thinner middle</em> of integration tests, and a <em>few</em> slow end-to-end tests at the apex. You want most of your safety net to be fast unit tests because they run in milliseconds and you run them all the time. Reserve the heavy end-to-end runs for the handful of checks that genuinely need the whole system.
+</div>
+
+<h4>5.3 &nbsp; The oracle: where the "expected answer" comes from</h4>
+
+<p>Every test asserts that the code's output equals an <em>expected</em> value. That raises the obvious question: where does the expected value come from, and why do you trust <em>it</em>? That trusted source has a name.</p>
+
+<div class="term"><strong>Oracle.</strong> A <em>trusted source of the correct answer</em> for a given input — the thing your code's output is checked against. An oracle can be (a) a <em>reference implementation</em> you already trust (the legacy <code>fsolve</code> solver), (b) a <em>hand calculation</em> you did on paper (a single-cell energy balance worked out by hand), (c) an <em>analytic</em> closed-form solution for a special case, or (d) a <em>known physical bound</em> the answer must respect. The art of testing a numerical code is largely the art of finding cheap, trustworthy oracles.</p></div>
+
+<p>The four kinds of test and the oracle interlock: a <em>parity</em> test uses a reference <em>implementation</em> as its oracle; a unit test often uses a <em>hand</em> or <em>analytic</em> oracle; a sanity check uses a <em>physical-bound</em> oracle. Keep the word in mind — when someone asks "how do you know that's the right answer?", the answer is always "because my oracle says so, and here is why I trust the oracle."</p>
+
+<h4>5.4 &nbsp; Practical tests for PowerPy</h4>
+
+<p>Abstractions land only when made concrete, so here are the exact tests that would guard PowerPy's thermal and electrical core — the code from Chapter&nbsp;2.</p>
+
+<p><strong>(a) Parity: the vectorised solver vs the legacy <code>fsolve</code>.</strong> Section&nbsp;4 replaced the per-cell <code>scipy.optimize.fsolve</code> loop with a single <em>vectorised</em> Newton step over the whole array. That is a performance change, and a performance change must not move the answer. The parity test makes that explicit: take the worked-example inputs from Chapter&nbsp;2, run the <em>old</em> per-cell solver and the <em>new</em> vectorised solver on the same single cell, and assert they agree. Both must give a front-face temperature of <strong>65.26&nbsp;°C</strong> (the converged value from worked example 2.1). The assertion idea:</p>
+
+<pre>
+t_ref = legacy_fsolve_single_cell(cell)     # trusted reference (the oracle)
+t_new = vectorised_solver(cell)             # the new implementation
+assert abs(t_new - t_ref) < 1e-3            # agree to a millikelvin
+</pre>
+
+<p>If that passes, you have shown the optimisation preserved the physics to a millikelvin. If it fails, you caught a regression the instant you introduced it — not three plots later.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 150" xmlns="http://www.w3.org/2000/svg" font-size="9.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="160" y="14" width="150" height="26" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="235" y="31" text-anchor="middle" font-size="9">same inputs (Ch.2 cell)</text>
+<rect x="40" y="64" width="160" height="26" rx="4" fill="#fff" stroke="#5d6b79"/><text class="tx" x="120" y="81" text-anchor="middle" font-size="9">legacy fsolve → 65.26°C</text>
+<rect x="270" y="64" width="160" height="26" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/><text class="tx" x="350" y="81" text-anchor="middle" font-size="9">vectorised → 65.26°C</text>
+<line x1="200" y1="40" x2="120" y2="64" stroke="#5d6b79"/><line x1="270" y1="40" x2="350" y2="64" stroke="#5d6b79"/>
+<rect x="150" y="112" width="170" height="26" rx="4" fill="#0b3d63"/><text class="tx" x="235" y="129" text-anchor="middle" fill="#fff" font-size="9">assert |Δ| &lt; 1e-3 → PASS</text>
+<line x1="120" y1="90" x2="220" y2="112" stroke="#1d2733"/><line x1="350" y1="90" x2="250" y2="112" stroke="#1d2733"/>
+</svg>
+<figcaption>Figure 10 — A parity test: the same inputs feed both solvers; the outputs must agree within a tolerance.</figcaption></figure>
+
+<p><strong>(b) Hand-worked oracle, when the reference itself is unavailable.</strong> Parity assumes you <em>have</em> a trusted reference. Sometimes you do not — the legacy code is broken, missing, or itself under suspicion. Then you fall back to an oracle you can compute by hand: the single-cell energy balance from Chapter&nbsp;2. For one cell at steady state the front and rear nodes must each have net-zero heat flow; solving that 2-node balance by hand gives front&nbsp;=&nbsp;65.26&nbsp;°C, rear&nbsp;=&nbsp;64.60&nbsp;°C. That paper answer is now your oracle, and the new solver is checked against <em>it</em>:</p>
+
+<pre>
+# oracle = the hand-computed Chapter-2 single-cell balance
+assert math.isclose(t_front_new, 65.26, abs_tol=0.01)
+assert math.isclose(t_rear_new,  64.60, abs_tol=0.01)
+</pre>
+
+<p>This is strictly stronger than parity in one way: a parity test only proves the new code <em>matches the old code</em> — if the old code was also wrong, they agree on a wrong answer. A hand oracle proves the code matches <em>physics</em>.</p>
+
+<p><strong>(c) Small-circuit sanity: a 2&times;2 before a 600-cell array.</strong> Before you trust ngspice on a 600-cell array whose internals you can never check by hand, trust it on a 2&times;2 cell circuit you <em>can</em>. With four cells you can reason about every node voltage and branch current on paper — series cells add voltage, parallel strings add current — and then read the per-cell <code>V</code> and <code>I</code> back from ngspice and confirm each matches your hand reasoning. Only once the 2&times;2 reads back correctly do you scale up. The small case is where bugs in wiring, indexing, and reading results are cheap to find; the 600-cell case is where they are impossible to find.</p>
+
+<p><strong>(d) Physical-sanity checks.</strong> The cheapest tests of all assert that a result lands inside a physically plausible band — no exact oracle needed, just physics. A sunlit panel temperature should sit somewhere in, say, <strong>0&ndash;150&nbsp;°C</strong>; a cell current in forward bias should be <strong>non-negative</strong>; output power should never exceed the <strong>incident</strong> power. These are one-line <code>assert</code>s that cost nothing and catch <em>gross</em> errors instantly — a temperature of &minus;800&nbsp;°C or 4000&nbsp;°C, a negative current, a panel that outputs more than it absorbs all scream a bug.</p>
+
+<pre>
+assert 0.0 <= t_panel <= 150.0,  f"panel temp {t_panel} °C is unphysical"
+assert current >= 0.0,           f"forward-bias current {current} A is negative"
+assert p_out <= p_in,            f"output {p_out} W exceeds input {p_in} W"
+</pre>
+
+<div class="callout">
+<strong>Sanity checks vs exact checks.</strong> A physical-sanity bound is <em>weak</em> (a buggy 64&nbsp;°C still passes "0&ndash;150&nbsp;°C") but <em>cheap and broad</em> — it guards every result for free. An oracle check is <em>strong</em> (it pins the exact value) but <em>narrow</em> — it only covers the one case you computed. Use both: sanity bounds everywhere as a coarse net, exact oracles on the few cases you can pin precisely.
+</div>
+
+<h4>5.5 &nbsp; Floating point: never compare with <code>==</code></h4>
+
+<p>There is a trap that bites every numerical-testing beginner exactly once: comparing two floating-point numbers with <code>==</code>. It does not work, and the reason is fundamental, not a quirk you can wish away.</p>
+
+<div class="term"><strong>Floating-point rounding.</strong> Computers store real numbers in a finite number of bits, so most values are kept only <em>approximately</em>. Numbers like 0.1 have no exact binary representation, and every arithmetic operation rounds its result to the nearest representable value. Tiny rounding errors therefore accumulate, so two calculations that are <em>mathematically</em> equal can differ in their last bits. The classic shock: <code>0.1 + 0.2 == 0.3</code> is <strong><code>False</code></strong> in Python, because <code>0.1 + 0.2</code> stores as <code>0.30000000000000004</code>.</p></div>
+
+<p>The consequence for testing: <code>assert t_new == 65.26</code> is almost guaranteed to fail even when the answer is correct, because the solver's last bits will differ from the literal. The fix is to compare <em>within a tolerance</em> — assert the two values are <em>close enough</em>, not bit-identical.</p>
+
+<ul>
+<li><strong>One scalar:</strong> <code>math.isclose(a, b, abs_tol=1e-3)</code> — true when <code>a</code> and <code>b</code> differ by less than the tolerance. (Use <code>abs_tol</code> for an absolute window near zero; <code>rel_tol</code> for a relative one on large values.)</li>
+<li><strong>A whole array</strong> (PowerPy's natural case — temperatures over all N cells): <code>numpy.allclose(arr_new, arr_ref, atol=1e-3)</code> — true when <em>every</em> element is within tolerance. This is the vectorised cousin of <code>isclose</code>, and exactly what you want for checking a 600-element temperature vector in one line.</li>
+</ul>
+
+<pre>
+import math, numpy as np
+
+math.isclose(0.1 + 0.2, 0.3)                 # True  — within default tolerance
+(0.1 + 0.2) == 0.3                           # False — the == trap
+
+np.allclose(t_new_array, t_ref_array, atol=1e-3)   # all N cells agree?  one bool
+</pre>
+
+<div class="pitfall">
+<strong>Pitfall — comparing floats with <code>==</code>.</strong> <code>assert result == 65.26</code> or <code>if voltage == 0.3:</code> will fail (or branch wrong) on values that are correct to twelve decimal places, because rounding makes the last bits differ. <em>Never</em> use <code>==</code> (or <code>!=</code>) on computed floats. Always compare with a tolerance: <code>math.isclose</code> for a scalar, <code>numpy.allclose</code> for an array. The only floats you may safely <code>==</code> are ones you never did arithmetic on (a literal you stored and read back unchanged).
+</div>
+
+<h4>5.6 &nbsp; Reproducibility: fix the seed, record the run</h4>
+
+<p>Chapter&nbsp;2's Monte-Carlo hot-spot study draws <em>random</em> numbers. That creates a problem for testing and for science alike: if every run draws different randoms, every run gives a different answer, and you can neither test it (the expected value moves) nor reproduce a result you reported last week. The fix rests on one concept.</p>
+
+<div class="term"><strong>Deterministic.</strong> A computation is <em>deterministic</em> if the same inputs always produce <em>exactly</em> the same outputs — no run-to-run variation. Ordinary arithmetic is deterministic; anything that draws "random" numbers is not, <em>unless</em> you pin the randomness. A pseudo-random generator is actually a deterministic sequence controlled by a starting value called the <strong>seed</strong>: fix the seed and the "random" draws are identical every run, which makes the whole Monte-Carlo computation deterministic and therefore reproducible and testable.</p></div>
+
+<pre>
+import numpy as np
+rng = np.random.default_rng(seed=12345)   # fix the seed
+samples = rng.normal(size=1000)           # identical sequence on every run
+</pre>
+
+<p>With the seed fixed, a Monte-Carlo run repeats <em>exactly</em>, so you can regression-test its output and anyone can reproduce your figure. But a seed alone is not enough for science: you must also <strong>record</strong> the seed and the parameters <em>alongside the results</em>. A result file that does not say which seed and which inputs produced it is not reproducible, however deterministic the code was — the determinism is wasted if no one knows the starting conditions. (This ties directly to Chapter&nbsp;2&nbsp;&sect;6&ndash;&sect;7, where the run's seed and parameter set are logged with the output.)</p>
+
+<div class="keyidea">
+<strong>Reproducible = deterministic code + recorded conditions.</strong> Fixing the seed makes the code <em>deterministic</em> (same inputs &rarr; same outputs). Recording the seed and parameters with the results makes the run <em>reproducible</em> (someone else, later, can recreate the exact inputs). You need both. A determinism you don't record, and a record without determinism, each fail to let a future reader reproduce your number.
+</div>
+
+<h4>5.7 &nbsp; How tests are organised and run</h4>
+
+<p>Tests are not scattered through the code; they live in a conventional place and are run by a tool.</p>
+
+<ul>
+<li><strong>A <code>tests/</code> folder.</strong> By convention, test files live in a top-level <code>tests/</code> directory, named <code>test_*.py</code>, mirroring the modules they cover (<code>test_thermal.py</code> tests the thermal solver). Keeping them separate from the source keeps the shipped code clean while keeping the safety net close.</li>
+<li><strong>Small, fast tests.</strong> Each test should check one thing and run quickly. Fast tests get run often (you will run a 200&nbsp;ms suite after every edit; you will avoid a 10&nbsp;minute one), and a test that runs often is a test that actually catches bugs.</li>
+<li><strong><code>pytest</code> to run them.</strong> <code>pytest</code> is the standard Python test runner: point it at the folder and it discovers every <code>test_*</code> function, runs them, and reports passes and failures with the offending values. You write plain functions with <code>assert</code>; <code>pytest</code> does the rest.</li>
+</ul>
+
+<div class="term"><strong>Fixture.</strong> A reusable piece of <em>setup</em> shared by many tests — a pre-built input object the tests need. In <code>pytest</code> you write a function decorated with <code>@pytest.fixture</code> that builds, say, a reference solar cell, and any test that lists the fixture's name as a parameter receives that ready-made object. Fixtures keep tests DRY (<em>Don't Repeat Yourself</em> — you build the reference cell once, not in every test) and make each test read as just "given this input, assert this output".
+<pre>
+import pytest
+
+@pytest.fixture
+def reference_cell():
+    """A single cell with the Chapter-2 worked-example parameters."""
+    return make_cell(isc_ref=0.50, alpha_isc=0.0005, t_ref=25.0, area=4e-4)
+
+def test_isc_at_reference(reference_cell):       # fixture injected by name
+    assert compute_isc(reference_cell, 25.0) == 0.50
+</pre>
+</div>
+
+<div class="term"><strong>Continuous Integration (CI).</strong> <em>Continuous Integration</em> — the practice of running your test suite <em>automatically on every change</em> (every push or merge), on a server, so broken code is caught the moment it is introduced rather than discovered later. You configure it once; thereafter every change is greeted by the full suite, and a red result blocks the change. CI is what turns "we have tests" into "the tests are always run" — the difference between a safety net you own and one you actually use.</div>
+
+<h4>5.8 &nbsp; Assertions and defensive checks <em>in the code itself</em></h4>
+
+<p>Tests live <em>outside</em> the code and run on demand. But you can also place checks <em>inside</em> the code that fire during every real run, guarding against bad inputs and broken invariants. The goal is the same as in Section&nbsp;3: make a failure <strong>loud and located</strong> rather than a silent NaN that propagates.</p>
+
+<p>The sharpest PowerPy example comes straight from Chapter&nbsp;2's vectorised solver. The global thermal Jacobian there is <em>block-diagonal</em>: N independent 2&times;2 blocks, one per cell. Each Newton step inverts those 2&times;2 blocks, and a 2&times;2 inverse divides by the determinant <code>det = ad &minus; bc</code>. If a block's determinant is (near) zero — a degenerate cell, a bad parameter — that division produces <code>inf</code> or <code>NaN</code>, which then silently poisons every downstream temperature. A defensive check catches it at the source, where the message can still name the cause:</p>
+
+<pre>
+# inside the Newton step, before dividing by the 2×2 determinant
+det = a * d - b * c
+if np.any(np.abs(det) < 1e-12):
+    bad = np.where(np.abs(det) < 1e-12)[0]
+    raise ValueError(f"singular 2x2 Jacobian block(s) at cells {bad}: det≈0")
+delta = solve_2x2(a, b, c, d, residual)     # safe: no block is singular
+</pre>
+
+<p>Without the guard, a singular block yields a <code>NaN</code> temperature that flows on through the electro-thermal loop and surfaces — if at all — as a baffling "the array won't converge" three layers away. With the guard, you get a precise message naming the exact cells, at the exact line. Validate inputs and invariants <em>early</em>, so failures are loud and located, not silent and far away.</p>
+
+<h4>5.9 &nbsp; Worked example — a narrated <code>pytest</code> parity + sanity test <span class="badge hot">EXAM-HOT</span></h4>
+
+<div class="worked">
+<strong>Worked example — one <code>pytest</code> file that parity-checks the thermal solve and asserts a physical bound.</strong> We build the shared input as a fixture, call both solvers, and assert (1) they agree to a tolerance and (2) the result is physically plausible. Every line is narrated below.
+
+<div class="step"><strong>The test file</strong> (<code>tests/test_thermal_parity.py</code>):
+<pre>
+import math
+import pytest
+from powerpy.thermal import legacy_fsolve_single_cell, vectorised_solver
+from powerpy.cells import make_cell
+
+@pytest.fixture
+def worked_example_cell():
+    """The single cell from Chapter-2 worked example 2.1."""
+    return make_cell(isc_ref=0.50, alpha_isc=0.0005, t_ref=25.0, area=4e-4)
+
+def test_vectorised_matches_legacy(worked_example_cell):
+    t_ref = legacy_fsolve_single_cell(worked_example_cell)   # trusted oracle
+    t_new = vectorised_solver(worked_example_cell)           # new implementation
+    assert math.isclose(t_new, t_ref, abs_tol=1e-3)          # parity to a mK
+
+def test_panel_temperature_is_physical(worked_example_cell):
+    t_new = vectorised_solver(worked_example_cell)
+    assert 0.0 <= t_new <= 150.0      # a sunlit panel must land in a sane band
+</pre></div>
+
+<div class="step"><strong>Line by line.</strong>
+<ul>
+<li><code>import math, pytest</code> — <code>math.isclose</code> for the tolerance comparison; <code>pytest</code> for the fixture decorator and to run the file.</li>
+<li>the <code>import</code>s from <code>powerpy</code> pull in the two solvers under test and the cell builder — the things whose correctness we are checking.</li>
+<li><code>@pytest.fixture</code> / <code>def worked_example_cell()</code> — builds the shared input <em>once</em>: a cell carrying the exact parameters of Chapter&nbsp;2's worked example. Any test that names <code>worked_example_cell</code> as a parameter is handed this object, so we never rebuild it.</li>
+<li><code>def test_vectorised_matches_legacy(worked_example_cell)</code> — <code>pytest</code> sees the <code>test_</code> prefix and runs it; it sees the parameter name matches the fixture and injects the cell.</li>
+<li><code>t_ref = legacy_fsolve_single_cell(...)</code> — run the <em>trusted</em> legacy solver; its output is our oracle (≈ 65.26&nbsp;°C).</li>
+<li><code>t_new = vectorised_solver(...)</code> — run the <em>new</em> vectorised solver on the identical input.</li>
+<li><code>assert math.isclose(t_new, t_ref, abs_tol=1e-3)</code> — the heart of the parity test: the two must agree to within a millikelvin. Note <code>isclose</code>, <em>not</em> <code>==</code> — float rounding would break <code>==</code>.</li>
+<li>the second test, <code>test_panel_temperature_is_physical</code>, is the cheap sanity net: whatever the exact value, a sunlit panel must lie in 0&ndash;150&nbsp;°C, so a gross bug (a negative or four-figure temperature) fails loudly even if no oracle were available.</li>
+</ul>
+</div>
+
+<div class="check"><strong>Running it.</strong> <code>pytest tests/test_thermal_parity.py</code> discovers both <code>test_</code> functions, injects the fixture, runs them, and prints <code>2 passed</code> — or, on a regression, shows the two values it compared and the line that failed. Two small, fast tests now stand permanently between a future edit and a silent change to the converged temperature. ✓</div>
+</div>
+
+<h4>5.10 &nbsp; Socratic ladder — trusting a solver with no perfect reference</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). What is a <em>unit test</em>, in one sentence, and what does it need to exist?</div>
+<div class="answer">A unit test checks one small piece of code — typically a single function — against a <em>known expected output</em>: call the function with chosen inputs and <code>assert</code> the result matches the value you obtained independently. It needs exactly one thing to exist: an <em>expected answer</em> you trust. No expected answer, no test — which is why the next rung matters.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (the source of truth). That "expected answer" — what is it called, and what can supply it when there is no trusted reference solver to copy from?</div>
+<div class="answer">It is the <em>oracle</em>: a trusted source of the correct answer. When no reference <em>implementation</em> exists, the oracle can instead be a <em>hand calculation</em>, an <em>analytic</em> solution for a special case, or a <em>physical bound</em> the answer must respect. The reference solver is only <em>one</em> possible oracle; losing it does not leave you blind, it just sends you to the other three.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (a hand-computable case). For PowerPy's 2-node thermal balance, what concrete case can you actually compute by hand to serve as that oracle?</div>
+<div class="answer">A <em>single cell</em> at steady state. With two nodes (front, rear) and the requirement that each has net-zero heat flow, the balance is a small system you can solve on paper — and Chapter&nbsp;2 does, getting front&nbsp;=&nbsp;65.26&nbsp;°C, rear&nbsp;=&nbsp;64.60&nbsp;°C. That hand answer becomes the oracle: <code>assert math.isclose(t_front_new, 65.26, abs_tol=0.01)</code>. It checks the new solver against <em>physics</em>, not against possibly-buggy old code.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (cheap broad coverage). The hand oracle covers one case. What do <em>physical-sanity bounds</em> add that an exact oracle does not?</div>
+<div class="answer">Breadth, for free. A bound like 0&nbsp;&le;&nbsp;<var>T</var>&nbsp;&le;&nbsp;150&nbsp;°C, or current&nbsp;&ge;&nbsp;0 in forward bias, or power&nbsp;&le;&nbsp;input, holds for <em>every</em> result, not just the one you hand-computed. It is weak (a wrong-but-plausible 64&nbsp;°C slips through) but it costs one line and catches every <em>gross</em> error — a &minus;800&nbsp;°C temperature, a negative current, a panel emitting more than it absorbs — across the whole simulation. Coarse net everywhere, sharp oracle on a few points.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;e (scaling confidence). Why build a 2&times;2-cell circuit and check it by hand before trusting a 600-cell array?</div>
+<div class="answer">Because the 2&times;2 is <em>hand-checkable</em> and the 600-cell is not. With four cells you can reason out every node voltage and branch current on paper and confirm the per-cell <code>V</code>/<code>I</code> read back from ngspice match — catching wiring, indexing, and result-reading bugs while they are cheap to find. Those <em>same</em> bugs in a 600-cell array are invisible (no one can hand-check 600 cells). Get the small case provably right first, then scale, so the only new thing in the big run is size, not correctness.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;f (the target). So: <em>if we have no perfectly-trusted reference implementation, how do we still know the new solver is correct?</em></div>
+<div class="answer">Stack the rungs. We do not need a reference <em>implementation</em> because the oracle can be a <em>hand calculation</em> (Q&middot;b): the single-cell 2-node balance gives 65.26/64.60&nbsp;°C by hand (Q&middot;c), and a unit test (Q&middot;a) pins the solver to it with <code>math.isclose</code>. Around that exact check we throw <em>physical-sanity bounds</em> (Q&middot;d) that cheaply guard every other result, and we earn confidence in the wiring on a <em>2&times;2 circuit we can check by hand</em> (Q&middot;e) before scaling to 600 cells. <strong>Correctness without a trusted twin comes from anchoring to physics you can compute, bounding everything you cannot, and proving the small case before trusting the large one.</strong> If a reference later appears, a parity test (<code>abs(t_new &minus; t_ref) &lt; 1e-3</code>) is added on top — but it was never the only road to trust.</div>
+</div>
+</div>
+
+<h4>5.11 &nbsp; Pitfalls</h4>
+
+<div class="pitfall">
+<strong>Pitfall 1 — comparing floats with <code>==</code>.</strong> (Restated because it is the one everyone hits.) <code>assert t_new == 65.26</code> fails on a correct answer because rounding makes the last bits differ. Use a tolerance: <code>math.isclose(t_new, 65.26, abs_tol=1e-2)</code> for a scalar, <code>numpy.allclose(...)</code> for an array. Reserve <code>==</code> for integers and for floats you never did arithmetic on.
+</div>
+
+<div class="pitfall">
+<strong>Pitfall 2 — a test that never actually asserts (it passes <em>vacuously</em>).</strong> A test with no reachable <code>assert</code> always "passes" — and proves nothing. The classic forms:
+<pre>
+def test_solver():
+    t = vectorised_solver(cell)      # computes a value...
+    # ...and never checks it. Passes no matter how wrong t is.
+
+def test_close():
+    math.isclose(t_new, t_ref)       # returns True/False but it is NOT asserted!
+</pre>
+The first never checks its result; the second <em>computes</em> a boolean and throws it away (you must write <code>assert math.isclose(...)</code>). A green suite full of vacuous tests is worse than no suite — it is false confidence. Every test must contain at least one <code>assert</code> that can actually fail.
+</div>
+
+<div class="pitfall">
+<strong>Pitfall 3 — trusting a big simulation you never checked on a small hand-solvable case.</strong> Running the 600-cell array and eyeballing "looks about right" is not verification — it is the exact situation where a silent bug hides, because no one can hand-check 600 cells. If you never confirmed the 2&times;2 circuit, or never pinned the single-cell temperature to the hand oracle, then the big number rests on nothing. Always anchor the large run to a small case whose answer you <em>know</em>.
+</div>
+
+<h4>5.12 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice D5-1.</strong> You are parity-testing the new vectorised solver against the legacy <code>fsolve</code> on one cell. Write the single assertion that checks their front-temperatures agree to within one millikelvin, given <code>t_new</code> and <code>t_ref</code> in °C. Then say in one line <em>why</em> you must not write <code>assert t_new == t_ref</code> instead.
+<div class="answerspace lines-5"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D5-2.</strong> A run reports a sunlit panel temperature <code>t_panel</code> and the incident and output powers <code>p_in</code>, <code>p_out</code>. Design <em>two</em> physical-sanity checks for this result — write each as a one-line <code>assert</code> with a message — and state in one sentence which class of bug each one catches.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D5-3.</strong> You want to compare the converged temperatures of two different cell <em>layouts</em> from a Monte-Carlo run and conclude which layout runs cooler. Explain why fixing the random <em>seed</em> matters here: what would go wrong if the two layouts were each simulated with a <em>different</em> (unfixed) seed, and what does fixing it let you conclude? Use the words <em>deterministic</em> and <em>reproducible</em>.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D5-4.</strong> Below is a test someone added. State why it gives <em>false</em> confidence, and rewrite it so it genuinely checks the result.
+<pre>
+def test_thermal():
+    t = vectorised_solver(reference_cell)
+    math.isclose(t, 65.26, abs_tol=0.01)
+</pre>
+<div class="answerspace lines-5"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> Test a scientific code because its worst bugs are <em>silent</em> — a wrong number that looks plausible. Four kinds of test: <strong>unit</strong> (one function vs a known output, via <code>pytest</code> + <code>assert</code>), <strong>integration</strong> (pieces working together end-to-end), <strong>regression</strong> (pin today's correct output so a future change can't silently move it), <strong>parity</strong> (new impl vs a trusted one to a tolerance). The expected value comes from an <strong>oracle</strong> — a trusted reference implementation, a hand calculation, an analytic case, or a physical bound. For PowerPy: <em>parity</em> of the vectorised solver vs legacy <code>scipy.fsolve</code> (both &rarr; front&nbsp;≈&nbsp;65.26&nbsp;°C, <code>assert abs(t_new&minus;t_ref)&lt;1e-3</code>); a <em>hand-worked</em> single-cell energy-balance oracle (65.26/64.60&nbsp;°C) when the reference is unavailable; a <em>2&times;2</em> circuit checked by hand before a 600-cell array; <em>physical-sanity</em> bounds (0&ndash;150&nbsp;°C, current&nbsp;&ge;&nbsp;0, power&nbsp;&le;&nbsp;input). Never compare computed floats with <code>==</code> (rounding) — use <code>math.isclose</code> (scalar) or <code>numpy.allclose</code> (array). For reproducibility, fix the <strong>seed</strong> so a Monte-Carlo run is <strong>deterministic</strong>, and <em>record</em> seed + parameters with the results so the run is <strong>reproducible</strong>. Organise tests in <code>tests/</code>, keep them small and fast, run with <code>pytest</code>, share setup via <strong>fixtures</strong>, and run them automatically on every change (<strong>Continuous Integration, CI</strong>). Put <strong>defensive checks in the code</strong> too — e.g. guard <code>det&nbsp;&ne;&nbsp;0</code> before inverting each 2&times;2 Jacobian block — so failures are loud and located, not silent <code>NaN</code>s. Avoid the three traps: <code>==</code> on floats; a test that never asserts (passes vacuously); and trusting a big simulation you never checked on a small hand-solvable case.
+</div>

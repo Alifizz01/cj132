@@ -1,0 +1,12 @@
+<% partial: embed a figure looked up by section.ref %>
+\section{<< section.title | tex >>}
+<<% set fig_path = figures.get(section.ref) %>>
+<<% if fig_path %>>
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.95\linewidth]{<< fig_path >>}
+\end{figure}
+<<% else %>>
+\textit{(figure ``<< section.ref | tex >>'' not produced by the
+render pipeline; check render.figures dispatch.)}
+<<% endif %>>

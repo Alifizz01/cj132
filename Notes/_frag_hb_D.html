@@ -1,0 +1,315 @@
+<section class="partopener"><div class="pn">Appendix D</div><h2>Inside the Code: How Each Calculation Is Performed</h2><div class="blurb">Module by module — the data, the steps, and the pseudocode behind each result.</div></section>
+
+<section class="sec">
+<h3><span class="sec-num">D.0</span>How to read this appendix</h3>
+<p class="slow">The rest of this handbook tells you <em>what</em> the simulator computes — temperatures, survival verdicts, ranked failure positions. This appendix tells you <em>how</em>, at the level of the actual Python. We walk the package in the order data flows through it: a substrate file and a layout grid go in at the top, get turned into flat numpy arrays of optical and thermal properties; a circuit tree turns into a SPICE netlist; the netlist and the arrays feed a coupling loop that bounces between an electrical solve and a thermal solve until both agree; the converged field is judged for breakdown; thousands of such runs are swept under Monte-Carlo control; and finally everything is stored and drawn. Each section below takes one module or one step, names exactly what data goes in and what comes out, lists the steps in words, gives a short pseudocode block that mirrors the real source, and ends with a <span class="num">deep-dive</span> box on the one trick that makes that piece work or makes it fast.</p>
+
+<p class="slow">A note on the spirit of the design before we start. Almost every module in this package is written to be <em>standalone and testable in isolation</em>: the thermal solver imports nothing from the rest of <span class="num">powerpy</span> and keeps its own copy of the physical constants; the coupling loop never knows how electrical power is obtained, because that is injected as a function; the Monte-Carlo driver never knows how a run is evaluated, because that too is injected. This dependency-injection style is why the pseudocode below is short — each module does one job and hands the next job to a callable it was given. Where a piece is not yet wired to the legacy ngspice cell model, the source says so honestly, and so do we.</p>
+
+<div class="recap"><span class="lbl">The ten stages</span> D.1 substrate properties → D.2 layout grid &amp; conduction adjacency → D.3 circuit tree &amp; netlist → D.4 the two-node thermal Newton loop → D.5 the vectorised constant-pattern sparse Jacobian → D.6 the electro-thermal coupling loop → D.7 electrical wiring (probed netlist → V, I, P) → D.8 breakdown criteria → D.9 Monte-Carlo &amp; the grid failure study → D.10 storage &amp; reporting.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.1</span>Substrate properties — <span class="num">config/substrate.py</span></h3>
+
+<p class="slow">The substrate is the board a panel is built on — here an aluminium honeycomb sandwich. Everything thermal about the board reduces to six numbers plus one derived quantity. This module gives those numbers a typed home and computes the one term the heat balance actually needs.</p>
+
+<div class="deep"><span class="lbl">Data in</span> A JSON file at <span class="num">data/substrates/&lt;name&gt;.json</span> with the keys <span class="num">name, alpha_front, alpha_rear, epsilon_front, epsilon_rear, conductivity, thickness</span>. <span class="lbl">Data out</span> a frozen <span class="num">Substrate</span> dataclass carrying those fields plus one computed property, <span class="num">c_cond</span>.</div>
+
+<p class="slow">The four optical numbers are the front and rear <em>solar absorptivity</em> α (the fraction of incident sunlight the face soaks up as heat) and the front and rear <em>infrared emissivity</em> ε (how readily the face radiates heat away). The two physical numbers are the through-thickness thermal <em>conductivity</em> k (W/m·K) and the substrate <em>thickness</em> t (m). The whole point of the dataclass is to collapse the last two into a single conduction coefficient that the two-node balance can use directly:</p>
+
+<div class="formula">c_cond = conductivity / thickness<div class="where">units W/(m²·K); with k=10 W/mK and t=0.01 m this is 10 / 0.01 = 1000 W/m²K — the front↔rear conductance per unit area</div></div>
+
+<p class="slow">The steps the module performs are deliberately small. (1) <span class="num">load_substrate(name)</span> resolves the path — packaged under <span class="num">data/substrates/</span> by default, or a local file if asked — and reads the JSON. (2) <span class="num">from_dict</span> validates that all seven required keys are present, raising a clear <span class="num">KeyError</span> listing any that are missing <em>before</em> any arithmetic happens. (3) Each value is coerced to <span class="num">float</span> and frozen into the dataclass, so a loaded substrate is immutable and safe to share across every tile of an array. (4) The <span class="num">c_cond</span> property is computed lazily on access, and guards against a non-positive thickness (which would mean an infinite conductance) by raising rather than returning a nonsense number.</p>
+
+<pre>def load_substrate(name):
+    path = data/substrates/&lt;name&gt;.json   # or local file
+    cfg  = json.load(open(path))
+    return from_dict(cfg)
+
+def from_dict(cfg):
+    missing = [k for k in REQUIRED if k not in cfg]
+    if missing: raise KeyError(missing)
+    return Substrate(name, alpha_front, alpha_rear,
+                     epsilon_front, epsilon_rear,
+                     conductivity, thickness)   # all float()
+
+# derived, lazily:
+property c_cond:
+    if thickness &lt;= 0: raise ValueError
+    return conductivity / thickness</pre>
+
+<div class="deep"><span class="lbl">The trick — validate early, derive lazily</span> The module separates two concerns that are easy to tangle. Validation happens <em>once</em>, at construction, so a malformed file fails loudly at load time rather than producing a quiet wrong temperature ten modules downstream. The physics derivation (<span class="num">c_cond</span>) is a property, computed only when something asks for it — so the stored object stays a faithful mirror of the file, and the one place that combines conductivity and thickness is the one place that can guard against t≤0. The frozen dataclass means no caller can accidentally mutate a shared substrate mid-sweep.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.2</span>Layout grid &amp; conduction adjacency — <span class="num">config/layout.py</span></h3>
+
+<p class="slow">A panel is not a single cell; it is a mosaic of tiles, some real photovoltaic cells, some bare substrate, some diodes. The layout module describes that mosaic as a human-readable 2-D <em>grid of single-character keys</em> plus a <em>palette</em> that maps each key to its full properties. From that one description it produces two things the solver needs: flat per-tile property arrays, and the 4-neighbour adjacency that defines which tiles can share heat.</p>
+
+<div class="deep"><span class="lbl">Data in</span> a grid like <span class="num">["AAAA","A..A","AAAA"]</span> and a palette mapping each character to a <span class="num">TileType</span> (carrying <span class="num">is_cell</span>, <span class="num">alpha_front/rear</span>, <span class="num">epsilon_front/rear</span>, <span class="num">string</span>, and the panel <span class="num">pitch_mm</span>). <span class="lbl">Data out</span> a <span class="num">PanelLayout</span> exposing <span class="num">neighbours()</span> (flat-index pairs) and <span class="num">prop_arrays()</span> (flat numpy arrays).</div>
+
+<p class="slow">A <span class="num">TileType</span> is a frozen dataclass — one palette entry. Its single computed property is <span class="num">generates_power</span>, which is simply <span class="num">is_cell</span>: only real cells convert absorbed sunlight into electricity. Bare tiles have <span class="num">generates_power == False</span>, which matters thermally — a bare tile absorbs sun but exports no power, so <em>all</em> of its absorbed sunlight stays behind as heat. That is why bare regions run hotter than cell regions and, through lateral conduction, can warm their neighbours.</p>
+
+<p class="slow">The grid is row-major, so tile <span class="num">(r,c)</span> has flat index <span class="num">i = r·n_cols + c</span>. The adjacency is built by walking every tile once and, for each, recording an undirected edge to the tile on its right and the tile below it — that records every 4-neighbour bond exactly once (the left and upward bonds are already recorded by the neighbour that owns them). This list of flat-index pairs is precisely the graph the lateral-conduction solver turns into a Laplacian in D.5.</p>
+
+<pre>def neighbours():               # 4-neighbour edges, each once
+    pairs = []
+    for r in range(n_rows):
+        for c in range(n_cols):
+            i = r*n_cols + c
+            if c+1 &lt; n_cols: pairs.append((i, i+1))
+            if r+1 &lt; n_rows: pairs.append((i, i+n_cols))
+    return pairs
+
+def prop_arrays():              # flat per-tile numpy arrays
+    tt = [palette[k] for k in grid.flatten()]
+    return {
+      "alpha_front":  array([t.alpha_front  for t in tt]),
+      "epsilon_rear": array([t.epsilon_rear for t in tt]),
+      ...,
+      "generates_power": array([t.is_cell for t in tt], bool),
+    }</pre>
+
+<div class="deep"><span class="lbl">The trick — one grid yields both the physics arrays and the adjacency</span> Authoring a panel as text means asymmetric layouts and empty regions are trivial to write and to version-control, but the deeper payoff is that the same grid that humans read <em>is</em> the conduction graph. Because tile geometry is a regular lattice, neighbourliness is pure index arithmetic — no geometry library, no distance test. Emitting each edge only on the right/down pass keeps the pair list free of duplicates, so the Laplacian built from it in D.5 is symmetric by construction. And by flattening palette lookups into numpy arrays once, every per-tile property the vectorised thermal solve needs is a single contiguous array, ready for elementwise math over all tiles at once.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.3</span>Circuit tree &amp; netlist — <span class="num">model/circuit.py</span></h3>
+
+<p class="slow">The electrical side of the array is a hierarchy: cells in series form a line, lines in parallel form a module, modules form a block, blocks form the whole circuit. The legacy code hard-wired which level was series and which parallel; the failure study needs to flip any junction and to reach in and fail one specific cell. So the circuit is rebuilt as a <em>recursive tree</em> of <span class="num">Group</span> nodes (each combining its children in series or parallel) whose leaves are <span class="num">CellRef</span> wrappers around individual cells.</p>
+
+<div class="deep"><span class="lbl">Data in</span> a prototype cell plus the five shape numbers — <span class="num">cells_per_line, lines_parallel, modules_per_block, n_blocks</span> and the four <span class="num">*_combine</span> rules. <span class="lbl">Data out</span> a <span class="num">Circuit</span> with a root <span class="num">Group</span>, a registry <span class="num">cells[id] → cell</span> for O(1) fault injection, and two netlist builders.</div>
+
+<p class="slow"><span class="num">from_prototype</span> builds the tree bottom-up. For each block <span class="num">b</span>, module <span class="num">m</span>, line <span class="num">l</span>, cell <span class="num">c</span> it forms the stable id <span class="num">B{b}.M{m}.L{l}.C{c}</span>, <em>deep-copies</em> the prototype so each cell is an independent object (never a shared reference), registers it under its id, and wraps it in a <span class="num">CellRef</span>. Lines combine their cells (default SERIES), modules combine their lines (default PARALLEL — the classic &ldquo;two parallel circuits&rdquo;), blocks combine modules (default SERIES, to reach the ~70 V bus), and the root combines blocks (default PARALLEL, one blocking diode each). The series/parallel rule is a parameter at every level.</p>
+
+<p class="slow">Fault injection is then trivial: <span class="num">fail(id, mode)</span> looks the cell up in O(1) and, for the default &ldquo;dead&rdquo;/&ldquo;open&rdquo; mode, calls <span class="num">setSeason(0)</span> — which zeroes that cell's photocurrent so it generates nothing. Building the netlist is a recursive walk that assigns SPICE nodes: a SERIES group threads its children head-to-tail through fresh internal nodes; a PARALLEL group ties every child between the same two rails. Each distinct cell subcircuit is emitted only once.</p>
+
+<pre>def emit(node, n_pos, n_neg):
+    if node is a CellRef:
+        sub, name = node.cell.buildModel(...)
+        subckts[name] = sub                 # once per distinct model
+        lines.append("X{id} {n_pos} {n_neg} {name}")
+        return
+    if node.combine == SERIES:
+        prev = n_pos
+        for i, child in enumerate(children):
+            nxt = n_neg if last else new_node()
+            emit(child, prev, nxt); prev = nxt
+    else:                                    # PARALLEL
+        for child in children:
+            emit(child, n_pos, n_neg)</pre>
+
+<p class="slow"><span class="num">build_probed_netlist</span> does the same walk but, for each cell, also inserts a 0-volt source in series with it. A 0-V source is the SPICE idiom for an ammeter: it changes no voltages but its branch current <em>is</em> the cell current. The builder returns a probe map <span class="num">{id: (node+, node−, ammeter)}</span> so that after a <span class="num">.op</span> solve you can read each cell's voltage and current and form its power.</p>
+
+<div class="deep"><span class="lbl">The trick — a parametric tree with stable ids and 0-V ammeters</span> Representing the array as a recursive tree means topology becomes data: any level can be flipped series↔parallel by a single argument, and arbitrary nesting needs no new code. Deep-copying the prototype is what makes per-cell failure possible — fail one id and no other cell is touched, because they are not the same object. The hierarchical id is both the dictionary key (O(1) reach) and the SPICE instance name (traceable in the netlist). And the 0-V series source is the cleanest possible current probe: it is electrically invisible yet its branch current is exactly what the electrical solve in D.7 reads back to compute per-cell power.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.4</span>The two-node thermal Newton loop — <span class="num">solve/thermal.py</span></h3>
+
+<p class="slow">This is the heart of the simulator. Every tile has two faces — a front that sees the Sun and a rear that radiates to deep space — at slightly different temperatures because heat must conduct through the substrate between them. The solver finds, for every tile at once, the pair of steady-state temperatures (T₁ front, T₂ rear) at which heat in equals heat out on each face. It is a root-find of two coupled nonlinear residuals per tile, solved by Newton's method, fully vectorised over the array.</p>
+
+<div class="deep"><span class="lbl">Data in</span> per-tile (or scalar) <span class="num">area, alpha_front/rear, epsilon_front/rear</span>; the conduction coefficient <span class="num">c_cond</span>; the environment fluxes <span class="num">p_sun, p_albedo, p_ir</span>; the electrical power per tile <span class="num">p_elec</span> (negative = a reverse-biased dissipating cell); optional <span class="num">neighbours</span> and <span class="num">g_lat</span> for lateral coupling. <span class="lbl">Data out</span> a <span class="num">ThermalResult</span> with front and rear temperatures in °C, iteration count, convergence flag and the final residual.</div>
+
+<p class="slow">First the module folds the inputs into the few constants each Newton step reuses. It coerces everything to length-N arrays, then precomputes the front-face conduction term <span class="num">CA = c_cond·A</span>, the absorbed front sunlight <span class="num">qF = α_front·A·p_sun·tilt</span>, and the rear-face absorbed albedo plus planetary-IR term <span class="num">qR = (α_rear·p_albedo + ε_rear·p_ir)·A·tilt</span>. The deep-space sink contributes <span class="num">T_space⁴</span> with <span class="num">T_space = 2.7 K</span> — kept for correctness though it is negligible against a cell at hundreds of kelvin.</p>
+
+<p class="slow">The two residuals are the net heat onto each face. For the front: absorbed sun, minus what it radiates, minus the electrical power exported, plus the conducted heat from the rear. For the rear: absorbed albedo/IR, minus what it radiates, minus the conducted heat to the front.</p>
+
+<div class="formula">f₁ = qF − ε_front·A·σ·(T₁⁴ − T_space⁴) − P_elec + CA·(T₂ − T₁)<div class="where">front-face residual; zero at the converged front temperature</div></div>
+<div class="formula">f₂ = qR − ε_rear·A·σ·(T₂⁴ − T_space⁴) − CA·(T₂ − T₁)<div class="where">rear-face residual; zero at the converged rear temperature</div></div>
+
+<p class="slow">When <span class="num">g_lat == 0</span> the tiles are independent, so the 2N×2N Jacobian is block-diagonal — N separate 2×2 blocks — and each block is inverted in closed form. Writing the 2×2 Jacobian of (f₁, f₂) in (T₁, T₂) as [[a, b],[c, d]], the entries are</p>
+
+<div class="formula">a = −4·ε_front·A·σ·T₁³ − CA&nbsp;&nbsp; b = c = CA&nbsp;&nbsp; d = −4·ε_rear·A·σ·T₂³ − CA<div class="where">det = a·d − b·c; the Newton update inverts each 2×2 block analytically</div></div>
+<div class="formula">ΔT₁ = −(d·f₁ − b·f₂)/det&nbsp;&nbsp;&nbsp;ΔT₂ = −(−c·f₁ + a·f₂)/det<div class="where">applied to every tile at once as numpy array operations — no Python loop over tiles</div></div>
+
+<pre>T1 = T2 = t_init                         # arrays, length N
+for it in 1..max_iter:
+    f1 = qF - eF*A*S*(T1**4 - Ts4) - Pe + CA*(T2-T1)
+    f2 = qR - eR*A*S*(T2**4 - Ts4)      - CA*(T2-T1)
+    a = -4*eF*A*S*T1**3 - CA;  b = c = CA
+    d = -4*eR*A*S*T2**3 - CA
+    det = where(|a*d-b*c| &lt; 1e-30, 1e-30, a*d-b*c)
+    dT1 = -(d*f1 - b*f2)/det
+    dT2 = -(-c*f1 + a*f2)/det
+    T1 += dT1;  T2 += dT2
+    if max(|dT1|,|dT2|) &lt; tol: converged; break
+return (T1 + T_ZERO_C, T2 + T_ZERO_C)    # back to degC</pre>
+
+<p class="slow">Convergence is fast because radiation is a smooth, strongly curved function — Newton's quadratic convergence reaches a micro-kelvin tolerance in a handful of iterations from a room-temperature start. The companion <span class="num">solve_panel</span> wrapper pulls the property arrays and adjacency straight from a <span class="num">PanelLayout</span>, zeroes the electrical power on tiles that don't generate, runs <span class="num">solve_thermal</span>, and reshapes the flat result back to the grid.</p>
+
+<div class="deep"><span class="lbl">The trick — a hand-inverted 2×2 over the whole array</span> Because the independent problem has no coupling between tiles, its Jacobian is block-diagonal and every block is just 2×2. Rather than call a linear solver, the code writes the analytic inverse of a 2×2 (divide by the determinant) — and because <span class="num">a, b, c, d, det, f1, f2</span> are all length-N arrays, that single closed-form expression updates all N tiles simultaneously as vector arithmetic. The determinant is floored at 1e-30 to keep the divide safe. This fast path reproduces the legacy per-cell <span class="num">scipy.fsolve</span> answer exactly (a single sunlit cell → 65.26 °C) while doing the work of N root-finds in one vectorised pass.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.5</span>The vectorised constant-pattern sparse Jacobian — <span class="num">solve/thermal.py</span> (lateral path)</h3>
+
+<p class="slow">When <span class="num">g_lat &gt; 0</span> the faces of neighbouring tiles share heat in-plane, so the tiles are no longer independent and the block-diagonal trick of D.4 no longer applies. Now we must solve one coupled 2N×2N linear system per Newton step. The art is in noticing that almost all of that matrix never changes between steps — so we build the constant part exactly once and add only the small changing part each iteration.</p>
+
+<div class="deep"><span class="lbl">Data in</span> the same per-tile arrays as D.4, plus the <span class="num">neighbours()</span> edge list and a lateral conductance <span class="num">g_lat</span> (from <span class="num">lateral_conductance(k,t,edge,pitch)=k·t·edge/pitch</span>). <span class="lbl">Data out</span> the same <span class="num">ThermalResult</span> — but with heat now spreading: peaks drop, neighbours warm.</div>
+
+<p class="slow">The in-plane heat flow on a face is a graph-Laplacian operation. From the edge list the code builds a symmetric adjacency matrix A, the degree diagonal D (how many neighbours each tile has), and the Laplacian <span class="num">L = D − A</span>. Multiplying the temperature vector by L gives, at each tile, the sum of (its temperature minus each neighbour's) — exactly the net conductive outflow per unit conductance. The lateral heat flux is therefore one sparse matrix-vector product, <span class="num">−g_lat·(L·T)</span>, with no Python loop over neighbour pairs.</p>
+
+<p class="slow">The 2N×2N Jacobian has two kinds of entries. The front↔rear conduction (the CA blocks) and the lateral coupling (<span class="num">g_lat·L</span> on each face's diagonal block) are <em>constant</em> — they do not depend on temperature. Only the radiative term <span class="num">−4·ε·A·σ·T³</span> changes from step to step, and it lives purely on the diagonal. So the code assembles the constant structure once and, each iteration, simply adds the radiative diagonal.</p>
+
+<div class="formula">J_const = [[ −CA·I − g_lat·L , CA·I ], [ CA·I , −CA·I − g_lat·L ]]<div class="where">built once; CA·I is the front↔rear conductance, g_lat·L the in-plane spreading</div></div>
+<div class="formula">J = J_const + diag( −4·ε·A·σ·T³ )&nbsp;&nbsp;&nbsp;solve J·Δx = −f each step<div class="where">only the diagonal is rebuilt per iteration; J is sparse, solved by spsolve</div></div>
+
+<pre># --- ONCE, before the Newton loop ---
+adj = sparse adjacency from neighbour pairs (symmetric)
+L   = diag(degree) - adj                 # graph Laplacian
+Jconst = bmat([[ -diag(CA) - g_lat*L,  diag(CA)        ],
+               [  diag(CA),           -diag(CA) - g_lat*L]])
+
+# --- each Newton step ---
+f1 -= g_lat * (L @ T1)                    # lateral flux: one matvec
+f2 -= g_lat * (L @ T2)
+f   = concat(f1, f2)
+rad = concat(-4*eF*A*S*T1**3, -4*eR*A*S*T2**3)
+J   = Jconst + diag(rad)                  # add changing diagonal
+dx  = spsolve(J, -f)                      # sparse solve
+T1 += dx[:N];  T2 += dx[N:]</pre>
+
+<p class="slow">The numbers bear out the design: a 40×40 panel is 1600 tiles — a 3200×3200 system — and it converges in five iterations in about 0.046 seconds. A scipy-free dense fallback exists for environments without scipy, but the sparse path is what makes large panels practical.</p>
+
+<div class="deep"><span class="lbl">The trick — build the constant structure once, add only the diagonal</span> The expensive parts of assembling a sparse 2N×2N matrix are the adjacency, the Laplacian, and the conduction blocks — and none of them depend on temperature. By recognising that only the radiative term varies, and that it is purely diagonal, the loop reduces to: one Laplacian matvec for the lateral flux, one diagonal addition for the Jacobian, one sparse solve. There is never a Python loop over neighbour pairs inside the iteration — the entire spatial coupling is carried by the precomputed Laplacian. This is the difference between a solver that crawls and one that does 1600 coupled tiles in 46 milliseconds.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.6</span>The electro-thermal coupling loop — <span class="num">solve/coupling.py</span></h3>
+
+<p class="slow">A cell's current-voltage curve depends on its temperature; its temperature depends on the electrical power it extracts or dissipates. That is a chicken-and-egg coupling, and there is no closed form for it. The coupling loop hunts for the self-consistent pair — the temperature field and the operating point that agree with each other — by a damped fixed-point iteration.</p>
+
+<div class="deep"><span class="lbl">Data in</span> a callable <span class="num">power_fn(T_front) → p_elec_array</span>, the same thermal inputs as D.4 (area, optical properties, c_cond, fluxes, tilt), and the under-relaxation factor <span class="num">omega</span> (default 0.5). <span class="lbl">Data out</span> a <span class="num">CoupledResult</span> with the converged front/rear temperatures, the final per-cell power, the outer-iteration count and a convergence flag.</div>
+
+<p class="slow">Each outer iteration does four things. (1) Call <span class="num">power_fn(T)</span> to get the electrical power each cell extracts at the <em>current</em> temperatures — in production this builds the netlist, runs ngspice and reads back V·I; in tests it is a synthetic function. (2) Feed that power into <span class="num">solve_thermal</span> to get the temperature field that power produces. (3) <em>Damp</em> the update: rather than jumping straight to the new temperature, move only a fraction <span class="num">omega</span> of the way there, <span class="num">T += omega·(T_new − T)</span>. (4) Stop when the damped step falls below the tolerance (default 1e-3 °C). A final clean thermal solve is run at the converged power so the returned field is exactly consistent.</p>
+
+<pre>T = t_init (array)
+for it in 1..max_outer:
+    p_elec = power_fn(T)                 # electrical solve at T
+    res    = solve_thermal(..., p_elec)  # thermal solve at that power
+    step   = omega * (res.t_front - T)   # damped move
+    T     += step
+    if max(|step|) &lt; tol_c: converged; break
+# one final consistent thermal solve at the converged power
+return CoupledResult(res.t_front, res.t_rear, p_elec, it, converged)</pre>
+
+<div class="deep"><span class="lbl">The trick — under-relaxation and an injected power function</span> Two design choices make this loop both stable and reusable. First, under-relaxation: a raw fixed-point iteration on this coupling can overshoot and oscillate because hotter cells make less power, which cools them, which makes more power, and so on. Multiplying each update by <span class="num">omega</span> &lt; 1 bleeds energy out of that oscillation and lets it settle. Second, the electrical solve is injected as <span class="num">power_fn</span> — the loop never knows or cares <em>how</em> the power is obtained. That keeps the loop logic pure and testable with a synthetic function today, and lets the real ngspice-backed function (D.7) drop in unchanged the moment the legacy cell model is ready.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.7</span>Electrical wiring: probed netlist → V, I, P — <span class="num">solve/electrical.py</span></h3>
+
+<p class="slow">This module is the bridge that closes the electro-thermal loop: it turns a circuit and a bus voltage into the per-cell electrical power the thermal solver needs. It does so by running a SPICE operating-point solve of the whole array and reading back each cell's voltage and current through the ammeter probes that <span class="num">build_probed_netlist</span> inserted in D.3.</p>
+
+<div class="deep"><span class="lbl">Data in</span> a <span class="num">Circuit</span>, a bus voltage <span class="num">v_bus</span>, and an injected SPICE runner <span class="num">run(netlist) → Solution</span> (real <span class="num">ngspice_runner()</span> or a deterministic mock). <span class="lbl">Data out</span> per cell <span class="num">P_elec = V·I</span>, packaged either as a dict, an array, or a <span class="num">power_fn</span> for the coupling loop.</div>
+
+<p class="slow">The steps: (1) <span class="num">build_probed_netlist</span> gives the netlist plus the probe map. (2) Append a bus driver (<span class="num">V_bus out 0 v_bus</span>), the analysis card (<span class="num">.op</span>) and <span class="num">.end</span>, and hand the full deck to the injected runner. (3) For each cell, read its terminal voltage as <span class="num">V = V(node+) − V(node−)</span> and its current as <span class="num">I = i(ammeter)</span> from the returned solution, and form <span class="num">P_elec = V·I</span>. The sign convention matches the thermal model exactly: a generating cell delivers power (P&gt;0 → energy leaves as electricity → cooler), while a reverse-biased cell has V&lt;0 so P&lt;0 (energy dumped as heat → hotter).</p>
+
+<pre>def per_cell_vi(circuit, v_bus, run):
+    netlist, probes = circuit.build_probed_netlist()
+    deck = netlist + "V_bus out 0 {v_bus}\n.op\n.end\n"
+    sol  = run(deck)                        # injected SPICE runner
+    return {id: (sol.voltage(npos) - sol.voltage(nneg),
+                 sol.current(amm))
+            for id,(npos,nneg,amm) in probes.items()}
+
+def make_power_fn(circuit, v_bus, run, order, set_temps):
+    def power_fn(T_front):
+        if set_temps: set_temps(circuit, T_front)  # push T into cells
+        _, p = per_cell_power(circuit, v_bus, run, order)
+        return p                              # P = V*I per cell, in order
+    return power_fn</pre>
+
+<p class="slow"><span class="num">make_power_fn</span> is what plugs into D.6. It closes over the circuit, bus voltage and runner, and returns a <span class="num">power_fn(T)</span> that — each time the coupling loop calls it — optionally pushes the current temperatures into the cell models via the <span class="num">set_temps</span> hook (so the IV curve's real temperature-dependence is captured), re-solves the circuit, and returns the per-cell power in the same <span class="num">order</span> as the thermal area array, so the two solves line up element-for-element.</p>
+
+<div class="deep"><span class="lbl">The trick — an injected runner and a Solution interface</span> The SPICE engine is hidden behind a tiny interface: any object with <span class="num">voltage(node)</span> and <span class="num">current(branch)</span> is a valid <span class="num">Solution</span>. Production injects a runner backed by the legacy ngspice; tests inject an in-memory mock with the same two methods. So the entire wiring — netlist assembly, bus drive, probe read-back, sign convention, ordering — is testable today without ngspice, and swapping in the real engine is a one-argument change. The ammeter branch names are lowercased to match ngspice's convention, a small detail that would otherwise silently break the current read-back.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.8</span>Breakdown criteria — <span class="num">analysis/breakdown.py</span></h3>
+
+<p class="slow">Once a run has converged, we must judge whether each cell survived. The project's decision is that a cell is <em>destroyed</em> if <em>either</em> of two independent criteria trips — one thermal, one electrical — because each can catch a failure mode the other misses.</p>
+
+<div class="deep"><span class="lbl">Data in</span> per-cell front temperature, voltage and current arrays, plus two limits: the melt temperature <span class="num">t_limit_c</span> and the reverse-power limit <span class="num">p_rev_limit_w</span>. <span class="lbl">Data out</span> a <span class="num">BreakdownReport</span> with three boolean masks (temperature-tripped, reverse-power-tripped, destroyed) and the reverse power per cell.</div>
+
+<div class="formula">destroyed = ( T_front ≥ t_limit )  OR  ( V &lt; 0  AND  |V·I| ≥ p_rev_limit )<div class="where">temperature captures the steady thermal outcome; reverse power captures electrical stress on a cell driven into reverse bias</div></div>
+
+<p class="slow">The evaluation is pure and elementwise. The temperature mask is a simple comparison against the limit. The reverse-power mask is computed with a guarded expression: the dissipated reverse power is <span class="num">|V·I|</span> only where <span class="num">V &lt; 0</span> and zero elsewhere (a forward-biased generating cell is not under reverse stress), and the mask trips where that exceeds the limit. The destroyed mask is the logical OR of the two, and a convenience property counts how many cells were destroyed.</p>
+
+<pre>def evaluate_breakdown(T, V, I, t_limit, p_rev_limit):
+    temp  = T &gt;= t_limit
+    p_rev = where(V &lt; 0, abs(V*I), 0.0)     # only reverse-biased cells
+    rev   = p_rev &gt;= p_rev_limit
+    return BreakdownReport(temp, rev,
+                           destroyed = temp OR rev,
+                           reverse_power_w = p_rev)</pre>
+
+<div class="deep"><span class="lbl">The trick — OR two independent failure modes, guard the reverse term</span> A cell can die two ways: it can simply get too hot (a sunlit cell with too little heat rejection), or it can be driven hard into reverse bias by healthy neighbours in its series string and burn up as a resistor even while not especially hot. Neither criterion subsumes the other, so the verdict ORs them. The <span class="num">where(V&lt;0, …, 0)</span> guard is what keeps a normal generating cell — which has V&gt;0 and is exporting power — from ever being flagged for &ldquo;reverse&rdquo; power; only cells actually pushed below zero volts accumulate reverse dissipation.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.9</span>Monte-Carlo &amp; the grid failure study — <span class="num">analysis/montecarlo.py</span>, <span class="num">analysis/study.py</span></h3>
+
+<p class="slow">A single run tells you what one failure pattern does. The interesting questions are statistical: which single cell, if it fails, is worst? How does the array degrade as more cells fail? Across many random patterns, what is the distribution of peak temperatures? The Monte-Carlo module generates the failure patterns and drives the sweep; the study module ties the layout, the lateral solver and those patterns together.</p>
+
+<div class="deep"><span class="lbl">Data in</span> a list of cell ids (or tile indices), a sampling mode, and an injected <span class="num">evaluate(pattern) → record</span>. <span class="lbl">Data out</span> one record per run, plus ranking and statistical helpers (standard error, runs-needed).</div>
+
+<p class="slow">Three pattern generators choose <em>which</em> failures to simulate, all from a seeded RNG for reproducibility. <span class="num">position_patterns</span> fails each cell in turn — O(N) runs to find the worst single location. <span class="num">count_patterns</span> draws, for each failure count k, a number of random k-cell sets — degradation versus number of failures. <span class="num">random_patterns</span> fails each cell independently with probability p_fail across many samples — the full outcome distribution. <span class="num">run_sweep</span> then evaluates every pattern through the injected <span class="num">evaluate</span> and stamps each record with its run id, the failed ids and the failure count; <span class="num">rank</span> sorts the records by any metric (default: hottest first).</p>
+
+<p class="slow">The statistics close the loop on &ldquo;how many runs are enough.&rdquo; <span class="num">standard_error</span> is the sample standard deviation (with <span class="num">ddof=1</span>, the unbiased estimator) divided by √N. Because that error shrinks like 1/√N, <span class="num">runs_needed</span> inverts the relation to estimate how many runs are required to reach a target error: <span class="num">N_target = N_now·(SE_now/SE_target)²</span>.</p>
+
+<pre># montecarlo: pattern generators (seeded RNG)
+position_patterns(ids)   -> [(id,) for id in ids]
+count_patterns(ids,ks,m) -> m random k-cell sets per k
+random_patterns(ids,p,n) -> n masks, each cell fails w.p. p
+run_sweep(patterns, evaluate) -> [evaluate(p) + run metadata]
+standard_error(xs) = std(xs, ddof=1) / sqrt(N)
+runs_needed(se_now,n,se_tgt) = ceil(n*(se_now/se_tgt)**2)</pre>
+
+<p class="slow">The study module specialises this to the panel-with-lateral-conduction case. <span class="num">make_pe(layout, failed, …)</span> builds the per-tile electrical-power map: healthy cells extract a positive <span class="num">healthy_w</span>, cells in the failed set dissipate a negative <span class="num">reverse_w</span> (they are driven into reverse bias), and bare tiles make zero. <span class="num">failure_sweep</span> then solves each pattern through <span class="num">solve_panel</span> <em>with lateral conduction</em>, and records the peak temperature, the mean, and how many tiles exceed the melt limit — so the ranking accounts for heat spreading to neighbours.</p>
+
+<pre># study: each pattern -> a per-tile power map -> lateral solve
+def make_pe(layout, failed):
+    pe = where(generates_power, healthy_w, 0.0)
+    for i in failed:
+        if generates_power[i]: pe[i] = reverse_w   # reverse bias
+    return pe
+
+def failure_sweep(layout, patterns, t_limit, **solve_kwargs):
+    for failed in patterns:
+        res = solve_panel(layout, p_elec=make_pe(layout,failed),
+                          g_lat=..., **solve_kwargs)
+        record peak_t_c, mean_t_c, n_over_limit, converged
+    return records   # rank() -> most-damaging first</pre>
+
+<div class="deep"><span class="lbl">The trick — injected evaluation and 1/√N run budgeting</span> The driver never knows how a run is evaluated — <span class="num">evaluate</span> is injected — so the same sweep machinery works whether a run means a full ngspice electro-thermal solve or a fast lateral-only panel solve. That is why the production failure study can reuse the tested Monte-Carlo generators verbatim. And the statistics make the sweep honest: rather than guessing a run count, you measure the current standard error and use the 1/√N law to compute exactly how many more runs buy you the precision you want — quadrupling the runs halves the error, no more, no less.</div>
+</section>
+
+<section class="sec">
+<h3><span class="sec-num">D.10</span>Storage &amp; reporting — <span class="num">reporting/store.py</span>, <span class="num">reporting/report.py</span></h3>
+
+<p class="slow">A sweep produces, for every run and every cell, a row of numbers — a three-dimensional tensor of results. The final two modules persist that faithfully and turn it into something a human reads at a glance: a colour-coded panel temperature map.</p>
+
+<div class="deep"><span class="lbl">Data in</span> the list of per-run records (each holding per-cell V, I, P, T arrays) and a converged <span class="num">PanelThermalResult</span>. <span class="lbl">Data out</span> a long-format DataFrame saved as Parquet/HDF5/CSV, an Excel summary, and a self-contained HTML heat-map plus a JSON source of truth.</div>
+
+<p class="slow"><span class="num">store.py</span> chooses a <em>tidy / long</em> table as the source of truth: one row per run-cell, with columns <span class="num">run_id, mode, failed_ids, cell_id, V, I, P_elec, T_front, T_rear, reverse_flag, hotspot_flag</span>. It flattens each record's per-cell arrays into those rows, builds a pandas DataFrame, and saves it to a compact columnar binary — Parquet by extension, HDF5 for <span class="num">.h5</span>, else CSV. Excel is deliberately <em>not</em> the primary store: a per-run × per-cell tensor blows past Excel's ~1.05M-row limit quickly and is slow as a database, so Excel is generated only as a summary on top. <span class="num">summarise</span> produces per-run aggregates (total power, max temperature, hot-spot count).</p>
+
+<p class="slow"><span class="num">report.py</span> builds the human artefact. <span class="num">summarise_panel</span> walks the grid, records each tile's front/rear temperature and its over-limit flag, and collects the summary (peak temperature and its tile, mean, grid shape, pitch, the lateral conductance used, the limit). The HTML renderer shades each tile by a blue→amber→red ramp keyed to the temperature range, outlines any over-limit tile in red, and emits a self-contained page that prints straight to PDF. The matching JSON file holds the same per-tile data so any run can be re-read or re-analysed without re-simulating.</p>
+
+<pre># store: tidy long table is the source of truth
+rows = flatten(records)          # one row per (run, cell)
+df   = DataFrame(rows, columns=LONG_COLUMNS)
+save(df, "results.parquet")      # .h5 -> HDF5, else CSV
+summarise(df)                    # per-run: total P, max T, n hotspots
+
+# report: heat-map HTML + JSON
+def heat_color(t, tmin, tmax):   # blue -> amber -> red
+    x = clamp((t - tmin)/(tmax - tmin), 0, 1)
+    return rgb(40+215*x, 90+120*(1-|2x-1|), 200*(1-x)+30)
+for each tile: shade by T; if over_limit: outline red
+write self-contained HTML (prints to PDF) + JSON source</pre>
+
+<div class="deep"><span class="lbl">The trick — long table as truth, presentation on top</span> The discipline here is separating the durable record from its presentations. The long table is normalised and columnar, so it stores millions of run-cell rows compactly and is queryable like a database; Parquet/HDF5 keep it small and fast. Every human-facing view — the Excel summary, the per-run aggregates, the heat-map — is computed <em>on top of</em> that single source, never the other way round. The JSON beside each report means a result is fully reproducible and re-analysable without ever re-running the (expensive) electro-thermal solve. The colour ramp is the only place numbers become pixels, and it is a pure function of temperature, so two reports of the same run look identical.</div>
+</section>

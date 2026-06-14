@@ -1,0 +1,19 @@
+\section{<< section.title | tex >>}
+
+{\centering
+\rowcolors{2}{white}{tablerowgrey}
+\begin{xltabular}{\linewidth}{|L|c|c|r|r|r|}
+  \hline
+  \reporthead{\textbf{Section} & \textbf{Wing} & \textbf{Panel} & \textbf{Strings} & \textbf{Series} & \textbf{Resistance [$\Omega$]}}\\ \hline
+  \endfirsthead
+  \reporthead{\textbf{Section} & \textbf{Wing} & \textbf{Panel} & \textbf{Strings} & \textbf{Series} & \textbf{Resistance [$\Omega$]}}\\ \hline
+  \endhead
+\endfoot
+  \endlastfoot
+<<% for s in layout.physical_sections %>>
+  \texttt{\small << s.instance_id | tex >>} & << s.wing_id | tex >> & << s.panel_id | tex >>
+    & << s.section_type.n_strings_parallel >> & << s.section_type.n_sca_series_per_string >>
+    & << s.resistance_ohm | num(".4f") >>\\ \hline
+<<% endfor %>>
+\end{xltabular}
+\par}

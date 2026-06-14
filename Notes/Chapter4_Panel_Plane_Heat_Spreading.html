@@ -1,0 +1,497 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<title>PowerPy — Spreading Heat Across the Panel · Chapter 4</title>
+<link rel="stylesheet" href="print-base.css">
+<link rel="stylesheet" href="design.css">
+<style>
+.analogy{ background:#eef6f1; border-left:4px solid #2f8f6b; border-radius:6px; padding:.7em 1em; margin:.9em 0; }
+.analogy .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#2f8f6b; }
+.bridge{ background:#fff7ec; border:1px dashed #d8b46a; border-radius:6px; padding:.6em 1em; margin:.9em 0; font-size:10pt; }
+.bridge .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.25em; color:#a9772a; }
+.bigq{ font-family:"Segoe UI",sans-serif; color:#0b3d63; font-weight:700; font-size:11pt; margin:.2em 0 .3em; }
+.recap{ background:#f3f6fa; border:1px solid #d6dde4; border-radius:6px; padding:.6em 1em; margin:1em 0; }
+.recap .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.2pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#0b3d63; }
+.verdict{ background:#eef6f1; border:1px solid #bcdcc9; border-left:6px solid #2f8f6b; border-radius:6px;
+  padding:.7em 1em; margin:1em 0; }
+.verdict .lbl{ display:block; font-family:"Segoe UI",sans-serif; font-size:8.4pt; font-weight:700;
+  letter-spacing:.12em; text-transform:uppercase; margin-bottom:.3em; color:#2f8f6b; }
+</style>
+</head><body>
+
+<section class="chapter-opener">
+<div class="booktitle">PowerPy · A Solar-Array Engineer's Handbook</div>
+<h1>Chapter 4<br>Letting Heat Spread<br>Across the Panel</h1>
+<div class="subtitle">Today the thermal solver treats every cell as a sealed island — front and rear only,
+no sideways sharing. This chapter answers, in plain words: can we let heat flow sideways through the panel
+too? What would it take, is it a rebuild or a bolt-on, and does it still plug into everything we already
+built?</div>
+<p class="lede">You asked three sharp questions: <strong>(1)</strong> is expanding the model to in-plane heat
+transmission possible or impossible, and what's the work; <strong>(2)</strong> is it independent of the current
+framework or does it tear it up; and <strong>(3)</strong> will the new results still be fed back into the earlier
+layers (breakdown, coupling, Monte-Carlo). This chapter answers each, slowly, with the same kitchen-English
+pictures as Chapter 3 — bathtubs with pipes, a city of linked ponds — and a ladder of small questions before
+every hard one.</p>
+<div class="meta">Generated for izzuwan · Design-direction note. Companion to Chapters 2 &amp; 3 and the
+design spec. No prior engineering assumed. Print on A4.</div>
+</section>
+
+<section class="toc"><h2>Contents</h2><ol>
+<li><strong>Words you need first</strong></li>
+<li><span class="sec-num">1</span> What you have now vs what you want</li>
+<li><span class="sec-num">2</span> Is it possible? (short answer + why)</li>
+<li><span class="sec-num">3</span> The physics — heat that flows sideways</li>
+<li><span class="sec-num">4</span> The one thing that changes in the maths</li>
+<li><span class="sec-num">5</span> Q2 — Is it independent of the current framework?</li>
+<li><span class="sec-num">6</span> Q3 — Does it feed back into the earlier layers?</li>
+<li><span class="sec-num">7</span> What you'd actually need to add (3 ingredients)</li>
+<li><span class="sec-num">8</span> A worked picture — two linked cells</li>
+<li><span class="sec-num">9</span> What it costs &amp; what it buys</li>
+<li><strong>Glossary</strong> · <strong>Worked solutions</strong></li>
+</ol></section>
+
+<!-- ===================================== WORDS -->
+<section class="page-break sec">
+<h2>Words You Need First</h2>
+<p class="lede">Six words carry this whole chapter. Meet them plainly; each is used properly later and all are
+in the Glossary.</p>
+<div class="term"><span class="lbl">In-plane / lateral conduction</span> Heat flowing <em>sideways</em>, across the flat face of the panel,
+from a hot cell to its neighbours — as opposed to front-to-rear <em>through</em> a cell. "Lateral" = sideways.</div>
+<div class="term"><span class="lbl">Node</span> A single point we track one temperature at. Today each cell has two nodes
+(front, rear). A bigger model just has more nodes.</div>
+<div class="term"><span class="lbl">Conductor (thermal)</span> A "pipe" between two nodes that lets heat flow between them. A fat
+conductor (low resistance) shares heat fast; a thin one barely shares. Sideways sharing = adding conductors
+between neighbouring cells.</div>
+<div class="term"><span class="lbl">Nodal network / resistor network</span> The standard way engineers model heat: a web of nodes
+joined by conductors, with "heat-in = heat-out" written at every node. It's literally how spacecraft thermal
+tools (ESATAN, Thermal Desktop) work.</div>
+<div class="term"><span class="lbl">Adjacency</span> The map of "which cell touches which" — who each cell's neighbours are. You need
+this so the solver knows where to put the sideways pipes.</div>
+<div class="term"><span class="lbl">Sparse matrix</span> A big grid of numbers that is <em>mostly zeros</em> (because each cell only touches a
+few neighbours, not all of them). Special "sparse" solvers exploit all those zeros to stay fast.</div>
+</section>
+
+<!-- ===================================== 1 NOW VS WANT -->
+<section class="page-break sec">
+<h2><span class="sec-num">1</span>What You Have Now vs What You Want</h2>
+<p class="lede">One picture makes the whole upgrade obvious. It's the bathtub from Chapter 3 — but now we ask
+what happens between <em>neighbouring</em> tubs.</p>
+
+<div class="analogy"><span class="lbl">The picture</span> <strong>Now:</strong> every cell is its own sealed bathtub. Water (heat)
+can slosh between its <em>front</em> end and <em>rear</em> end, but the tub has solid walls — nothing leaks to the tub
+next door. That's why a hot-spot piles up: the heat has nowhere sideways to go.
+<strong>What you want:</strong> drill a pipe between each tub and its neighbours. Now a tub that's filling fast (a
+hot cell) bleeds some water into the tubs beside it. The peak level drops; the neighbours rise a little. That
+pipe is <em>lateral conduction</em>.</div>
+
+<figure class="fig-frame"><svg width="440" height="170" viewBox="0 0 440 170" xmlns="http://www.w3.org/2000/svg">
+<text x="105" y="14" font-size="9" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI" font-weight="bold">NOW — sealed islands</text>
+<g font-family="Segoe UI" font-size="7">
+<rect x="30" y="40" width="40" height="60" fill="#f2d6d6" stroke="#9a3b3b"/><rect x="32" y="48" width="36" height="50" fill="#f6bcbc"/>
+<rect x="80" y="40" width="40" height="60" fill="#cfe3f6" stroke="#0b3d63"/><rect x="82" y="80" width="36" height="18" fill="#bcd6ef"/>
+<rect x="130" y="40" width="40" height="60" fill="#cfe3f6" stroke="#0b3d63"/><rect x="132" y="80" width="36" height="18" fill="#bcd6ef"/>
+<text x="50" y="118" text-anchor="middle" fill="#9a3b3b">hot cell</text>
+<text x="100" y="118" text-anchor="middle" fill="#5d6b79">cool</text><text x="150" y="118" text-anchor="middle" fill="#5d6b79">cool</text>
+<text x="100" y="138" text-anchor="middle" fill="#9a3b3b">no sideways pipe → heat piles up → 187°C</text>
+</g>
+<line x1="225" y1="20" x2="225" y2="155" stroke="#d6dde4"/>
+<text x="335" y="14" font-size="9" text-anchor="middle" fill="#2f8f6b" font-family="Segoe UI" font-weight="bold">WANT — pipes between tubs</text>
+<g font-family="Segoe UI" font-size="7">
+<rect x="260" y="40" width="40" height="60" fill="#f6dada" stroke="#2f8f6b"/><rect x="262" y="60" width="36" height="38" fill="#efb9b9"/>
+<rect x="310" y="40" width="40" height="60" fill="#e0eef0" stroke="#2f8f6b"/><rect x="312" y="70" width="36" height="28" fill="#cfe6ea"/>
+<rect x="360" y="40" width="40" height="60" fill="#e7f0ee" stroke="#2f8f6b"/><rect x="362" y="74" width="36" height="24" fill="#d6ebe6"/>
+<line x1="300" y1="78" x2="310" y2="78" stroke="#2f8f6b" stroke-width="2"/><line x1="350" y1="80" x2="360" y2="80" stroke="#2f8f6b" stroke-width="2"/>
+<text x="330" y="118" text-anchor="middle" fill="#2f8f6b">heat bleeds sideways</text>
+<text x="330" y="138" text-anchor="middle" fill="#2f8f6b">peak drops, neighbours warm → ~lower°C</text>
+</g>
+</svg><figcaption>Left: today's model — each cell sealed, hot-spot piles up. Right: the upgrade — conductors
+("pipes") let heat spread to neighbours, lowering the peak and warming the surround.</figcaption></figure>
+
+<div class="bridge"><span class="lbl">Why this is the crux</span> In Chapter 3 we said the solver vectorises <em>because</em> the cells are
+independent (sealed tubs). The moment you drill the pipes, the cells stop being independent — each one's
+temperature now depends on its neighbours'. That single change is the entire story of this chapter: gain
+realism, lose the "every cell is its own little problem" shortcut.</div>
+</section>
+
+<!-- ===================================== 2 POSSIBLE -->
+<section class="page-break sec">
+<h2><span class="sec-num">2</span>Is It Possible? — Short Answer First</h2>
+
+<div class="verdict"><span class="lbl">Verdict</span> <strong>Yes — entirely possible, and it's a standard, well-trodden upgrade.</strong>
+It is <em>not</em> exotic research; in-plane conduction is exactly how professional spacecraft thermal models work.
+What you have now is the simplest case of a bigger, completely normal model. You are not inventing a new
+physics — you are switching on a term we deliberately left at zero.</div>
+
+<p>The reason it feels like a big jump is only that it changes <em>how</em> the numbers are solved (Section 4), not
+<em>whether</em> they can be. The governing physics — heat flows from hot to cold — is the same one you already use
+for front-to-rear; we just also apply it side-to-side.</p>
+
+<div class="ladder"><div class="laddertitle">Ladder · "possible" from the ground up</div>
+<div class="socratic"><div class="q">Q1. Is sideways heat flow real, or are we inventing it?</div>
+<div class="answer">Completely real. Aluminium honeycomb has metal face-sheets that conduct heat sideways quite well.
+Today's model just <em>ignores</em> that path for simplicity. Switching it on makes the model <em>more</em> faithful to
+reality, not less.</div></div>
+<div class="socratic"><div class="q">Q2. Is the maths for sideways flow different from the front-to-rear flow we already do?</div>
+<div class="answer">No — it's the <em>same</em> law (heat ∝ temperature difference × conductance). We already compute one such
+flow (front↔rear). Lateral flow is just more of the same links, pointing sideways.</div></div>
+<div class="socratic"><div class="q">Q3. Then what actually makes it harder than what we have?</div>
+<div class="answer">Only this: the links now tie cells <em>together</em>, so you must solve all cells at once as one big joined
+puzzle instead of N tiny separate ones. The difficulty is bookkeeping and solving a bigger system — not new
+physics. (Section 4 shows exactly what that means.)</div></div>
+<div class="socratic"><div class="q">Q4. Has anyone solved problems like this before, or are we pioneers?</div>
+<div class="answer">It's textbook. The "nodes joined by conductors, balance at every node" recipe is the bedrock of
+thermal engineering and of solving heat-flow on any grid. Mature, fast, free libraries (scipy's sparse
+solvers) do the heavy lifting. So: well-charted territory.</div></div>
+</div>
+</section>
+
+<!-- ===================================== 3 PHYSICS -->
+<section class="page-break sec">
+<h2><span class="sec-num">3</span>The Physics — Heat That Flows Sideways</h2>
+<p class="lede">The whole model is one tiny rule, applied at every node. Learn the rule once and the rest is
+repetition.</p>
+
+<div class="term"><span class="lbl">The one rule (Fourier's law, in words)</span> Heat flows from a hot node to a cooler one at a
+rate equal to the temperature difference times a "conductance" (the fatness of the pipe). Big difference or
+fat pipe → lots of heat moves. Equal temperatures → no flow.</div>
+
+<div class="formula">heat from node A to node B = G<sub>AB</sub> × (T<sub>A</sub> − T<sub>B</sub>)
+<div class="where">G<sub>AB</sub> = the conductance of the pipe between A and B (watts per °C) · T = each node's
+temperature. Note: if T<sub>A</sub> = T<sub>B</sub>, the flow is zero — heat only moves on a difference.</div></div>
+
+<div class="analogy"><span class="lbl">The picture — a city of ponds</span> Imagine each cell is a pond, and pipes join neighbouring
+ponds. Pour water into one pond (a hot cell) and it spreads to its neighbours, which spread to <em>their</em>
+neighbours. Eventually the whole field of ponds finds a set of levels where every pond's inflow equals its
+outflow at once. There's no "first pond" — they all settle together. Solving the panel is finding that whole
+settled landscape of temperatures in one go.</div>
+
+<div class="bridge"><span class="lbl">What gets written down</span> At every node you again write the bathtub balance "heat-in =
+heat-out", but now "out" includes a term for <em>each</em> sideways pipe to a neighbour. With N cells × 2 faces you
+get ~2N balance equations, all tangled together through the shared neighbour temperatures. That tangled set
+is what the solver cracks.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · the rule, then the network</div>
+<div class="socratic"><div class="q">Q1. Two cells, one at 187°C, one at 40°C, joined by a pipe of conductance 0.05 W/°C. Which way does heat
+flow and how much?</div>
+<div class="answer">From hot to cold (187 → 40). Amount = 0.05 × (187 − 40) = 0.05 × 147 ≈ <strong>7.4 W</strong> leaving the hot
+cell into the cold one. That 7.4 W is heat the hot cell no longer has to radiate alone — so it runs cooler.</div></div>
+<div class="socratic"><div class="q">Q2. If we made that pipe ten times fatter (G = 0.5), what happens to the two temperatures over time?</div>
+<div class="answer">They rush toward each other — lots of heat shared, so the gap shrinks fast. A very fat pipe makes
+neighbours nearly equal in temperature (the panel "smears" the hot-spot out).</div></div>
+<div class="socratic"><div class="q">Q3. If the pipe had zero conductance (G = 0), what model are we back to?</div>
+<div class="answer">Exactly today's model — no sideways sharing, sealed islands. So the current solver is just the
+special case "all lateral conductances = 0". The upgrade <em>contains</em> what you have.</div></div>
+<div class="socratic"><div class="q">Q4 (top rung). Why can't we still solve each cell on its own once the pipes exist?</div>
+<div class="answer">Because each cell's balance now contains its neighbours' temperatures, which aren't known until <em>their</em>
+balances are solved, which contain <em>their</em> neighbours'… it's one connected web. Pull one node and the whole
+net moves. So the cells must be solved together, as a single system. That's Section 4.</div></div>
+</div>
+</section>
+
+<!-- ===================================== 4 THE MATH CHANGE -->
+<section class="page-break sec">
+<h2><span class="sec-num">4</span>The One Thing That Changes in the Maths</h2>
+<p class="lede">Everything you learned in Chapter 3 about Newton's method <em>stays</em>. Exactly one ingredient
+changes shape. Here it is, with no hand-waving.</p>
+
+<div class="keyidea"><span class="lbl">What stays / what changes</span>
+<strong>Stays:</strong> Newton–Raphson (guess → correct → repeat until settled). Still the engine.<br>
+<strong>Changes:</strong> the "slope" Newton uses. Today it's N tiny <em>independent</em> 2×2 blocks (one per cell), so
+we invert each by a closed-form formula and blast them all at once. With sideways pipes the slope becomes
+<em>one big matrix</em> where each node is linked to its neighbours — a <strong>sparse</strong> matrix — solved in one shot by
+a sparse linear solver instead of N little closed-form inverses.</div>
+
+<figure class="fig-frame"><svg width="430" height="160" viewBox="0 0 430 160" xmlns="http://www.w3.org/2000/svg">
+<text x="100" y="14" font-size="9" text-anchor="middle" fill="#9a3b3b" font-family="Segoe UI" font-weight="bold">NOW — block-diagonal</text>
+<g transform="translate(40,28)">
+<rect x="0" y="0" width="120" height="120" fill="#fff" stroke="#cbb"/>
+<rect x="2" y="2" width="26" height="26" fill="#0b3d63"/><rect x="32" y="32" width="26" height="26" fill="#0b3d63"/>
+<rect x="62" y="62" width="26" height="26" fill="#0b3d63"/><rect x="92" y="92" width="26" height="26" fill="#0b3d63"/>
+<text x="60" y="148" font-size="7.5" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">only the diagonal blocks → cells independent</text>
+</g>
+<line x1="225" y1="18" x2="225" y2="150" stroke="#d6dde4"/>
+<text x="330" y="14" font-size="9" text-anchor="middle" fill="#2f8f6b" font-family="Segoe UI" font-weight="bold">WITH lateral — sparse banded</text>
+<g transform="translate(270,28)">
+<rect x="0" y="0" width="120" height="120" fill="#fff" stroke="#cbb"/>
+<rect x="2" y="2" width="22" height="22" fill="#2f8f6b"/><rect x="28" y="28" width="22" height="22" fill="#2f8f6b"/>
+<rect x="54" y="54" width="22" height="22" fill="#2f8f6b"/><rect x="80" y="80" width="22" height="22" fill="#2f8f6b"/><rect x="98" y="98" width="20" height="20" fill="#2f8f6b"/>
+<rect x="28" y="2" width="22" height="22" fill="#9cc7b5"/><rect x="2" y="28" width="22" height="22" fill="#9cc7b5"/>
+<rect x="54" y="28" width="22" height="22" fill="#9cc7b5"/><rect x="28" y="54" width="22" height="22" fill="#9cc7b5"/>
+<rect x="80" y="54" width="22" height="22" fill="#9cc7b5"/><rect x="54" y="80" width="22" height="22" fill="#9cc7b5"/>
+<text x="60" y="148" font-size="7.5" text-anchor="middle" fill="#5d6b79" font-family="Segoe UI">off-diagonal links = the sideways pipes</text>
+</g>
+</svg><figcaption>The only structural change: dark = a cell's own block (always there); light green = new entries
+linking a cell to its neighbours. Mostly still zeros — that's why "sparse" solvers stay fast.</figcaption></figure>
+
+<div class="bridge"><span class="lbl">In one line of code-speak</span> Today: a closed-form 2×2 inverse, vectorised over cells.
+Tomorrow: build a sparse matrix (each node + its neighbour links) and call
+<code>scipy.sparse.linalg.spsolve</code> once per Newton step. Sparse solvers chew through 10⁴–10⁵ nodes in
+milliseconds, so it stays fast even for a big array.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · why "sparse" keeps it cheap</div>
+<div class="socratic"><div class="q">Q1. A panel of 1000 cells — could each cell, in principle, link to all 999 others?</div>
+<div class="answer">In principle the matrix has 1000×1000 = a million slots. But a cell only touches ~4 neighbours, so
+only a handful of slots per row are non-zero. The matrix is ~99.6% zeros.</div></div>
+<div class="socratic"><div class="q">Q2. Why does all those zeros being there actually help us?</div>
+<div class="answer">Sparse solvers <em>skip</em> the zeros entirely — they store and compute only the non-zero links. So the
+cost grows with the number of <em>pipes</em>, not with N². A near-empty matrix is cheap to solve.</div></div>
+<div class="socratic"><div class="q">Q3. Did we lose Newton's method by switching to a matrix solve?</div>
+<div class="answer">No. Newton still wraps the whole thing: guess all temperatures, build the sparse slope, solve for the
+correction, update, repeat until settled. We only swapped the <em>inner</em> "invert the slope" step from a 2×2
+formula to a sparse solve.</div></div>
+<div class="socratic"><div class="q">Q4 (top rung). So is "no per-cell loop" still true after the upgrade?</div>
+<div class="answer">Yes — even better. We never loop over cells in slow Python; we build one big sparse system and solve
+it in one compiled call. The vectorised spirit of Chapter 3 survives; it just graduates from "N independent
+2×2s" to "one sparse system."</div></div>
+</div>
+
+<div class="practice"><span class="lbl">Practice 1</span> Two neighbouring cells are joined by a pipe G = 0.08 W/°C. One sits at 150°C, the
+other at 50°C. (a) How much heat flows between them, and which way? (b) If instead both were at 90°C, how
+much flows?
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ===================================== 5 INDEPENDENT? -->
+<section class="page-break sec">
+<h2><span class="sec-num">5</span>Q2 — Is It Independent of the Current Framework?</h2>
+
+<div class="verdict"><span class="lbl">Verdict</span> <strong>Largely yes — it is a contained swap, not a rebuild.</strong> The change lives almost
+entirely inside the <em>thermal layer</em>. The layers above it don't care how a temperature was computed — they
+just receive an array of temperatures. That's the whole reason it was built in layers.</div>
+
+<div class="analogy"><span class="lbl">The picture</span> Think of the framework as a kitchen with stations. The thermal solver is
+the "oven." Breakdown, coupling, and Monte-Carlo are the chefs who use whatever comes out of the oven. If you
+swap the oven for a better one that bakes more evenly (spreads heat), the chefs' recipes don't change — they
+still take "the baked tray" and carry on. You upgraded one appliance, not the kitchen.</div>
+
+<figure class="fig-frame"><svg width="430" height="200" viewBox="0 0 430 200" xmlns="http://www.w3.org/2000/svg">
+<g font-family="Segoe UI" font-size="8">
+<rect x="130" y="10" width="170" height="26" rx="4" fill="#fdecea" stroke="#9a3b3b"/><text x="215" y="27" text-anchor="middle" fill="#9a3b3b">Monte-Carlo sweep (unchanged)</text>
+<rect x="130" y="46" width="170" height="26" rx="4" fill="#f3f6fa" stroke="#0b3d63"/><text x="215" y="63" text-anchor="middle" fill="#0b3d63">breakdown + results (unchanged)</text>
+<rect x="130" y="82" width="170" height="26" rx="4" fill="#f3f6fa" stroke="#0b3d63"/><text x="215" y="99" text-anchor="middle" fill="#0b3d63">electro-thermal coupling (unchanged)</text>
+<rect x="110" y="124" width="210" height="40" rx="4" fill="#e7f3ec" stroke="#2f8f6b" stroke-width="2"/>
+<text x="215" y="140" text-anchor="middle" fill="#2f8f6b" font-weight="bold">thermal solver — THE ONLY PART THAT CHANGES</text>
+<text x="215" y="155" text-anchor="middle" fill="#2f8f6b">add sideways conductors + sparse solve</text>
+<line x1="215" y1="36" x2="215" y2="46" stroke="#888"/><line x1="215" y1="72" x2="215" y2="82" stroke="#888"/><line x1="215" y1="108" x2="215" y2="124" stroke="#888"/>
+<text x="345" y="148" fill="#5d6b79" font-size="7.5">same in/out</text>
+<text x="345" y="158" fill="#5d6b79" font-size="7.5">interface</text>
+</g>
+</svg><figcaption>The layers above the thermal solver are agnostic: they hand it conditions and receive a
+temperature array. Replace the solver internals and the interface — "give conditions, get temperatures" —
+stays identical, so nothing upstream has to change.</figcaption></figure>
+
+<div class="bridge"><span class="lbl">The one honest "but"</span> Two <em>small</em> things do ripple outward, and both are additive (you add
+info, you don't rewrite): <strong>(a)</strong> the cells now need a <em>geometry</em> — which cell sits next to which (a grid
+position), because "sideways" only means something once cells have neighbours; and <strong>(b)</strong> the substrate/
+panel gains one new number, the lateral conductance. Neither breaks existing code; they're new inputs the new
+solver reads. Everything already written keeps working with lateral conductance set to zero.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · how "contained" it really is</div>
+<div class="socratic"><div class="q">Q1. What does the Monte-Carlo layer actually receive from the thermal solver?</div>
+<div class="answer">An array of per-cell temperatures (and the derived flags). It doesn't know or care whether those came
+from sealed islands or a connected network. So a smarter solver is invisible to it.</div></div>
+<div class="socratic"><div class="q">Q2. If the interface (inputs in, temperature array out) stays the same, what must we change upstream?</div>
+<div class="answer">Nothing structural. The breakdown check, the coupling loop, the results store, the sweep — all keep
+their code. They consume the same shape of output. That's the payoff of layering.</div></div>
+<div class="socratic"><div class="q">Q3. So why isn't it <em>perfectly</em> independent — what leaks out?</div>
+<div class="answer">Just two new <em>inputs</em>: cell geometry (the neighbour map) and the lateral conductance value. These are
+additions, not edits — you feed the solver more, you don't tear anything down.</div></div>
+<div class="socratic"><div class="q">Q4 (top rung). Could we ship it so the old behaviour is still available?</div>
+<div class="answer">Yes — set lateral conductance = 0 and the new solver reproduces the current sealed-island answers
+exactly (Section 3, Q3). So it's a strict superset: old model = new model with the pipes closed. You never
+lose what you have.</div></div>
+</div>
+</section>
+
+<!-- ===================================== 6 FEED BACK -->
+<section class="page-break sec">
+<h2><span class="sec-num">6</span>Q3 — Does It Feed Back Into the Earlier Layers?</h2>
+
+<div class="verdict"><span class="lbl">Verdict</span> <strong>Yes — and it flows through the exact same channels you already have.</strong> The
+new, more realistic temperatures pour straight into breakdown, into the coupling loop, and into Monte-Carlo,
+because those layers were built to read "a temperature per cell" — which is precisely what the new solver
+still produces (just better numbers).</p></div>
+
+<p>Let's trace the journey of one number so "feed back" is concrete.</p>
+
+<figure class="fig-frame"><svg width="430" height="150" viewBox="0 0 430 150" xmlns="http://www.w3.org/2000/svg">
+<g font-family="Segoe UI" font-size="7.5">
+<rect x="10" y="50" width="78" height="40" rx="4" fill="#e7f3ec" stroke="#2f8f6b"/><text x="49" y="68" text-anchor="middle" fill="#2f8f6b">thermal</text><text x="49" y="80" text-anchor="middle" fill="#2f8f6b">(now spreads)</text>
+<rect x="120" y="50" width="78" height="40" rx="4" fill="#f3f6fa" stroke="#0b3d63"/><text x="159" y="68" text-anchor="middle" fill="#0b3d63">breakdown</text><text x="159" y="80" text-anchor="middle" fill="#0b3d63">melt? yes/no</text>
+<rect x="230" y="50" width="78" height="40" rx="4" fill="#f3f6fa" stroke="#0b3d63"/><text x="269" y="68" text-anchor="middle" fill="#0b3d63">coupling</text><text x="269" y="80" text-anchor="middle" fill="#0b3d63">agree V·I↔T</text>
+<rect x="340" y="50" width="80" height="40" rx="4" fill="#fdecea" stroke="#9a3b3b"/><text x="380" y="68" text-anchor="middle" fill="#9a3b3b">Monte-Carlo</text><text x="380" y="80" text-anchor="middle" fill="#9a3b3b">+ results</text>
+<line x1="88" y1="70" x2="120" y2="70" stroke="#2f8f6b"/><polygon points="120,66 128,70 120,74" fill="#2f8f6b"/>
+<line x1="198" y1="70" x2="230" y2="70" stroke="#888"/><polygon points="230,66 238,70 230,74" fill="#888"/>
+<line x1="308" y1="70" x2="340" y2="70" stroke="#888"/><polygon points="340,66 348,70 340,74" fill="#888"/>
+<text x="155" y="40" text-anchor="middle" fill="#2f8f6b">array of cell temps →</text>
+<path d="M269 90 Q269 120 159 120 Q90 120 49 95" fill="none" stroke="#9a3b3b" stroke-dasharray="3 3"/>
+<polygon points="52,99 45,90 58,90" fill="#9a3b3b"/>
+<text x="160" y="135" text-anchor="middle" fill="#9a3b3b">coupling feeds new temps BACK so electricity &amp; heat re-agree</text>
+</g>
+</svg><figcaption>The temperature array flows rightward into every later layer unchanged. The coupling loop
+also feeds it <em>back</em> (dashed) so electricity and temperature re-settle together — the new spread-out
+temperatures simply make that agreement more realistic.</figcaption></figure>
+
+<div class="bridge"><span class="lbl">Two kinds of "feed back" — both already exist</span>
+<strong>(1) Forward feed:</strong> thermal → breakdown → results. The new temperatures are simply better inputs; the
+melt decision and the stored numbers update automatically. <strong>(2) The loop feed-back:</strong> the electro-thermal
+coupling already sends temperatures <em>back</em> to the electrical model so the two agree (Chapter 3 §11). With
+lateral spreading, the temperatures it sends back are the spread-out ones — so the loop converges to a more
+honest joint answer. You don't add a new feedback path; the existing one just carries better data.</div>
+
+<div class="ladder"><div class="laddertitle">Ladder · trace the number, see the feedback</div>
+<div class="socratic"><div class="q">Q1. The new solver says the hot-spot is now 150°C (spread), not 187°C (sealed). Where does that 150 go first?</div>
+<div class="answer">Into the breakdown check — "is 150°C above the melt limit?" Same check as before, just fed a more
+realistic number. If the limit is, say, 160°C, the verdict can flip from "melts" to "survives." That's the
+upgrade earning its keep.</div></div>
+<div class="socratic"><div class="q">Q2. Does the coupling loop need rewriting to accept spread-out temperatures?</div>
+<div class="answer">No. It already takes "temperatures in, power out, repeat." It doesn't care that the temperatures now
+include sideways sharing — it just keeps looping until electricity and temperature agree, landing on a better
+fixed point.</div></div>
+<div class="socratic"><div class="q">Q3. And Monte-Carlo — does running thousands of these change?</div>
+<div class="answer">Not in structure. Each run still calls the solver and records the worst temperature. The histogram
+simply shifts to more realistic values (often a cooler, narrower danger tail). The sweep code is untouched.</div></div>
+<div class="socratic"><div class="q">Q4 (top rung). So in one sentence: does the new physics reach the old layers?</div>
+<div class="answer">Yes — it reaches all of them, through the same wires, because every later layer speaks one common
+language ("a temperature per cell"), and the upgraded solver still speaks exactly that language — just more
+truthfully.</div></div>
+</div>
+</section>
+
+<!-- ===================================== 7 INGREDIENTS -->
+<section class="page-break sec">
+<h2><span class="sec-num">7</span>What You'd Actually Need to Add</h2>
+<p class="lede">Strip away the theory and the to-do list is short — three ingredients. None of them is a rewrite;
+each is an <em>addition</em>.</p>
+
+<table>
+<thead><tr><th>#</th><th>Ingredient</th><th>In plain words</th><th>Where it lives</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong>Geometry / adjacency</strong></td><td>Give each cell a position on the panel (row, column) so the solver knows who its neighbours are. Without neighbours, "sideways" is meaningless.</td><td>the <code>Circuit</code> class (add grid coords to each cell)</td></tr>
+<tr><td>2</td><td><strong>Lateral conductance</strong></td><td>One new number: how fat the sideways pipe is, from the face-sheet's conductivity, thickness and cell spacing. One value (or a small table) for the panel.</td><td>the substrate / panel parameters</td></tr>
+<tr><td>3</td><td><strong>Sparse-network solver</strong></td><td>Build the big sparse "slope" matrix (each node + its neighbour links) and solve it once per Newton step with a sparse solver.</td><td>a new <code>thermal_panel.py</code> (today's solver is the G=0 case)</td></tr>
+</tbody></table>
+
+<div class="recap"><span class="lbl">The shape of the work</span> Ingredients 1 and 2 are small, additive inputs. Ingredient 3 is the
+real coding — but it's a known recipe (nodes + conductors + sparse solve), guarded by an easy test: with all
+lateral conductances set to zero, the new module must reproduce today's verified numbers (65.26°C / 187.48°C)
+exactly. Pass that, and you know you only <em>added</em> spreading without breaking the physics you trust.</div>
+
+<div class="pitfall"><span class="lbl">The one thing to get right</span> The conductance value (ingredient 2) is where realism is won
+or lost. Too fat and the panel looks falsely uniform (hot-spots vanish that really exist); too thin and you
+barely improve on sealed islands. It's worth grounding that number in the real face-sheet material and, if
+possible, one measured or reference data point — otherwise you have a more elaborate model that's confidently
+wrong. Garbage pipe-width in, garbage spreading out.</div>
+
+<div class="practice"><span class="lbl">Practice 2</span> Of the three ingredients, which one (a) is the biggest coding job, and (b) most
+decides whether the answers are physically trustworthy? One line each, with why.
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ===================================== 8 WORKED -->
+<section class="page-break sec">
+<h2><span class="sec-num">8</span>A Worked Picture — Two Linked Cells</h2>
+<p class="lede">The smallest version of the whole idea: a hot cell joined to one cool neighbour. Watch the pipe
+pull the peak down. (Numbers chosen to be followable by hand, not exact solver output.)</p>
+
+<div class="worked"><span class="lbl">Worked example — the pipe cools the hot-spot</span>
+<div class="step"><strong>Sealed (today):</strong> the dead cell dumps 9.6&nbsp;W and must radiate all of it alone. Balance lands
+high — call it 187°C. Its healthy neighbour sits at ~40°C, ignoring each other.</div>
+<div class="step"><strong>Now open a pipe</strong> of conductance G = 0.05&nbsp;W/°C between them. Heat flows hot→cold:
+0.05 × (187 − 40) = 0.05 × 147 ≈ 7.4&nbsp;W tries to cross.</div>
+<div class="step">That 7.4&nbsp;W is heat the hot cell no longer radiates by itself — so its balance temperature <em>drops</em>.
+Meanwhile the neighbour now receives extra heat, so <em>its</em> temperature <em>rises</em>.</div>
+<div class="step">They meet somewhere in between — the hot cell maybe ~150°C, the neighbour maybe ~60°C (the real
+numbers come from re-solving the joined balance, which is what the sparse solver does in one shot).</div>
+<div class="check">Check the direction of every move: peak went <em>down</em> (good — heat had somewhere to go),
+neighbour went <em>up</em> (it absorbed some), and total heat radiated by the pair is unchanged (energy is
+conserved — we only moved <em>where</em> it leaves). If the melt limit is 160°C, this cell just crossed from
+"melts" to "survives". That flip is the entire engineering value of the upgrade.</div></div>
+
+<div class="ladder"><div class="laddertitle">Ladder · read the result correctly</div>
+<div class="socratic"><div class="q">Q1. Did opening the pipe create or destroy any heat?</div>
+<div class="answer">Neither. The 9.6&nbsp;W is still produced and still radiated to space in total. The pipe only <em>redistributes</em>
+where it sits before it leaves — peak down, neighbour up, sum the same. Pure conservation.</div></div>
+<div class="socratic"><div class="q">Q2. Why is "peak down, neighbours up" usually good news for survival?</div>
+<div class="answer">Melting is about the <em>hottest single point</em>, not the average. Shaving the peak — even while nudging
+the average neighbourhood up a little — is exactly what keeps the substrate under its limit.</div></div>
+<div class="socratic"><div class="q">Q3. Could spreading ever be <em>bad</em>?</div>
+<div class="answer">Occasionally — if a neighbour was already near its own limit, the extra heat could tip <em>it</em> over, or a
+cluster of failures could pool heat. That's precisely why you'd run Monte-Carlo on the new model: to catch
+those subtler, spread-out danger patterns the sealed model can't see.</div></div>
+<div class="socratic"><div class="q">Q4 (top rung). Why is today's sealed 187°C still a useful number even after the upgrade?</div>
+<div class="answer">Because it's the <em>worst case</em> — "what if no heat spreads at all." It's a safe, conservative bound. The
+lateral model gives the <em>realistic</em> case. Engineers like having both: design to the conservative bound, report
+the realistic one. You're not throwing 187°C away; you're adding a truer companion to it.</div></div>
+</div>
+</section>
+
+<!-- ===================================== 9 COST/BUY -->
+<section class="page-break sec">
+<h2><span class="sec-num">9</span>What It Costs &amp; What It Buys</h2>
+
+<table>
+<thead><tr><th>You give up</th><th>You gain</th></tr></thead>
+<tbody>
+<tr><td>The trivially-simple closed-form 2×2 solve (replaced by a sparse solve — still fast, slightly more code)</td><td>Physically realistic temperatures: hot-spots <em>spread</em> instead of piling up unrealistically</td></tr>
+<tr><td>A bit of new bookkeeping: cell geometry + one conductance number</td><td>The peak-temperature predictions stop being needlessly alarmist (often cooler, truer)</td></tr>
+<tr><td>A test burden: must prove G=0 reproduces today's numbers</td><td>New questions answerable: how far does damage spread? do failure <em>clusters</em> pool heat?</td></tr>
+</tbody></table>
+
+<div class="recap"><span class="lbl">Bottom line for your three questions</span>
+<strong>Possible?</strong> Yes — standard, well-charted, mature tools do the heavy lifting.
+<strong>Independent of the framework?</strong> Largely — it's a contained swap of the thermal solver's internals;
+the upper layers are untouched because they only ever read "a temperature per cell," and the old behaviour
+survives as the G=0 case.
+<strong>Fed back to earlier layers?</strong> Yes — through the same wires you already built; breakdown, the
+coupling loop, and Monte-Carlo all consume the new temperatures automatically, just with more honest values.</div>
+
+<div class="bridge"><span class="lbl">Suggested order, when you're ready</span> (1) Pin the physics in the spec — nodes, conductors, the
+new parameters, the G=0 validation case. (2) Build <code>thermal_panel.py</code> and pass the G=0 test against
+today's numbers. (3) Add the conductance and a small grid; validate on a 2×2 then a real layout. (4) Re-run
+the Monte-Carlo sweep and compare the danger tail to the sealed model. Each step is independently checkable —
+no big-bang rewrite.</div>
+
+<div class="practice"><span class="lbl">Practice 3</span> A reviewer asks: "If you add lateral conduction, do you have to rewrite the
+Monte-Carlo and breakdown code?" Answer in two sentences, and say what (if anything) you <em>do</em> have to add.
+<div class="answerspace lines-4"></div></div>
+</section>
+
+<!-- ===================================== GLOSSARY -->
+<section class="page-break sec">
+<h2>Glossary</h2>
+<div class="glossary">
+<div class="glossary-entry"><span class="gt">Adjacency</span> The neighbour map — which cell sits next to which. Needed before "sideways" means anything.</div>
+<div class="glossary-entry"><span class="gt">Conductance (thermal, G)</span> How easily heat flows between two nodes, in watts per °C. The "fatness of the pipe."</div>
+<div class="glossary-entry"><span class="gt">Conductor</span> A heat path joining two nodes; carries G × (temperature difference) watts.</div>
+<div class="glossary-entry"><span class="gt">Fourier's law</span> Heat flow = conductance × temperature difference; heat only moves on a difference.</div>
+<div class="glossary-entry"><span class="gt">In-plane / lateral conduction</span> Heat flowing sideways across the panel face, cell to neighbour.</div>
+<div class="glossary-entry"><span class="gt">Interface (of a layer)</span> The agreed "inputs in, outputs out" contract; here: conditions in, a temperature array out.</div>
+<div class="glossary-entry"><span class="gt">Newton–Raphson</span> The guess-correct-repeat solver; unchanged by the upgrade — only its inner slope-solve changes.</div>
+<div class="glossary-entry"><span class="gt">Nodal network / resistor network</span> Modelling heat as nodes joined by conductors, balanced at every node.</div>
+<div class="glossary-entry"><span class="gt">Node</span> A point at which one temperature is tracked.</div>
+<div class="glossary-entry"><span class="gt">Sparse matrix</span> A mostly-zero grid of numbers; sparse solvers skip the zeros to stay fast.</div>
+<div class="glossary-entry"><span class="gt">spsolve</span> scipy's sparse linear solver — solves the big network in one compiled call per Newton step.</div>
+<div class="glossary-entry"><span class="gt">Superset (G=0 case)</span> The new model with all sideways pipes shut reproduces today's sealed-island model exactly.</div>
+<div class="glossary-entry"><span class="gt">Worst case / conservative</span> The sealed 187°C — "what if no heat spreads"; a safe upper bound to design against.</div>
+</div>
+</section>
+
+<!-- ===================================== SOLUTIONS -->
+<section class="solutions">
+<h2>Worked Solutions</h2>
+<div class="soln"><span class="sid">Solution 1.</span> (a) Heat = G × ΔT = 0.08 × (150 − 50) = 0.08 × 100 = <strong>8&nbsp;W</strong>,
+flowing from the hot cell (150°C) to the cool one (50°C). (b) Both at 90°C → ΔT = 0 → 0.08 × 0 = <strong>0&nbsp;W</strong>.
+Equal temperatures, no flow — heat only moves on a difference.</div>
+<div class="soln"><span class="sid">Solution 2.</span> (a) Biggest coding job: <strong>ingredient 3, the sparse-network solver</strong> — it's
+the actual new algorithm (build the sparse matrix, sparse-solve each Newton step), where the others are just
+new inputs. (b) Most decides trustworthiness: <strong>ingredient 2, the lateral conductance</strong> — if that pipe-width
+is wrong, the spreading is wrong, so the realism of every temperature hinges on it (garbage in, garbage out).</div>
+<div class="soln"><span class="sid">Solution 3.</span> Model answer: "No — the Monte-Carlo and breakdown code stay as they are, because
+they only consume a per-cell temperature array, which the upgraded solver still produces. The only additions
+are two new <em>inputs</em>: each cell's grid position (so it knows its neighbours) and one lateral-conductance value
+for the panel; the old behaviour is preserved by setting that conductance to zero."</div>
+</section>
+
+</body></html>

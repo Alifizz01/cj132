@@ -1,0 +1,266 @@
+<h3>6 &nbsp; A concrete improvement roadmap for PowerPy</h3>
+
+<p>The previous five sections were about <em>principles</em>: how to cut a program into parts, how to write a function you can trust, how to test physics, how to find and fix the hot spots. This final section spends that capital. It turns those principles into a single, ordered, <strong>actionable plan for <em>this</em> codebase</strong> — PowerPy, the satellite solar-array simulator we have been dissecting throughout — and, just as importantly, it argues for the <em>order</em>. A roadmap is not a wish-list. A wish-list says "here are ten good things". A roadmap says "here are ten good things, and here is which one you do first, and why doing them out of order will hurt you". The hard, counter-intuitive lesson at the centre of this section is that the most <em>exciting</em> work — the vectorised solver, the parallel Monte-Carlo, the new physics modules — is the work you do <strong>last</strong>, and starting with it is the single most common way to waste weeks on a scientific codebase.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> Make it <strong>run</strong> and be <strong>tested</strong> first; <em>then</em> refactor the structure under the protection of those tests; <em>then</em> optimise the hot spots you have actually <em>measured</em>; <em>then</em> build the new features. Each stage protects the next. Refactoring without tests is editing blind — you cannot tell whether you broke the physics. Optimising without profiling is guessing — you speed up code that was never the bottleneck. Building features on a package that does not even import is building on sand. The roadmap below is exactly this order, made concrete for PowerPy, with each item framed as <strong>problem → fix → why it matters → rough effort</strong>.</p>
+</div>
+
+<h4>6.1 &nbsp; The current state of PowerPy, stated plainly</h4>
+
+<p>Before planning repairs, look honestly at what is there. PowerPy is not uniformly good or uniformly bad — it is a <strong>two-layer</strong> codebase, and the two layers are at very different levels of health. Recognising this split is the whole basis of the plan, because the two layers need opposite things.</p>
+
+<p><strong>The good, modern layer.</strong> A set of subpackages — <code>schemas/</code>, <code>loader/</code>, <code>simulation/</code>, <code>render/</code> — built in the style this course recommends: small modules, <code>@dataclass</code> data shapes, a clear dependency direction (schemas at the bottom, render at the top), and an explicit <em>pipeline</em> that wires the stages together. This layer is a strength. The plan's job for it is mostly to <em>extend</em> it: it is the target shape everything else should grow toward.</p>
+
+<p><strong>The fragile, legacy layer.</strong> A set of large, top-level, multi-job classes in flat modules — <code>cell.py</code>, <code>string.py</code>, <code>section.py</code>, <code>panel.py</code>. Several of these files were <strong>OCR-reconstructed</strong> (recovered from a scan or a PDF rather than from clean source), and that process left <em>real defects</em> behind: a duplicated-<code>self</code> method signature, unbalanced parentheses, stray characters — the kind of damage that stops the package importing at all. This layer is where most of the urgent, unglamorous work lives.</p>
+
+<div class="callout">
+<strong>Keep the two layers straight.</strong> The legacy top-level <code>string.py</code> (a flat module holding a big <code>String</code> class) is a different thing from the modern <code>simulation/string_level</code> module. When this section says "the legacy monolith classes", it means the flat <code>cell.py</code> / <code>string.py</code> / <code>section.py</code> / <code>panel.py</code> files — not their well-built counterparts inside <code>simulation/</code>. The plan is, in one phrase, <em>to grow the legacy layer toward the modern one</em> — but only after we have made it run and pinned its behaviour with tests.
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 440 195" xmlns="http://www.w3.org/2000/svg" font-size="9.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="40" y="30" width="360" height="26" rx="3" fill="#fbe3df" stroke="#9a3b3b"/><text class="tx" x="220" y="47" text-anchor="middle" font-size="9">5 · new features</text><rect x="56" y="60" width="328" height="26" rx="3" fill="#fbf0e0" stroke="#b9851a"/><text class="tx" x="220" y="77" text-anchor="middle" font-size="9">4 · profile &amp; optimise</text><rect x="72" y="90" width="296" height="26" rx="3" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="220" y="107" text-anchor="middle" font-size="9">3 · refactor structure</text><rect x="88" y="120" width="264" height="26" rx="3" fill="#e8f0ec" stroke="#3f7a4f"/><text class="tx" x="220" y="137" text-anchor="middle" font-size="9">2 · add tests</text><rect x="104" y="150" width="232" height="26" rx="3" fill="#eaf2f0" stroke="#1f6a6a"/><text class="tx" x="220" y="167" text-anchor="middle" font-size="9">1 · make it run / import</text>
+<text class="tx" x="410" y="180" text-anchor="end" font-size="9" fill="#b9851a">build bottom-up ↑</text>
+</svg>
+<figcaption>Figure 11 — The improvement roadmap, built bottom-up: make it run, add tests, refactor, optimise, then new features.</figcaption></figure>
+
+<h4>6.2 &nbsp; The roadmap as a prioritised table</h4>
+
+<p>Here is the whole plan at a glance, grouped by priority. Each row is one item, framed the way the whole section is framed: the <em>problem</em> (what is wrong now), the <em>fix</em> (what to do), <em>why it matters</em> (the payoff), and a <em>rough effort</em> (so you can sequence realistically). Read the table top to bottom: that <em>is</em> the order to work in. The per-item notes after it add texture the table cannot hold.</p>
+
+<table>
+  <caption>PowerPy improvement roadmap, in priority order. Priority 1 is "do this first"; Priority 5 is "do this last". Effort is a rough relative size, not a precise estimate.</caption>
+  <thead>
+    <tr><th>Priority</th><th>Problem (now)</th><th>Fix</th><th>Why it matters</th><th>Effort</th></tr>
+  </thead>
+  <tbody>
+    <tr><td rowspan="3"><strong>P1</strong><br>correctness<br>&amp; "make it run"</td>
+        <td>OCR defects in legacy files (duplicated <code>self</code>, unbalanced parens, stray chars) — the package will not import.</td>
+        <td>Find and fix each syntax defect until <code>import powerpy</code> succeeds cleanly.</td>
+        <td>Nothing else can be trusted until the code runs. This is the gate to every other item.</td>
+        <td>S–M</td></tr>
+    <tr><td>The legacy top-level <code>string.py</code> <em>shadows</em> the standard-library <code>string</code>, which silently breaks <code>import pandas</code> when run from inside the package.</td>
+        <td>Rename the module (e.g. <code>string.py</code> → <code>cellstring.py</code>) and update imports.</td>
+        <td>Removes a silent, baffling breakage that wastes hours because the error points at pandas, not at you.</td>
+        <td>S</td></tr>
+    <tr><td>Imports only work from the current directory — there is no installable package.</td>
+        <td>Add a <code>pyproject.toml</code>; <code>pip install -e .</code> for an editable install.</td>
+        <td>Imports stop depending on where you happen to be standing; tests and tools can find the package.</td>
+        <td>S</td></tr>
+    <tr><td rowspan="2"><strong>P2</strong><br>reliability</td>
+        <td>No automated tests — correctness is unproven, and any change is a leap of faith.</td>
+        <td>Add a <code>tests/</code> suite: a thermal parity test, a 2×2-circuit sanity test, physical-bound asserts (Section 5).</td>
+        <td>Locks in correctness <em>before</em> refactoring, so later changes can be checked, not hoped about.</td>
+        <td>M</td></tr>
+    <tr><td>The ngspice wrapper uses a bare <code>try/except: pass</code>, so real failures vanish.</td>
+        <td>Replace with <em>specific</em>, <em>logged</em> exceptions; re-raise what you cannot handle.</td>
+        <td>Stops hiding failures — a malformed netlist becomes a visible error, not a silent wrong answer.</td>
+        <td>S</td></tr>
+    <tr><td rowspan="2"><strong>P3</strong><br>structure<br>&amp; clarity</td>
+        <td>Legacy monolith classes each do many jobs (load + maths + netlist + simulate + plot).</td>
+        <td>Split by concern toward the modern subpackage style: loading, parameter maths, netlist, simulation, plotting.</td>
+        <td>Each piece becomes testable and changeable on its own; one reason to change per module.</td>
+        <td>L</td></tr>
+    <tr><td>Functions return bare tuples/dicts, e.g. the 6-tuple <code>(model, config, isc, imp, vmp, voc)</code>.</td>
+        <td>Replace with <code>@dataclass</code> results; add type hints on public functions.</td>
+        <td>Fewer mis-index bugs; the return value documents itself; tools catch typos early.</td>
+        <td>M</td></tr>
+    <tr><td rowspan="4"><strong>P4</strong><br>performance</td>
+        <td>The thermal solve loops cell-by-cell — slow, and run thousands of times in Monte-Carlo.</td>
+        <td>Vectorise the thermal solve (Chapter 2 §2) with NumPy array operations.</td>
+        <td>The single biggest speed win for Monte-Carlo runs.</td>
+        <td>M</td></tr>
+    <tr><td>ngspice is invoked many times (many <code>.op</code> calls), re-launching the engine each time.</td>
+        <td>Batch ngspice: one run per circuit / IV sweep; reuse the engine.</td>
+        <td>Removes repeated process start-up and parsing overhead.</td>
+        <td>M</td></tr>
+    <tr><td>Monte-Carlo runs are independent but executed one at a time on one core.</td>
+        <td>Parallelise across cores with <code>joblib</code>.</td>
+        <td>Near-linear speed-up on an embarrassingly parallel workload.</td>
+        <td>S–M</td></tr>
+    <tr><td>Risk of optimising the wrong thing.</td>
+        <td><strong>Profile first</strong> to confirm the hot spot before each change above.</td>
+        <td>Guarantees effort lands where the time actually goes, not where you guessed.</td>
+        <td>S</td></tr>
+    <tr><td><strong>P5</strong><br>new features</td>
+        <td>Chapter 2's planned physics is not yet implemented.</td>
+        <td>Add <code>circuit.py</code>, <code>substrate.py</code>, <code>thermal_vectorized.py</code>, <code>electrothermal.py</code>, <code>environment_orbit.py</code>, <code>montecarlo.py</code>, <code>results.py</code> in the modern layout, each with tests.</td>
+        <td>Extends capability on a base that is now stable, tested, clean, and fast.</td>
+        <td>L</td></tr>
+  </tbody>
+</table>
+
+<h4>6.3 &nbsp; Priority 1 — correctness and "make it run"</h4>
+
+<p>This tier has one theme: <strong>the package must import cleanly</strong>. Until it does, every other item is blocked, because you cannot test, refactor, profile, or extend code that will not load. There is no judgement call here about whether P1 comes first — it is a precondition, not a preference.</p>
+
+<p><strong>Fix the OCR/syntax defects.</strong> The OCR-reconstructed legacy files contain mechanical damage: a method written <code>def setTemperature(self, self, temperature)</code> (the duplicated <code>self</code> is a <code>SyntaxError</code>), parentheses that do not balance, stray characters dropped mid-line. Each is a hard error that stops <code>import</code>. Work through them until <code>python -c "import powerpy"</code> runs without a traceback. <em>Why it matters:</em> nothing downstream can be trusted — or even attempted — until the code runs. <em>Effort:</em> small-to-medium; mechanical once located, and the interpreter points you at each one in turn.</p>
+
+<p><strong>Rename <code>string.py</code>.</strong> Python resolves the legacy top-level <code>string.py</code> <em>before</em> the standard library's <code>string</code> when code runs from inside the package, so any library that imports stdlib <code>string</code> — pandas does, indirectly — gets PowerPy's module instead and breaks in a way whose error message blames pandas. Rename the file (e.g. to <code>cellstring.py</code>) and fix the imports that referred to it. <em>Why it matters:</em> it removes a <em>silent, confusing</em> breakage that can swallow an afternoon, because the symptom appears nowhere near the cause. <em>Effort:</em> small.</p>
+
+<p><strong>Make the package installable.</strong> Right now imports work only because you happen to be in the right directory. Add a <code>pyproject.toml</code> declaring the package, then <code>pip install -e .</code> for an <em>editable</em> install (your edits take effect immediately, but the package is importable from anywhere). <em>Why it matters:</em> imports stop depending on the current directory, and the test runner, your editor, and CI can all find the package the same way. <em>Effort:</em> small.</p>
+
+<h4>6.4 &nbsp; Priority 2 — reliability</h4>
+
+<p>Now the code runs. The next question is: <em>does it run <strong>correctly</strong>?</em> — and, crucially, can we <em>keep</em> it correct while we change it? That is what tests buy. This tier exists to lay down a safety net <strong>before</strong> the refactoring of P3, because refactoring is precisely the activity that silently breaks things.</p>
+
+<p><strong>Add a <code>tests/</code> suite.</strong> Start with the three kinds Section 5 argued for: a <em>thermal parity test</em> (the new vectorised path, once it exists, must agree with the trusted loop within tolerance), a <em>2×2-circuit sanity test</em> (a tiny hand-checkable circuit whose answer you know), and <em>physical-bound asserts</em> (no negative power, efficiency in [0, 1], a cell no hotter than physically possible). <em>Why it matters:</em> it <strong>locks in correctness before refactoring</strong> — a test that passes now will tell you the instant a later edit changes the answer. <em>Effort:</em> medium.</p>
+
+<p><strong>Kill the bare <code>except: pass</code>.</strong> The ngspice wrapper currently catches <em>everything</em> and does <em>nothing</em> — a malformed netlist, a missing binary, a parse error all vanish, and the simulation sails on with stale or empty results. Replace it with a <code>try/except</code> that names the <em>specific</em> exception it can handle, <em>logs</em> it, and re-raises what it cannot. <em>Why it matters:</em> it stops <em>hiding failures</em> — a hidden failure is worse than a crash, because the crash points at the bug and the hidden one produces a plausible wrong number you will plot and believe. <em>Effort:</em> small.</p>
+
+<h4>6.5 &nbsp; Priority 3 — structure and clarity</h4>
+
+<p>The code runs and is pinned by tests. <em>Only now</em> is it safe to change its shape. This tier moves the legacy layer toward the modern one — and every edit here is protected by the P2 tests, so if a split accidentally alters the physics, a test goes red immediately.</p>
+
+<p><strong>Split the monolith classes by concern.</strong> Each legacy class does several jobs at once: reading data, doing parameter maths, generating the netlist, running the simulation, plotting. Separate these into distinct modules in the modern style — one for loading, one for the parameter maths, one for netlist generation, one for simulation, one for plotting. <em>Why it matters:</em> each concern becomes <em>testable and changeable</em> in isolation; a change to the report format no longer risks the physics. <em>Effort:</em> large — this is the biggest structural item, which is exactly why it comes after the safety net and not before.</p>
+
+<p><strong>Replace bare tuple/dict returns with dataclasses.</strong> The 6-tuple <code>(model, config, isc, imp, vmp, voc)</code> forces every caller to remember that <code>vmp</code> is element 4 — a mis-index waiting to happen, silent because every element is a float. Replace such returns with a <code>@dataclass</code> whose fields have names, and add type hints to the public functions. <em>Why it matters:</em> <em>fewer mis-index bugs</em>, and the signature becomes <em>self-documenting</em> — the reader and the type-checker both see what comes back. <em>Effort:</em> medium.</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 130" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family:monospace} .l{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="20" y="20" width="210" height="44" rx="4" fill="#fcefea" stroke="#9a3b3b"/><text class="l" x="125" y="16" text-anchor="middle" font-size="8" fill="#9a3b3b">before</text>
+<text class="tx" x="30" y="40" font-size="9">return (model, config,</text><text class="tx" x="30" y="54" font-size="9"> isc, imp, vmp, voc)</text>
+<rect x="250" y="20" width="200" height="44" rx="4" fill="#eaf2f0" stroke="#1f6a6a"/><text class="l" x="350" y="16" text-anchor="middle" font-size="8" fill="#1f6a6a">after</text>
+<text class="tx" x="260" y="40" font-size="9">@dataclass</text><text class="tx" x="260" y="54" font-size="9">class CellResult: ...</text>
+<path d="M232 42 H248" stroke="#b9851a" stroke-width="2"/><polygon points="248,42 242,38 242,46" fill="#b9851a"/>
+<rect x="120" y="84" width="240" height="32" rx="4" fill="#fff" stroke="#0b3d63"/><text class="tx" x="240" y="104" text-anchor="middle" font-size="9">assert cell_result(c).vmp == 2.35</text>
+<text class="l" x="240" y="128" text-anchor="middle" font-size="8" fill="#5d6b79">a test pins the field by name</text>
+</svg>
+<figcaption>Figure 12 — One concrete fix: a 6-tuple return becomes a typed dataclass, pinned by a test.</figcaption></figure>
+
+<h4>6.6 &nbsp; Priority 4 — performance</h4>
+
+<p>Clean, tested, well-structured code that is too slow is a real problem — but it is a <em>fourth</em>-order problem, addressed only once the first three tiers are done. The governing rule of this tier is one word: <strong>measure</strong>. You do not optimise what you guess is slow; you optimise what a profiler <em>shows</em> is slow.</p>
+
+<p><strong>Profile first.</strong> Before touching any of the three changes below, run a profiler on a representative workload and read off where the time actually goes. <em>Why it matters:</em> intuition about performance is notoriously wrong; profiling replaces a guess with a measurement, so your effort lands on the real bottleneck. <em>Effort:</em> small — and it pays for itself by stopping you optimising code that was never the problem.</p>
+
+<p><strong>Vectorise the thermal solve</strong> (Chapter 2 §2). The cell-by-cell Python loop is the prime suspect for Monte-Carlo cost, because it runs once per cell <em>per sample</em>, thousands of times over. Recast it as NumPy array operations over all cells at once. <em>Why it matters:</em> it is <strong>the single biggest speed win</strong> for Monte-Carlo. <em>Effort:</em> medium — and note the P2 thermal parity test is what proves the vectorised version still gives the right answer.</p>
+
+<p><strong>Batch ngspice.</strong> Today the simulator issues many separate <code>.op</code> calls, paying engine start-up and parse cost each time. Issue <em>one</em> run per circuit / IV sweep and <em>reuse</em> the engine instead of relaunching it. <em>Why it matters:</em> it removes a large, repeated fixed overhead. <em>Effort:</em> medium.</p>
+
+<p><strong>Parallelise Monte-Carlo across cores.</strong> Monte-Carlo samples are independent — an "embarrassingly parallel" workload — yet they run one at a time. Distribute them across CPU cores with <code>joblib</code>. <em>Why it matters:</em> near-linear speed-up for almost no algorithmic change. <em>Effort:</em> small-to-medium.</p>
+
+<h4>6.7 &nbsp; Priority 5 — the new feature work</h4>
+
+<p>Last, and only last, comes the genuinely <em>new</em> capability: the Chapter 2 physics modules. They go last not because they are unimportant but because they should be built <em>on solid ground</em> — a package that imports, has tests, is cleanly structured, and runs fast. Add them in the <strong>modern layout</strong>, each as a small focused module with its own test file: <code>circuit.py</code>, <code>substrate.py</code>, <code>thermal_vectorized.py</code>, <code>electrothermal.py</code>, <code>environment_orbit.py</code>, <code>montecarlo.py</code>, <code>results.py</code>. <em>Why it matters:</em> new features built on a stable, tested base stay correct as they grow, instead of inheriting and compounding the old fragility. <em>Effort:</em> large — but de-risked by everything that came before.</p>
+
+<h4>6.8 &nbsp; How to sequence it — and why not start with the fun part</h4>
+
+<div class="keyidea">
+<strong>The sequencing rule.</strong> <strong>Run &amp; test → refactor → optimise → extend.</strong> Concretely: P1–P2 make it <em>run</em> and <em>tested</em>; <em>then</em> P3 refactors the structure <em>under the protection of those tests</em>; <em>then</em> P4 optimises the hot spots you have <em>profiled and proven</em>; <em>then</em> P5 builds new features on the now-solid base. The justification is a chain of dependencies, not a matter of taste: <em>refactoring without tests is risky</em> (you cannot tell whether a structural change altered the physics), and <em>optimising without profiling is guesswork</em> (you may speed up code that was never the bottleneck while the real one stays slow). Each tier is the safety equipment for the next.
+</div>
+
+<p>Why is it so tempting to do this <em>backwards</em>? Because the bottom of the pyramid is boring and the top is exciting. Fixing a stray bracket and renaming a file feels like janitorial work; writing a vectorised electro-thermal solver feels like real engineering. But the excitement is exactly the trap: the glamorous work is the <em>most</em> dependent on the unglamorous foundation, and building it first means building it on code you cannot trust, cannot test, and have not measured.</p>
+
+<div class="callout">
+<strong>Definition of done — a checklist for a healthy module.</strong> When is a PowerPy module finished? When all of these are true:
+<ul>
+<li><strong>Single clear responsibility</strong> — one reason to change.</li>
+<li><strong>Type-hinted public functions</strong> — the contract is on the page.</li>
+<li><strong>Docstrings</strong> — what it does, parameters with units, what it returns.</li>
+<li><strong>A test file</strong> — its behaviour is pinned, not hoped about.</li>
+<li><strong>No stdlib-name clashes</strong> — nothing named <code>string</code>, <code>json</code>, <code>random</code>, … that shadows the standard library.</li>
+<li><strong>No bare excepts</strong> — failures are specific and logged, never swallowed.</li>
+<li><strong>Data via package resources, not hard-coded paths</strong> — it loads its data through the package, not from <code>C:\Users\me\...</code>.</li>
+</ul>
+This is the bar P5's new modules must clear, and the bar P3 is dragging the legacy modules up to.
+</div>
+
+<h4>6.9 &nbsp; Worked example — one legacy smell, end to end <span class="badge hot">EXAM-HOT</span></h4>
+
+<div class="worked">
+<strong>Worked example — the <code>string.py</code> shadowing smell: problem → fix → the test that proves it.</strong> We take one P1 item and walk it the whole way, ending — and this is the part that ties P1 to P2 — in the concrete test you would add so the bug can never silently return.
+
+<div class="step"><strong>Problem.</strong> PowerPy has a top-level module <code>string.py</code> (the legacy <code>String</code> class). When any code runs from inside the package directory, Python finds <em>this</em> <code>string</code> on the import path before the standard library's <code>string</code>. Most libraries import stdlib <code>string</code> somewhere in their machinery — pandas does — so <code>import pandas</code> ends up loading PowerPy's module by mistake and fails. The error names pandas, so you hunt in entirely the wrong place.
+<pre>
+powerpy/
+  string.py        # legacy String class — SHADOWS stdlib `string`
+  cell.py
+  ...
+
+# from inside powerpy/:
+>>> import pandas
+ImportError: ... (pandas tried to use stdlib `string`, got PowerPy's instead)
+</pre>
+</div>
+
+<div class="step"><strong>Fix.</strong> Rename the module so it no longer collides with a standard-library name, and update every import that referred to it.
+<pre>
+# rename the file:
+powerpy/string.py   ->   powerpy/cellstring.py
+
+# update imports throughout the package:
+- from powerpy.string import String
++ from powerpy.cellstring import String
+</pre>
+Now nothing in the package is named <code>string</code>, so Python's stdlib <code>string</code> resolves normally and <code>import pandas</code> works from anywhere.</div>
+
+<div class="step"><strong>The test you would add (this is the P2 step).</strong> A fix is not done until a test guards it. Add a tiny test that fails on the old code and passes on the fixed code — it asserts both that the shadow is gone and that the symptom is cured:
+<pre>
+# tests/test_no_stdlib_shadow.py
+import importlib
+
+def test_stdlib_string_not_shadowed():
+    """The stdlib `string` must resolve to the standard library, not PowerPy."""
+    import string
+    assert "site-packages" in string.__file__ or "lib" in string.__file__.lower()
+    # i.e. it is NOT powerpy/string.py
+
+def test_pandas_imports_cleanly():
+    """The original symptom: importing pandas must not break."""
+    pandas = importlib.import_module("pandas")
+    assert pandas is not None
+</pre>
+</div>
+
+<div class="check"><strong>Check.</strong> Run the tests <em>before</em> the rename: <code>test_stdlib_string_not_shadowed</code> fails (stdlib <code>string</code> points at <code>powerpy/string.py</code>) and <code>test_pandas_imports_cleanly</code> fails (the <code>ImportError</code>). Run them <em>after</em> the rename: both pass. The bug is now <em>regression-proofed</em> — if anyone ever re-adds a top-level <code>string.py</code>, the suite goes red and names the real problem instead of blaming pandas. ✓ That is the P1→P2 motion in miniature: fix the defect, then pin it with a test so it cannot silently return.</div>
+</div>
+
+<h4>6.10 &nbsp; In what order do you fix a fragile scientific codebase?</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). Before you can <em>trust any result</em> PowerPy prints, what must be true of the code?</div>
+<div class="answer">At minimum it must <strong>run</strong> — the package must import without a <code>SyntaxError</code> and without a name clash that breaks a dependency — and its core answers must be <strong>checked</strong> against something you know. A number from code that barely imports, or that you have never compared to a hand-calculation or a physical bound, is not a result; it is an output. So the first two things to establish are "it runs" (P1) and "its answers are pinned by tests" (P2). Everything else is premature until these hold.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (build up). Why refactor <em>under tests</em> — why not just carefully restructure the monolith classes and re-check by eye?</div>
+<div class="answer">Because a refactor is a structural change with a promise attached: "I changed the shape but <em>not</em> the behaviour." Re-checking by eye cannot verify that promise across a large class with many code paths — you will miss the one branch where the split quietly changed a sign or an index. A test suite verifies the promise mechanically and instantly: make the structural change, run the tests, and if any answer moved, a test goes red and points at it. That is why P2 (tests) <em>precedes</em> P3 (refactor): the tests are the equipment that makes refactoring safe rather than a gamble.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (why). Why <em>profile before optimising</em> — surely the slow cell-by-cell loop is obviously the bottleneck?</div>
+<div class="answer">It probably is — but "probably" is the problem. Performance intuition is wrong often enough that committing days of work to a guess is reckless. The loop <em>might</em> be dwarfed by, say, the repeated ngspice start-ups, or by file I/O. A profiler turns the guess into a measurement: it shows where the time <em>actually</em> goes, so you spend your effort where it pays. Optimising without profiling can mean speeding up code that was never the bottleneck — you do real work and the program is no faster. So P4 starts with "profile first", and only then vectorises, batches, and parallelises.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (deep — the target). <em>So in what order should we fix a fragile scientific codebase, and why is the exciting performance/feature work last?</em></div>
+<div class="answer">Put the rungs together. First make it <strong>run and be tested</strong> (Q&middot;a) — without that, no result is trustworthy and nothing can be verified. Then <strong>refactor under those tests</strong> (Q&middot;b) — the tests are what make restructuring safe rather than blind. Then <strong>profile and optimise</strong> (Q&middot;c) — measure before you accelerate, so effort lands on the real bottleneck. Then, on that stable, tested, clean, fast base, build the <strong>new features</strong> (P5), each with its own tests, in the modern layout. The exciting work is last precisely because it is the <em>most dependent</em>: a vectorised solver you cannot test is unverifiable, an optimisation you have not profiled may be pointless, and a feature added to code that does not import cannot even run. <strong>You fix from the foundation up because each tier is the safety equipment for the one above it — and the glamorous tiers sit at the top.</strong></div>
+</div>
+</div>
+
+<div class="pitfall">
+<strong>Pitfall — starting with the fun part.</strong> The most common and most expensive mistake on a fragile scientific codebase is to open it and immediately reach for the <em>interesting</em> work: vectorise the solver, parallelise the Monte-Carlo, add the new orbit module. On code that does not yet <em>import</em>, or has <em>no tests</em>, this is building on sand. You vectorise a thermal solve with no parity test, so you cannot tell whether your fast version still gives the right answer. You parallelise before fixing the bare <code>except</code> that hides failures, so now failures are hidden <em>and</em> spread across cores. You add a feature to a package that crashes on import, so you cannot even run it. Every one of these efforts is wasted or worse, because the foundation it needed was never laid. Do P1–P2 first. Always.
+</div>
+
+<h4>6.11 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice D6-1.</strong> You inherit a PowerPy-like module with three known issues: <strong>(A)</strong> a stray unbalanced parenthesis that stops the file importing, <strong>(B)</strong> a cell-by-cell loop that makes the Monte-Carlo run slowly, and <strong>(C)</strong> no test anywhere for the thermal calculation. Put the three in the order you would tackle them, and justify each placement in one line. (Hint: which one blocks the others? Which one must exist before you dare to change the slow one?)
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D6-2.</strong> Write the <strong>"definition of done"</strong> for one brand-new module from Priority 5 — say <code>montecarlo.py</code> — as a checklist of concrete, checkable items. (Use the §6.8 checklist as your template, but make each item specific to <em>this</em> module: what is its single responsibility? what would its test file assert? what data does it need and how should it get it?)
+<div class="answerspace lines-10"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D6-3.</strong> A teammate proposes this plan for the week: "Day 1: vectorise the thermal solve. Day 2: add the new <code>environment_orbit.py</code> feature. Day 3: if there's time, fix the import error and add some tests." In two or three sentences, explain what is wrong with the ordering and rewrite the week in the right order, naming which roadmap priority each day belongs to.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> PowerPy is a <strong>two-layer</strong> codebase: a healthy modern layer (<code>schemas/ loader/ simulation/ render/</code>, dataclasses, a pipeline) and a fragile legacy layer (the flat <code>cell.py string.py section.py panel.py</code>, OCR-reconstructed with real defects). The roadmap fixes it from the foundation up, each item framed <em>problem → fix → why → effort</em>: <strong>P1 make it run</strong> (fix the OCR syntax defects so it imports; rename <code>string.py</code> so it stops shadowing the stdlib and breaking pandas; add <code>pyproject.toml</code> + <code>pip install -e .</code>), <strong>P2 reliability</strong> (a <code>tests/</code> suite — thermal parity, 2×2 sanity, physical-bound asserts; replace the bare <code>except: pass</code> in the ngspice wrapper with specific logged exceptions), <strong>P3 structure</strong> (split the monolith classes by concern; replace the 6-tuple with a dataclass + type hints), <strong>P4 performance</strong> (<em>profile first</em>, then vectorise the thermal solve, batch ngspice, parallelise Monte-Carlo with joblib), <strong>P5 new features</strong> (the Chapter 2 modules in the modern layout, each with tests). The sequencing rule that ties it together: <strong>run &amp; test → refactor → optimise → extend</strong>, because refactoring without tests is risky and optimising without profiling is guesswork — and the exciting work goes last precisely because it depends on everything below it. The pitfall to avoid above all: starting with the fun optimisation or feature work on code that does not yet run or have tests, which is building on sand.
+</div>

@@ -1,0 +1,342 @@
+<h3><span class="sec-num">5</span> From one cell to a whole array: the SCA hierarchy, and the two kinds of diode</h3>
+
+<p class="lede">A single space solar cell is almost uselessly small: about <strong>2.6&nbsp;V</strong> and half an amp. A satellite, meanwhile, wants a bus at perhaps <strong>50–100&nbsp;V</strong> drawing many amps. The entire gap between those two facts is bridged by <em>wiring</em> — putting cells end-to-end to build voltage, and side-by-side to build current. This section teaches that wiring from the ground up: the one electrical rule that governs all of it, the four-level object hierarchy PowerPy uses to model it (<code>string</code> → <code>section</code> → <code>panel</code> → array), one subtlety that catches everyone (the deep-copy "reference break"), and finally the single most-confused topic in the whole subject — the <strong>two different diodes</strong>, which look similar, sit in different places, and solve completely different problems.</p>
+
+<div class="keyidea">
+<span class="lbl">Key idea</span>
+<p>One cell ≈ 2.6&nbsp;V, ≈ 0.5&nbsp;A — far too little. You reach a useful bus by combining cells two ways: <strong>series adds voltage</strong>, <strong>parallel adds current</strong>. PowerPy models the build-up as a nested stack of Python objects — a <span class="term">string</span> (cells in series), a <span class="term">section</span> (strings in parallel), and a <span class="term">panel</span> (sections on a physical substrate) — and a command sent to any level <em>cascades down</em> to every cell inside it.</p>
+</div>
+
+<h4>5.1 The basic unit: the SCA</h4>
+
+<p>Before any wiring, fix what the "atom" of an array actually is. You do not lay a bare wafer onto a satellite — a raw cell would be cracked by launch vibration and stripped of charge by the first proton that hit it. The manufactured, flight-ready unit is the SCA.</p>
+
+<div class="term">
+<span class="lbl">Term — SCA (Solar Cell Assembly)</span>
+<p>An <strong>SCA</strong> is the basic manufactured building block: a solar cell <em>together with</em> its protective <strong>coverglass</strong> (a thin glass layer bonded on top that stops radiation and micrometeoroids) and its welded <strong>interconnects</strong> (the metal tabs that carry current in and out and let you weld one cell to the next). It arrives ready to lay straight onto the panel.</p>
+<p>You will very often see it written <strong>CIC</strong> — <strong>C</strong>ell-<strong>I</strong>nterconnect-<strong>C</strong>overglass — which spells out the same three ingredients. For our purposes <em>SCA and CIC mean the same thing</em>: the cell-plus-coverglass-plus-tabs unit you actually wire together.</p>
+</div>
+
+<p>So when the rest of this section says "cell," picture an SCA: a single small voltage source (≈2.6&nbsp;V) with two welded tabs ready to join to its neighbours. Everything from here is about how those tabs get joined.</p>
+
+<h4>5.2 The one rule that underpins everything: series vs parallel</h4>
+
+<p>If you remember nothing else from this section, remember the next box. Every voltage, current and power figure for a string, a section, a panel or an array is just this rule applied over and over. We will teach it slowly because almost every mistake later traces back to mixing up its two halves.</p>
+
+<div class="keyidea">
+<span class="lbl">The fundamental rule <span class="badge hot">EXAM-HOT</span></span>
+<p><strong>SERIES (cells end-to-end, like links in a chain):</strong></p>
+<ul>
+<li>The <strong>voltages ADD</strong>. Ten 2.6&nbsp;V cells in series make ≈26&nbsp;V. Stacking voltage sources nose-to-tail sums their voltages.</li>
+<li>The <strong>current is COMMON</strong> to every cell — the <em>same</em> current flows through all of them, because there is only one path. And that shared current can be no larger than the <strong>weakest cell</strong> can supply. A chain carries only as much current as its weakest link allows; one shaded or failed cell throttles the entire string. <em>(This single fact is the seed of the whole bypass-diode story in §5.7.)</em></li>
+</ul>
+<p><strong>PARALLEL (cells side-by-side, all tops joined, all bottoms joined):</strong></p>
+<ul>
+<li>The <strong>currents ADD</strong>. Twenty 0.48&nbsp;A strings in parallel deliver ≈9.6&nbsp;A. Each branch contributes its own current into the shared rails.</li>
+<li>The <strong>voltage is COMMON</strong> to every branch — they all sit between the same two rails, so they are all held at the <em>same</em> voltage.</li>
+</ul>
+</div>
+
+<div class="formula">
+<span class="badge api">series</span> &nbsp; V<sub>string</sub> = V<sub>1</sub> + V<sub>2</sub> + … + V<sub>n</sub> &nbsp; (≈ n · V<sub>cell</sub>) &nbsp;&nbsp;|&nbsp;&nbsp; I<sub>string</sub> = I<sub>1</sub> = I<sub>2</sub> = … (common, set by the weakest cell)<br>
+<span class="badge api">parallel</span> &nbsp; I<sub>section</sub> = I<sub>1</sub> + I<sub>2</sub> + … + I<sub>m</sub> &nbsp; (≈ m · I<sub>string</sub>) &nbsp;&nbsp;|&nbsp;&nbsp; V<sub>section</sub> = V<sub>1</sub> = V<sub>2</sub> = … (common)
+<div class="where">A handy mnemonic: <strong>"series sums volts, parallel sums amps."</strong> The quantity that is <em>not</em> summing is the one that is shared (common) across all members. Power is always P&nbsp;=&nbsp;V·I at whatever level you have just computed V and I.</div>
+</div>
+
+<div class="callout">
+<span class="lbl">Why "common" matters more than it looks</span>
+<p>The word <strong>common</strong> does the heavy lifting. In a series string the <em>current</em> is common, so a problem with current (a weak cell) is a problem for the whole string. In a parallel section the <em>voltage</em> is common, so every string is forced to the same voltage whether it likes it or not — which is precisely how a healthy string can end up driving current <em>backwards</em> through a weak neighbour (the seed of the <em>blocking</em>-diode story in §5.7). Keep asking, at each level: <em>which quantity is common here?</em></p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 650 150" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.bx{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.4} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .ar{stroke:#b9851a;stroke-width:2;fill:none}</style>
+<rect class="bx" x="10" y="58" width="56" height="32" rx="4"/><text class="tx" x="38" y="78" text-anchor="middle">cell</text>
+<rect class="bx" x="110" y="50" width="120" height="48" rx="4"/><text class="tx" x="170" y="44" text-anchor="middle" font-size="10">string + bypass∥, blocking⊳</text>
+<rect x="120" y="64" width="13" height="16" fill="#cfe0ef" stroke="#11507a"/><rect x="140" y="64" width="13" height="16" fill="#cfe0ef" stroke="#11507a"/><rect x="160" y="64" width="13" height="16" fill="#cfe0ef" stroke="#11507a"/><rect x="180" y="64" width="13" height="16" fill="#cfe0ef" stroke="#11507a"/><rect x="200" y="64" width="13" height="16" fill="#cfe0ef" stroke="#11507a"/>
+<polygon points="214,64 222,64 218,58" fill="#9a3b3b"/>
+<rect class="bx" x="278" y="42" width="140" height="64" rx="4"/><text class="tx" x="348" y="36" text-anchor="middle" font-size="10">section (∥ strings)</text>
+<rect x="288" y="50" width="120" height="12" fill="#cfe0ef" stroke="#11507a"/><rect x="288" y="68" width="120" height="12" fill="#cfe0ef" stroke="#11507a"/><rect x="288" y="86" width="120" height="12" fill="#cfe0ef" stroke="#11507a"/>
+<rect class="bx" x="466" y="34" width="150" height="80" rx="4"/><rect x="478" y="50" width="126" height="50" fill="#fbf4e2" stroke="#c9a227"/><text class="tx" x="541" y="126" text-anchor="middle" font-size="10">panel → array</text>
+<path class="ar" d="M70 74 H106"/><polygon points="106,74 100,70 100,78" fill="#b9851a"/><path class="ar" d="M234 74 H274"/><polygon points="274,74 268,70 268,78" fill="#b9851a"/><path class="ar" d="M422 74 H462"/><polygon points="462,74 456,70 456,78" fill="#b9851a"/>
+</svg>
+<figcaption>Figure 5.1 — The PowerPy object hierarchy, each level forwarding commands to its children.</figcaption></figure>
+
+<h4>5.3 The PowerPy hierarchy: four nested objects</h4>
+
+<p>PowerPy mirrors the physical build-up with a stack of Python objects. Each level is a real class; you construct a level from the level below it. Read the stack bottom-up — it is just the series/parallel rule made into software.</p>
+
+<div class="callout">
+<span class="lbl">The four levels at a glance</span>
+<ul>
+<li><span class="term">cell</span> — one SCA. ≈2.6&nbsp;V, ≈0.5&nbsp;A. (Built and aged in Sections 2–3.)</li>
+<li><span class="term">string</span> — cells wired in <strong>SERIES</strong>. Builds voltage. Also carries an intra-string resistance and one or more <em>blocking diodes</em>.</li>
+<li><span class="term">section</span> — strings wired in <strong>PARALLEL</strong>. Builds current. Carries a section resistance.</li>
+<li><span class="term">panel</span> — one or more sections mounted on a <strong>substrate</strong> (the physical board) with a total area. Owns the thermal behaviour (Section 7).</li>
+<li>array — combines panels (the top of the tree).</li>
+</ul>
+</div>
+
+<h4>5.3.1 string — cells in series</h4>
+
+<p>A <span class="term">string</span> is cells joined end-to-end. Because they are in series, the string's voltage is roughly the cell voltage times the number of cells, and the string's current is just one cell's current (the common current). PowerPy gives you two constructors:</p>
+
+<div class="formula">
+<span class="badge api">string.fromSingleCell(cell, n_series, resistance, diodeType, n_diodes_series, n_diodes_parallel)</span>
+<div class="where">Takes <em>one</em> prototype cell and <strong>clones it <code>n_series</code> times</strong> to make a string of identical cells. <code>resistance</code> is the intra-string wiring resistance (ohms). <code>diodeType</code> chooses the blocking-diode model; <code>n_diodes_series</code> / <code>n_diodes_parallel</code> set how many blocking diodes sit at the string output and how they are arranged. Resulting voltage ≈ <code>n_series</code> × cell voltage.</div>
+</div>
+
+<div class="formula">
+<span class="badge api">string.fromCells(list_of_cells)</span>
+<div class="where">Builds a string from an explicit <em>list</em> of cell objects, in series, in the order given. Use this when the cells are <em>not</em> all identical (e.g. you want to model one deliberately weaker cell).</div>
+</div>
+
+<h4>5.3.2 section — strings in parallel</h4>
+
+<p>A <span class="term">section</span> places strings side-by-side in parallel. The currents add; the voltage is common. Three constructors, including a convenient shortcut that builds the whole section straight from a single cell:</p>
+
+<div class="formula">
+<span class="badge api">section.fromSingleString(string, n_parallel, resistance)</span>
+<div class="where">Clones one prototype <code>string</code> <code>n_parallel</code> times and wires the clones in parallel. <code>resistance</code> is the section-level wiring resistance. Resulting current ≈ <code>n_parallel</code> × string current.</div>
+</div>
+
+<div class="formula">
+<span class="badge api">section.fromStrings(list)</span>
+<div class="where">Builds a section from an explicit list of (possibly different) string objects, in parallel.</div>
+</div>
+
+<div class="formula">
+<span class="badge api">section.fromSingleCell(cell, n_parallel, n_serial, resistance, diodeType)</span>
+<div class="where">The one-shot shortcut: from a single prototype cell it builds <code>n_serial</code> cells per string <em>and</em> <code>n_parallel</code> strings in parallel in a single call — i.e. it does §5.3.1 and the parallel step together. Handy for a uniform array; reach for the longer route when you need non-uniform parts.</div>
+</div>
+
+<h4>5.3.3 panel — sections on a substrate</h4>
+
+<div class="formula">
+<span class="badge api">panel.fromSections(list, substrate, area)</span>
+<div class="where"><code>list</code> is the sections mounted on this panel; <code>substrate</code> is the physical board the cells are bonded to (it carries the <strong>thermal properties</strong> — how the panel heats up in sun and cools in shadow); <code>area</code> is the total panel area. The panel is the level that owns <em>temperature</em>, which is why Section 7 (thermal) operates here.</div>
+</div>
+
+<div class="term">
+<span class="lbl">Term — substrate</span>
+<p>The <strong>substrate</strong> is the rigid (or flexible) board onto which the SCAs are bonded. Electrically it is just a carrier, but <em>thermally</em> it is central: its absorptivity, emissivity and heat capacity set how hot the cells get, and cell temperature feeds straight back into the four operating-point numbers (Section 3). That is why the substrate lives at the <code>panel</code> level — the level that computes temperature.</p>
+</div>
+
+<p>Above the panel sits the <strong>array</strong>, which combines panels into the complete wing or body-mounted surface. The same rule still applies at every join: are these panels effectively adding voltage (series) or current (parallel)?</p>
+
+<h4>5.4 Cascading commands: one call reaches every cell</h4>
+
+<p>Because the objects nest, PowerPy makes a command on a <em>higher</em> object forward automatically to <em>all</em> its children. You set a condition once, at the level it applies, and it propagates down to every cell inside. This is what makes a whole-panel simulation a one-liner.</p>
+
+<div class="callout">
+<span class="lbl">Cascading (forwarding) commands</span>
+<p>Examples — each call below reaches every cell beneath the object it is called on:</p>
+<ul>
+<li><span class="badge api">string.setTemperature(T)</span> — set temperature on every cell in the string.</li>
+<li><span class="badge api">section.addLossI(name, factor)</span> — add a named current-loss factor to every cell in every string of the section.</li>
+<li><span class="badge api">panel.setSeason(s)</span> — set the season (sun-distance/illumination) for the whole panel.</li>
+<li><span class="badge api">panel.setDose(di, dv)</span> — apply the current/voltage radiation dose to every cell on the panel.</li>
+</ul>
+<p>The full forwarding set: <code>setTemperature</code>, <code>setDose</code>, <code>setSeason</code>, <code>addLossI</code>/<code>addLossV</code>, <code>removeLosses</code>, <code>setAngles</code>, <code>setModel</code>, <code>setDiode</code>, <code>setCell</code>. Call any of these on a string, section, panel or array and it walks the tree down to the leaves.</p>
+</div>
+
+<h4>5.5 The reference break: PowerPy DEEP-COPIES your prototype</h4>
+
+<p>Here is the subtlety that trips up almost everyone the first time. When you build a string or section <em>from a prototype</em> (a single cell, or a single string), PowerPy does not store a <em>reference</em> to your prototype — it stores an independent <strong>deep copy</strong>. The clones inside the container are their own objects, disconnected from the original.</p>
+
+<div class="term">
+<span class="lbl">Term — deep copy vs reference</span>
+<p>A <strong>reference</strong> is a second name for the <em>same</em> object: change it through either name and both see the change. A <strong>deep copy</strong> is a brand-new, fully independent duplicate: changing the original afterwards has <em>no effect</em> on the copy, and vice versa. PowerPy's <code>fromSingleCell</code>/<code>fromSingleString</code> constructors make deep copies — so the cells <em>inside</em> the string are not the cell you handed in.</p>
+</div>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — editing the prototype after the build does nothing <span class="badge hot">EXAM-HOT</span></span>
+<p>This is a <em>silent</em> failure: no error is raised, the numbers are just quietly wrong. Set properties at the <strong>right level</strong>, or <strong>before</strong> you build. Tweaking the prototype cell <em>after</em> building the string changes nothing inside the string — those cells were copied at construction time and have moved on independently. To change cells already inside a string, either (a) set the property on the prototype <em>before</em> calling the constructor, or (b) call a cascading command (§5.4) on the <em>string</em> so it reaches the copies.</p>
+</div>
+
+<pre><code># WRONG — modifying the prototype AFTER the build does nothing to the string
+cell = Cell(); cell.setTemperature(28)
+s = string.fromSingleCell(cell, 10, 0.03, diodeType, 1, 1)  # 10 deep copies taken HERE
+cell.setTemperature(-80)        # changes only the lonely prototype...
+# ...the 10 cells inside s are STILL at 28 degC. No effect.
+
+# RIGHT (a) — set it on the prototype BEFORE building
+cell = Cell(); cell.setTemperature(-80)
+s = string.fromSingleCell(cell, 10, 0.03, diodeType, 1, 1)  # copies inherit -80
+
+# RIGHT (b) — set it on the STRING, so the cascade reaches every copy
+s.setTemperature(-80)           # forwards to all 10 internal cells (see 5.4)</code></pre>
+
+<div class="callout">
+<span class="lbl">Why this is a feature, not a bug</span>
+<p>Deep copying buys <strong>independence</strong>. Once cells are inside a string they can be aged, heated or shaded individually without your edits leaking back to some shared template — exactly what you need to model one shadowed string among twenty healthy ones. The price is that you must aim your edits at the right object. When a change "doesn't take," your first suspicion should be: <em>did I edit the prototype after the deep copy was made?</em></p>
+</div>
+
+<h4>5.6 How it is wired inside: a netlist sketch</h4>
+
+<p>PowerPy ultimately turns the hierarchy into a circuit netlist (SPICE-style). You do not need the literal text, but a mental picture of the nodes makes the diodes in §5.7 obvious.</p>
+
+<div class="callout">
+<span class="lbl">Node picture (conceptual)</span>
+<ul>
+<li><strong>Inside a string</strong> the cells chain <em>node to node</em>: the top of <code>XCell_0</code> is the bottom of <code>XCell_1</code>, and so on (<code>XCell_0</code>, <code>XCell_1</code>, <code>XCell_2</code>, …). One continuous ladder from the string bottom to the string top — the physical picture of "series."</li>
+<li><strong>A section</strong> gives every string a shared <em>top rail</em> and <em>bottom rail</em> and ties all the string tops to the top rail and all the string bottoms to the bottom rail — the physical picture of "parallel."</li>
+<li><strong>The blocking diode</strong> sits <em>between each string's top and the top rail</em>: current can leave the string into the rail, but the diode stops the rail pushing current back down into the string.</li>
+</ul>
+</div>
+
+<h4>5.7 The two diodes — taught slowly, then contrasted <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>This is the part students confuse most, so we go one diode at a time and only compare them at the end. First, a one-line reminder of what <em>any</em> diode does: a diode is a one-way valve for current — it conducts when forward-biased past its turn-on voltage (≈0.7&nbsp;V for silicon) and blocks when reverse-biased. The two diodes below differ only in <em>where they sit</em> and <em>which disaster they prevent</em>.</p>
+
+<h4>5.7.1 The BYPASS diode (a.k.a. shunt diode)</h4>
+
+<div class="term">
+<span class="lbl">Term — bypass diode (shunt diode)</span>
+<p>A <strong>bypass diode</strong> is wired in <strong>reverse-parallel</strong> across each cell (or each small group of cells) — i.e. it sits <em>across</em> the cell, pointing the "wrong" way so that in normal operation it is reverse-biased and <strong>OFF</strong> (it blocks, and has no effect on the healthy cell). It is there purely as an emergency relief path.</p>
+</div>
+
+<p>Walk through the emergency, because it is exactly the series rule biting. Suppose one cell in a long series string gets <strong>shaded, cracked or fails</strong>, so it can no longer produce the current its healthy neighbours are producing. But the string current is <em>common</em> — the good cells insist on pushing their full current through every cell, including the weak one. The weak cell cannot supply that much, so it is forced into <strong>reverse bias</strong>: the string drives current <em>backwards</em> through it, and the cell starts dropping a large <em>negative</em> voltage and dissipating power as heat (a "hotspot" that can crack the cell or scorch the panel).</p>
+
+<p>Now the bypass diode earns its keep. As the weak cell's reverse voltage grows, it eventually reaches the diode's turn-on (≈0.7&nbsp;V in the reverse direction across the cell). The diode switches <strong>ON</strong> and carries the string's current <em>around</em> the bad cell. This does two things at once: the string keeps flowing (you lose that cell's contribution but not the whole string), and the bad cell's reverse voltage is <strong>clamped to about −0.7&nbsp;V</strong>, capping the power it can dissipate and saving it from thermal runaway.</p>
+
+<div class="callout">
+<span class="lbl">In PowerPy</span>
+<p>The bypass diode is the <code>DD_Shunt</code> element inside each cell's subcircuit, and is available standalone as the <code>shuntdiode</code> element. (The name <em>shunt</em> reflects that it shunts — diverts — current around the cell.)</p>
+</div>
+
+<h4>5.7.2 The BLOCKING diode</h4>
+
+<div class="term">
+<span class="lbl">Term — blocking diode</span>
+<p>A <strong>blocking diode</strong> is wired in <strong>series at the END (output) of each string</strong>. It points "with" the string's normal current, so it lets current flow <em>out</em> of the string into the bus — but it <strong>blocks</strong> any current trying to flow <em>back into</em> the string from outside.</p>
+</div>
+
+<p>Why would current ever try to flow backwards into a string? Two classic situations, both flowing straight from "voltage is common in parallel" (§5.2):</p>
+<ul>
+<li><strong>A weak neighbour on the same bus.</strong> Parallel strings share rails, so they are all forced to the same voltage. A shadowed or unusually <em>cold</em> string may have a lower (or mismatched) operating point than its bright neighbours, and the brighter strings can then drive current <em>down into</em> the weak one — wasting power and stressing it. The blocking diode at the weak string's output refuses that reverse current.</li>
+<li><strong>The battery at night.</strong> In eclipse the array makes no power, but the spacecraft battery is still sitting on the bus at a real voltage. Without protection it would push current <em>back into</em> the dark array (dissipating the battery into the cells). The blocking diode stops this back-feed cold.</li>
+</ul>
+
+<div class="callout">
+<span class="lbl">In PowerPy</span>
+<p>Blocking diodes are configured on the <code>string</code> via <code>n_diodes_series</code> and <code>n_diodes_parallel</code> (with <code>diodeType</code> choosing the model) — the same arguments you saw in <code>string.fromSingleCell(...)</code> in §5.3.1. They live at the string's output, between the string top and the section's top rail (§5.6).</p>
+</div>
+
+<h4>5.7.3 Contrast: they solve DIFFERENT problems</h4>
+
+<p>Now, and only now, put them side by side. The single most useful question to tell them apart is <em>"across a cell, or in series with a string?"</em></p>
+
+<table>
+<thead>
+<tr><th>&nbsp;</th><th>BYPASS (shunt) diode</th><th>BLOCKING diode</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Where it sits</strong></td><td><em>Across</em> a cell (or small group), in reverse-parallel</td><td><em>In series</em> at the end (output) of a whole string</td></tr>
+<tr><td><strong>Normal state</strong></td><td>OFF (reverse-biased, no effect)</td><td>ON (conducts the string's output current)</td></tr>
+<tr><td><strong>Acts when…</strong></td><td>a cell goes weak/shaded/failed and is forced into reverse bias</td><td>something outside tries to push current back into the string</td></tr>
+<tr><td><strong>What it does</strong></td><td>carries string current <em>around</em> the bad cell; clamps the cell to ≈−0.7&nbsp;V</td><td>passes current <em>out</em>, blocks current coming <em>in</em></td></tr>
+<tr><td><strong>Protects against</strong></td><td><strong>internal</strong> reverse bias / hotspot of one weak cell</td><td><strong>external</strong> back-feed (bright neighbours, battery at night)</td></tr>
+<tr><td><strong>PowerPy</strong></td><td><code>DD_Shunt</code> / <code>shuntdiode</code></td><td><code>n_diodes_series</code>, <code>n_diodes_parallel</code> on the string</td></tr>
+</tbody>
+</table>
+
+<div class="pitfall">
+<span class="lbl">Pitfall — do not swap these two <span class="badge hot">EXAM-HOT</span></span>
+<p>The classic exam error is to name the wrong diode for a fault. Anchor it with the placement: <strong>bypass = aCROSS a cell, internal protection (hotspot)</strong>; <strong>blocking = in series with a string, external protection (back-feed)</strong>. If the fault is "one cell in a string is shaded and overheating," that is the <em>bypass</em> diode. If the fault is "current is flowing backwards into a string from the bus / from the battery at night," that is the <em>blocking</em> diode. They are <em>not</em> interchangeable and a design needs both.</p>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 220" xmlns="http://www.w3.org/2000/svg" font-size="10.5">
+<style>.w{stroke:#1d2733;stroke-width:1.5;fill:none} .cell{fill:#cfe0ef;stroke:#0b3d63} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<text class="tx" x="105" y="18" text-anchor="middle" fill="#0b3d63">SERIES string — bypass diodes</text>
+<rect class="cell" x="60" y="30" width="46" height="24"/><polygon points="120,36 120,48 132,42" fill="#fbe3df" stroke="#9a3b3b"/><line class="w" x1="120" y1="30" x2="120" y2="54"/><line class="w" x1="60" y1="30" x2="40" y2="30"/><line class="w" x1="40" y1="30" x2="40" y2="54"/><rect class="cell" x="60" y="68" width="46" height="24"/><polygon points="120,74 120,86 132,80" fill="#fbe3df" stroke="#9a3b3b"/><line class="w" x1="120" y1="68" x2="120" y2="92"/><line class="w" x1="60" y1="68" x2="40" y2="68"/><line class="w" x1="40" y1="68" x2="40" y2="92"/><rect class="cell" x="60" y="106" width="46" height="24"/><polygon points="120,112 120,124 132,118" fill="#fbe3df" stroke="#9a3b3b"/><line class="w" x1="120" y1="106" x2="120" y2="130"/><line class="w" x1="60" y1="106" x2="40" y2="106"/><line class="w" x1="40" y1="106" x2="40" y2="130"/><rect class="cell" x="60" y="144" width="46" height="24"/><polygon points="120,150 120,162 132,156" fill="#fbe3df" stroke="#9a3b3b"/><line class="w" x1="120" y1="144" x2="120" y2="168"/><line class="w" x1="60" y1="144" x2="40" y2="144"/><line class="w" x1="40" y1="144" x2="40" y2="168"/>
+<line class="w" x1="40" y1="30" x2="40" y2="20"/><line class="w" x1="132" y1="42" x2="132" y2="200"/><line class="w" x1="106" y1="42" x2="132" y2="42"/>
+<text class="tx" x="138" y="120" fill="#9a3b3b" font-size="9">bypass ∥ each cell</text>
+<text class="tx" x="350" y="18" text-anchor="middle" fill="#0b3d63">PARALLEL strings — blocking diodes</text>
+<rect class="cell" x="280" y="40" width="34" height="80"/><polygon points="291,130 303,130 297,142" fill="#cfe0ef" stroke="#0b3d63"/><line class="w" x1="297" y1="120" x2="297" y2="130"/><line class="w" x1="297" y1="142" x2="297" y2="170"/><rect class="cell" x="340" y="40" width="34" height="80"/><polygon points="351,130 363,130 357,142" fill="#cfe0ef" stroke="#0b3d63"/><line class="w" x1="357" y1="120" x2="357" y2="130"/><line class="w" x1="357" y1="142" x2="357" y2="170"/><rect class="cell" x="400" y="40" width="34" height="80"/><polygon points="411,130 423,130 417,142" fill="#cfe0ef" stroke="#0b3d63"/><line class="w" x1="417" y1="120" x2="417" y2="130"/><line class="w" x1="417" y1="142" x2="417" y2="170"/>
+<line class="w" x1="270" y1="170" x2="420" y2="170"/><text class="tx" x="345" y="186" text-anchor="middle" font-size="9" fill="#5d6b79">common bus</text>
+<text class="tx" x="345" y="158" text-anchor="middle" font-size="9" fill="#0b3d63">blocking ⊳ in series</text>
+</svg>
+<figcaption>Figure 5.2 — Two different diodes: a bypass diode across every cell (left) versus a blocking diode in series with each string feeding the bus (right).</figcaption></figure>
+
+<h4>5.8 Worked examples (with units)</h4>
+
+<p>These apply the §5.2 rule level by level. Watch which quantity adds and which is common at each step — that is the whole exercise.</p>
+
+<div class="worked">
+<span class="lbl">Worked 5A — a 10-cell string, then subtract the blocking diode</span>
+<p><strong>Given:</strong> 10 identical cells in series, each at its max-power point V<sub>mp</sub>&nbsp;=&nbsp;2.35&nbsp;V, I<sub>mp</sub>&nbsp;=&nbsp;0.48&nbsp;A. One blocking diode at the output with a forward drop of ≈0.7&nbsp;V.</p>
+<div class="step"><strong>1. String voltage (series ⇒ volts ADD):</strong> &nbsp; V<sub>string</sub> = 10 × 2.35&nbsp;V = <strong>23.5&nbsp;V</strong>.</div>
+<div class="step"><strong>2. String current (series ⇒ current COMMON):</strong> &nbsp; I<sub>string</sub> = I<sub>mp</sub> of one cell = <strong>0.48&nbsp;A</strong>. <span class="small">(it does NOT multiply by 10 — there is one path)</span></div>
+<div class="step"><strong>3. String power:</strong> &nbsp; P = V·I = 23.5&nbsp;V × 0.48&nbsp;A = 11.28&nbsp;W ≈ <strong>11.3&nbsp;W</strong>.</div>
+<div class="step"><strong>4. Subtract the blocking-diode drop:</strong> &nbsp; the diode is in series at the output, so its ≈0.7&nbsp;V comes off the <em>voltage</em>: &nbsp; V<sub>out</sub> = 23.5&nbsp;V − 0.7&nbsp;V = <strong>22.8&nbsp;V</strong>. The current is unchanged at 0.48&nbsp;A (a series element shares the common current).</div>
+<div class="check">Units and rule both check out: ten 2.35&nbsp;V cells gave 23.5&nbsp;V (volts summed), the current stayed at one cell's 0.48&nbsp;A (common in series), and the one series diode shaved 0.7&nbsp;V off the voltage only. Output: <strong>22.8&nbsp;V at 0.48&nbsp;A</strong>. ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 5B — 20 such strings in parallel make a section</span>
+<p><strong>Given:</strong> 20 copies of the Worked-5A string (each 22.8&nbsp;V output at 0.48&nbsp;A) wired in parallel into a section. Ignore the small section resistance.</p>
+<div class="step"><strong>1. Section voltage (parallel ⇒ voltage COMMON):</strong> &nbsp; V<sub>section</sub> ≈ <strong>22.8&nbsp;V</strong>. <span class="small">(it stays at one string's voltage — it does NOT multiply by 20)</span></div>
+<div class="step"><strong>2. Section current (parallel ⇒ currents ADD):</strong> &nbsp; I<sub>section</sub> = 20 × 0.48&nbsp;A = <strong>9.6&nbsp;A</strong>.</div>
+<div class="step"><strong>3. Section power:</strong> &nbsp; P = V·I = 22.8&nbsp;V × 9.6&nbsp;A = 218.88&nbsp;W ≈ <strong>219&nbsp;W</strong>.</div>
+<div class="check"><strong>The mirror of 5A.</strong> Going to parallel flips which quantity does what: in series we summed <em>volts</em> and kept current common; in parallel we sum <em>amps</em> and keep voltage common. So the section is ≈22.8&nbsp;V (not 20×22.8) at 9.6&nbsp;A (= 20×0.48). The most common slip is multiplying the voltage by 20 — that would violate "voltage is common in parallel." ✓</div>
+</div>
+
+<div class="worked">
+<span class="lbl">Worked 5C — sizing for a target bus voltage</span>
+<p><strong>Question:</strong> using the same 2.35&nbsp;V cells, how many in series do you need to reach a <strong>70&nbsp;V</strong> bus?</p>
+<div class="step"><strong>Series ⇒ volts add, so n ≈ target ÷ cell voltage:</strong> &nbsp; n = 70&nbsp;V ÷ 2.35&nbsp;V ≈ 29.8.</div>
+<div class="step"><strong>Round up (you cannot have a fraction of a cell, and rounding down would fall short):</strong> &nbsp; n = <strong>30 cells</strong>.</div>
+<div class="check">30 × 2.35&nbsp;V = 70.5&nbsp;V, a hair above 70&nbsp;V before subtracting the blocking-diode drop (−0.7&nbsp;V ⇒ ≈69.8&nbsp;V) and any wiring losses — in a real design you would add a cell or two of margin so the <em>hot, end-of-life</em> string (lowest voltage, Section 3) still clears the bus. ✓</div>
+</div>
+
+<h4>5.9 Why one weak cell drags the whole string — a Socratic ladder</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — If one cell in a long series string is weak, why does it drag down the WHOLE string, and what stops it overheating?</div>
+
+<div class="socratic">
+<div class="q">Q1. In a series string, which quantity is common to every cell — the voltage or the current?</div>
+<div class="answer">The <strong>current</strong>. There is a single path through the string, so the <em>same</em> current flows through every cell. (The voltages, by contrast, add up — §5.2.) This one fact is the root of everything that follows.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q2. The healthy cells are producing, say, 0.48&nbsp;A. What is the weak (shaded) cell now required to do?</div>
+<div class="answer">It is required to pass that same <strong>0.48&nbsp;A</strong>, because the current is common — the string can only carry one current, and the strong cells are driving it. But a shaded cell can only <em>generate</em> a much smaller current on its own. It is being asked to carry more current than it can produce.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q3. What does being forced to pass more current than it can generate do to the weak cell's voltage?</div>
+<div class="answer">It pushes the cell into <strong>reverse bias</strong>. Instead of <em>adding</em> voltage like its healthy neighbours, the weak cell now <em>drops</em> a negative voltage — the rest of the string is effectively driving current backwards through it. And current × a large reverse voltage = real power dissipated <em>as heat inside that one cell</em> (the dreaded hotspot). This is also why the string's overall output sags: the weak cell is now subtracting voltage instead of contributing it.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Q4. So what does the bypass diode do at that moment, and what does it protect?</div>
+<div class="answer">As the weak cell's reverse voltage climbs to ≈0.7&nbsp;V, the bypass diode across it turns <strong>ON</strong> and carries the string's 0.48&nbsp;A <em>around</em> the bad cell. That <strong>clamps the bad cell's reverse voltage to ≈−0.7&nbsp;V</strong>, capping the heat it can dissipate (protecting it from the hotspot), and keeps the rest of the string delivering current. You lose that one cell's contribution, but you save the cell and keep the string alive — instead of losing the whole string and possibly cracking a cell. <em>(Note which diode this is: the </em>bypass<em>, because the danger is internal reverse bias — contrast §5.7.3.)</em></div>
+</div>
+</div>
+
+<h4>5.10 Practice</h4>
+
+<div class="practice">
+<span class="lbl">Practice 5-1 — compute a section's bus V / I / P</span>
+<p>A section is built from <strong>16 strings in parallel</strong>. Each string is <strong>12 cells in series</strong>, each cell at V<sub>mp</sub>&nbsp;=&nbsp;2.30&nbsp;V, I<sub>mp</sub>&nbsp;=&nbsp;0.50&nbsp;A, and each string ends in one blocking diode of ≈0.7&nbsp;V drop. Ignore wiring resistance. Find: (a) one string's output voltage and current; (b) the section's voltage; (c) the section's current; (d) the section's power. State, for each, whether you were adding the quantity or keeping it common.</p>
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 5-2 — which diode protects, and why</span>
+<p>For each fault, name the diode (bypass or blocking) that protects against it and give the one-line reason:</p>
+<p>(a) At night, the spacecraft battery sits on the bus and would otherwise push current back into the dark array. &nbsp; (b) In sunlight, one cell partway up a 30-cell string is shaded by an antenna and begins to overheat. &nbsp; (c) One whole string runs cold and mismatched, and its brighter parallel neighbours start driving current down into it.</p>
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice 5-3 — sizing, plus a reference-break trap</span>
+<p>(a) Using 2.30&nbsp;V cells, how many in series are needed for a <strong>50&nbsp;V</strong> bus? Show the division and the rounding, and say why you round that way. &nbsp; (b) An engineer writes <code>cell.setDose(0,0)</code>, then <code>s = string.fromSingleCell(cell, 12, 0.03, dt, 1, 1)</code>, then <code>cell.setDose(20,20)</code>, and is surprised the string still behaves as brand-new. In one or two sentences, explain what went wrong and give the correct fix.</p>
+<div class="answerspace lines-8"></div>
+</div>
+
+<hr class="sep">
+<p class="small">Looking ahead: §5 combined cells into strings, sections and panels using the series/parallel rule, and installed the two protective diodes. The panel level introduced a <em>substrate</em> with thermal properties — and temperature, as Section 3 showed, moves every operating-point number. Section 7 picks up exactly there: how the panel computes its own temperature from sun, shadow and the substrate, and feeds it back down the hierarchy.</p>

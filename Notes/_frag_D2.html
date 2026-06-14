@@ -1,0 +1,257 @@
+<!-- ===================================================================
+     CHAPTER (Design & Performance) · SECTION 2 — Structuring a Python
+     module and package well
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     Practice IDs: D2-1, D2-2, D2-3  (matched in _sol_D2.html)
+     Figures injected later from the FIG markers.
+     =================================================================== -->
+
+<h3><span class="sec-num">2</span> Structuring a Python module and package well</h3>
+
+<p class="lede">A simulator is not one big program; it is a <em>pile of files</em> that have to find one another. Where you put those files — and what you name them — decides whether a newcomer can read the code, whether you can swap a file format without re-deriving the physics, and (we will see a real PowerPy example) whether an innocent-looking filename can silently break <code>pandas</code>. This section teaches the vocabulary of Python's file organisation from the ground up — <strong>module</strong>, <strong>package</strong>, <code>__init__.py</code>, the public API, absolute and relative imports — then uses PowerPy's own layout as the model to copy, and ends on the trap that gives this section its bite: a module named <code>string.py</code> that shadows the standard library. We define every term the moment it appears.</p>
+
+<h4>2.1 The two foundational words: module and package</h4>
+
+<p>Everything in this section is built on two ideas. Get these exactly right and the rest follows.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>module</strong> — a single Python file. One file <code>cell.py</code> <em>is</em> a module named <code>cell</code>. When you write <code>import cell</code>, Python finds the file <code>cell.py</code>, runs it top to bottom once, and hands you back an object whose attributes are the names defined inside (its functions, classes, variables). "Module" and ".py file" are, to a first approximation, the same thing.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>package</strong> — a <em>folder</em> of modules that Python treats as one importable unit, marked by a file named <code>__init__.py</code> inside it. The folder name becomes the package name. A package can hold sub-folders that are themselves packages — those are <strong>subpackages</strong> — so a package is a <em>tree</em> of folders and files, not a flat list.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> A <strong>module is a file; a package is a folder of modules.</strong> The folder earns the title "package" by containing an <code>__init__.py</code>. PowerPy is a package: the top-level folder <code>powerpy/</code> contains an <code>__init__.py</code> and a set of subpackages — <code>schemas/</code>, <code>loader/</code>, <code>simulation/</code>, <code>render/</code> — each of which is again a folder of modules. So <code>powerpy.simulation.solver</code> reads literally as "the <code>solver.py</code> module, inside the <code>simulation</code> subpackage, inside the <code>powerpy</code> package": folder, folder, file.</div>
+
+<div class="callout"><span class="lbl">Note — the dotted name is a path</span> The dots in <code>powerpy.simulation.solver</code> mirror the folders on disk exactly the way the slashes do in <code>powerpy/simulation/solver.py</code>. Reading an import statement, you can always recover <em>where the file lives</em> by replacing each dot with a folder boundary and adding <code>.py</code> at the end. This one-to-one mapping between dotted names and disk layout is why a tidy folder structure and tidy imports are the same achievement.</div>
+
+<h4>2.2 PowerPy's layout — the model to copy</h4>
+
+<p>PowerPy already uses a clean, layered layout. We teach it here not just as "where PowerPy keeps things" but as the <em>pattern you should imitate</em> for any simulator. There are four subpackages, and they form a stack — each one is allowed to use the layers <em>below</em> it, never above.</p>
+
+<table>
+  <caption>The four subpackages of <code>powerpy/</code>, listed bottom of the stack to top. Each layer may depend only on the layers below it.</caption>
+  <thead>
+    <tr><th>Layer</th><th>Subpackage</th><th>Its one job</th><th>May use</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1 (bottom)</td><td><code>schemas/</code></td><td>Describe the <em>data shapes</em> — dataclasses for a cell, a layout, the fluxes. Pure structure, no behaviour.</td><td>nothing (only the standard library)</td></tr>
+    <tr><td>2</td><td><code>loader/</code></td><td>Read JSON and other files <em>into</em> those shapes — parsing, validation, turning text on disk into <code>schemas</code> objects.</td><td><code>schemas</code></td></tr>
+    <tr><td>3</td><td><code>simulation/</code></td><td>The physics. Compute what the array does: <code>cell_level</code>, <code>string_level</code>, <code>section_level</code>, <code>panel_level</code>, <code>array_level</code>, plus <code>environment</code>, <code>solver</code>, <code>pipeline</code>.</td><td><code>schemas</code>, <code>loader</code></td></tr>
+    <tr><td>4 (top)</td><td><code>render/</code></td><td>Turn results into output for humans — <code>figures</code>, <code>report</code>.</td><td><code>schemas</code>, <code>loader</code>, <code>simulation</code></td></tr>
+  </tbody>
+</table>
+
+<div class="term"><span class="lbl">Term</span> <strong>dataclass</strong> — a small Python class whose main purpose is to <em>hold named fields of data</em>, written with the <code>@dataclass</code> decorator so Python generates the boilerplate (the constructor, equality, a readable <code>repr</code>) for you. A <code>schemas</code> dataclass for a cell is just a labelled bundle: <code>area</code>, <code>Vmp</code>, <code>Imp</code>, and so on. It carries the <em>shape</em> of the data without doing any physics.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>layer / layering</strong> — organising code into levels where each level is allowed to call only the levels beneath it. The arrows of dependency all point <em>one way</em>, downward. A layered design has no cycles: <code>render</code> reaches down to <code>simulation</code>, which reaches down to <code>loader</code> and <code>schemas</code> — but <code>schemas</code> never reaches <em>up</em> to know about rendering. Lower layers are ignorant of higher ones.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 210" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .pk{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.3}</style>
+<rect class="pk" x="160" y="10" width="150" height="24" rx="4"/><text class="tx" x="235" y="26" text-anchor="middle">powerpy/  (__init__.py)</text>
+<rect class="pk" x="40" y="60" width="96" height="24" rx="4"/><text class="tx" x="88" y="76" text-anchor="middle" font-size="9">render/</text><line x1="235" y1="34" x2="88" y2="60" stroke="#5d6b79"/><rect class="pk" x="148" y="60" width="96" height="24" rx="4"/><text class="tx" x="196" y="76" text-anchor="middle" font-size="9">simulation/</text><line x1="235" y1="34" x2="196" y2="60" stroke="#5d6b79"/><rect class="pk" x="256" y="60" width="96" height="24" rx="4"/><text class="tx" x="304" y="76" text-anchor="middle" font-size="9">loader/</text><line x1="235" y1="34" x2="304" y2="60" stroke="#5d6b79"/><rect class="pk" x="364" y="60" width="96" height="24" rx="4"/><text class="tx" x="412" y="76" text-anchor="middle" font-size="9">schemas/</text><line x1="235" y1="34" x2="412" y2="60" stroke="#5d6b79"/>
+<text class="tx" x="235" y="120" text-anchor="middle" fill="#b9851a" font-weight="bold">dependency direction →</text>
+<text class="tx" x="88" y="138" text-anchor="middle" font-size="8" fill="#5d6b79">depends on ↓</text><text class="tx" x="196" y="138" text-anchor="middle" font-size="8" fill="#5d6b79">depends on ↓</text><text class="tx" x="304" y="138" text-anchor="middle" font-size="8" fill="#5d6b79">depends on ↓</text>
+<rect x="40" y="155" width="390" height="40" rx="5" fill="#eaf2f0" stroke="#1f6a6a"/><text class="tx" x="235" y="172" text-anchor="middle" font-size="9" fill="#1f6a6a">higher layers depend on lower; lower layers know nothing of higher</text>
+<text class="tx" x="235" y="188" text-anchor="middle" font-size="8.5">render → simulation → loader → schemas (+ data/ accessed via package resources)</text>
+</svg>
+<figcaption>Figure 3 — A layered package: higher layers depend on lower ones, never the reverse.</figcaption></figure>
+
+<div class="keyidea"><span class="lbl">Key idea — why this layering pays for itself</span> Because each layer touches only the ones below, you can <strong>replace a layer without disturbing the rest</strong>. Suppose the cell data arrives as CSV next year instead of JSON. You rewrite one file in <code>loader/</code>; <code>simulation/</code> does not change a single line, because it never knew the data came from JSON in the first place — it only ever saw finished <code>schemas</code> objects. The file format is <em>quarantined</em> inside <code>loader</code>. The same insulation works the other way: you can re-style every figure in <code>render/</code> without any risk of perturbing the physics, because the physics cannot see <code>render</code> at all.</div>
+
+<div class="callout"><span class="lbl">Note — the names tell the story</span> Notice the <code>simulation</code> modules are named for the array hierarchy itself: <code>cell_level</code>, <code>string_level</code>, <code>section_level</code>, <code>panel_level</code>, <code>array_level</code>. A reader who has met the cell → string → section → panel ladder can guess what each file does <em>before opening it</em>. Then <code>environment</code> supplies the conditions (sun, temperature), <code>solver</code> does the numerical work, and <code>pipeline</code> wires the steps together into one run. Good filenames are free documentation.</div>
+
+<h4>2.3 <code>__init__.py</code> and the public API</h4>
+
+<p>The file <code>__init__.py</code> is the one piece of machinery that turns a plain folder into a package. It does two jobs, one structural and one editorial.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong><code>__init__.py</code></strong> — the file whose presence <em>marks a folder as a package</em>. It runs automatically the first time anything in the package is imported. It may be completely empty (its mere existence is enough to make the folder importable), or it may contain code — most usefully, a handful of imports that decide what names the package offers to the outside world.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>public API</strong> — <em>Application Programming Interface</em>: the set of names a module or package <em>intends</em> for outsiders to use, as opposed to its private internals. The "public" part means "promised and supported"; everything else is an implementation detail you should be free to change. A package shapes its public API in <code>__init__.py</code> by importing the chosen names up to the top level.</div>
+
+<p>Concretely, if <code>__init__.py</code> contains</p>
+
+<pre>from .cell import cell</pre>
+
+<p>then a user can write the short, clean <code>from powerpy import cell</code> instead of the long <code>from powerpy.simulation.cell_level import cell</code>. You have <em>chosen</em> to promote <code>cell</code> to the front door and to keep the exact module it lives in as a private detail you may rearrange later. That is what "exposing a clean public API" means: the package presents a tidy, stable set of names and hides the folder structure behind them.</p>
+
+<div class="callout"><span class="lbl">Note — the leading dot</span> The <code>.</code> in <code>from .cell import cell</code> is not decoration; it means "from <em>this</em> package." We unpack that next — it is the difference between a <em>relative</em> and an <em>absolute</em> import, and getting it wrong is a real and common bug.</div>
+
+<h4>2.4 Imports: absolute vs relative</h4>
+
+<p>There are two ways to name the thing you are importing, and inside a package you will meet both.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>absolute import</strong> — names the target by its <em>full path from the top-level package</em>, e.g. <code>from powerpy.simulation.electric import ng_sim</code>. It reads the same no matter which file it appears in, because it always starts from the root. Absolute imports are explicit and unambiguous.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>relative import</strong> — names the target <em>relative to the current module's own package</em>, using leading dots. One dot means "the package this file is in"; two dots mean "the package one level up." Inside the <code>simulation</code> subpackage, <code>from .electric import ng_sim</code> means "from the <code>electric</code> module sitting <em>beside me</em>." It is shorter and it survives the whole package being renamed, because it never spells out the top-level name.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> A leading dot is a <strong>position</strong>, not a name. <code>from .cell import cell</code> says "look <em>here</em>, in my own folder." <code>from .electric import ng_sim</code> says the same for a sibling module. There is no such place as a folder literally called "<code>.</code>"; the dot is resolved at import time to the package the running file belongs to.</div>
+
+<div class="pitfall"><span class="lbl">Pitfall — a wrong import that breaks the module</span> A very common bug is writing an absolute import that names a top-level package which <em>does not exist</em>. Inside <code>powerpy</code>, writing
+<br><code>from power.cell import cell</code>
+<br>(note: <code>power</code>, not the leading dot, and not even the right package name) makes Python hunt for a top-level package called <code>power</code>. There isn't one, so the import raises <code>ModuleNotFoundError: No module named 'power'</code> and the whole file fails to load. The fix is the relative form that says "from <em>this</em> package": <code>from .cell import cell</code>. The single missing dot is the entire bug. Whenever you see a <code>ModuleNotFoundError</code> for a name that looks <em>almost</em> like your own package, suspect a dropped dot first.</div>
+
+<h4>2.5 How Python finds a module — and the search path</h4>
+
+<p>To understand the trap in §2.6 you first need to know <em>how</em> <code>import X</code> locates the file. Python does not scan your whole disk. It walks a specific, ordered list of folders and stops at the first match.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>search path — <code>sys.path</code></strong> — a Python list of folder names that <code>import</code> consults <em>in order</em>, top to bottom, taking the first folder that contains a matching module. It includes the standard library's location and the installed-packages folder (<em>site-packages</em>). You can print it: <code>import sys; print(sys.path)</code>.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong><code>sys.path[0]</code> — the first entry</strong> — the slot searched <em>before all others</em>. When you run <code>python script.py</code>, Python inserts the folder containing <code>script.py</code> at <code>sys.path[0]</code>. When you start the interactive interpreter (the REPL), it inserts the <em>current working directory</em> there instead. Either way, "where you are" gets first say in which module wins.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>current working directory (cwd)</strong> — the folder your shell is "in" when you launch Python — what <code>cd</code> set and <code>pwd</code> reports. It is a property of how you <em>ran</em> the program, not of where the program's files live. The same script can be launched from many different cwds, and — crucially — that choice changes <code>sys.path[0]</code>.</div>
+
+<div class="keyidea"><span class="lbl">Key idea — first match wins, and cwd often goes first</span> Two facts combine into the whole trap. (1) <code>import</code> takes the <strong>first</strong> folder on <code>sys.path</code> that has the module — it does not prefer the standard library, it simply stops at the earliest hit. (2) The folder you launched from is placed <strong>at the front</strong> of that list. So if your launch folder contains a file with the same name as a standard-library module, <em>your file is found first</em> and the standard library's version never gets a look in.</div>
+
+<h4>2.6 The name-shadowing trap (a real PowerPy gotcha)</h4>
+
+<p>This is the centrepiece of the section, so we go slowly. PowerPy's legacy code contains a module named <code>string.py</code>. The Python standard library <em>also</em> has a module named <code>string</code> (it holds things like <code>string.ascii_letters</code>). Two different files, same name. Which one wins an <code>import string</code> depends entirely on <code>sys.path</code> order — and that depends on where you ran Python from.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>shadowing</strong> — when a name you have introduced <em>hides</em> an existing name that would otherwise be visible, so references resolve to yours instead of the original. A local file <code>string.py</code> earlier on <code>sys.path</code> <em>shadows</em> the standard library's <code>string</code>: every <code>import string</code> in the whole process now reaches your file. The standard one is still installed; it is simply never found, because the search stops before it.</div>
+
+<div class="worked"><span class="lbl">Worked — how the trap springs</span>
+<div class="step"><strong>1. You sit inside the package directory.</strong> Your shell's cwd is <code>.../powerpy/</code> (or wherever <code>string.py</code> lives), and you launch <code>python</code> or run a script from there. Python puts that folder at <code>sys.path[0]</code>.</div>
+<div class="step"><strong>2. Something does <code>import string</code>.</strong> It need not be your code. Deep inside the library stack, <code>dateutil</code> (the date-parsing library that <code>pandas</code> relies on) contains a plain <code>import string</code>.</div>
+<div class="step"><strong>3. First match wins — and yours is first.</strong> Python checks <code>sys.path[0]</code> (your folder), finds <code>string.py</code>, and binds the name <code>string</code> to <em>your</em> module. The standard library's <code>string</code>, further down the path, is never reached.</div>
+<div class="step"><strong>4. The wrong module misbehaves.</strong> Your <code>string.py</code> does not define <code>string.ascii_letters</code> (or whatever the caller expected). <code>dateutil</code> gets an <code>AttributeError</code> on a name it was sure would exist — and so <code>pandas</code> breaks, on a line that has nothing to do with your code.</div>
+<div class="check">The bug is <em>spooky</em>: nothing you wrote imported <code>string</code> wrongly, and the error surfaces in a third-party library. The only "mistake" was a filename plus a launch directory. Change either — rename the file, or run from elsewhere — and the symptom vanishes.</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 175" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<rect x="170" y="14" width="130" height="26" rx="4" fill="#fff" stroke="#1d2733"/><text class="tx" x="235" y="31" text-anchor="middle"><tspan font-family="monospace">import string</tspan></text>
+<rect x="30" y="90" width="170" height="34" rx="4" fill="#fcefea" stroke="#9a3b3b" stroke-width="1.6"/><text class="tx" x="115" y="104" text-anchor="middle" font-size="9" fill="#9a3b3b">LOCAL ./string.py</text><text class="tx" x="115" y="117" text-anchor="middle" font-size="8" fill="#5d6b79">(cwd is first on the path)</text>
+<rect x="270" y="90" width="170" height="34" rx="4" fill="#eef5fb" stroke="#0b3d63"/><text class="tx" x="355" y="104" text-anchor="middle" font-size="9">stdlib string</text><text class="tx" x="355" y="117" text-anchor="middle" font-size="8" fill="#5d6b79">(what you wanted)</text>
+<line x1="210" y1="40" x2="120" y2="90" stroke="#9a3b3b" stroke-width="2"/><polygon points="120,90 122,82 128,87" fill="#9a3b3b"/><text class="tx" x="120" y="62" fill="#9a3b3b" font-size="9">picks this ✗</text>
+<line x1="260" y1="40" x2="350" y2="90" stroke="#5d6b79" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text class="tx" x="235" y="150" text-anchor="middle" fill="#9a3b3b" font-size="9">→ breaks dateutil → pandas import. Fix: rename the module / install the package.</text>
+</svg>
+<figcaption>Figure 4 — The shadowing trap: a local string.py is found before the standard library's, silently breaking pandas.</figcaption></figure>
+
+<div class="callout"><span class="lbl">Note — why <code>sys</code> can't be shadowed but <code>string</code> can</span> The trap only works on modules Python finds <em>by searching the path</em>. A few core modules (<code>sys</code> itself, <code>builtins</code>) are compiled into the interpreter and resolved before the path is consulted, so a local <code>sys.py</code> could not hijack them. <code>string</code>, by contrast, is an ordinary path-based module living in the standard-library folder — exactly the kind a same-named local file can get in front of. That is why <code>string.py</code> is dangerous in a way <code>sys.py</code> would not be.</div>
+
+<div class="keyidea"><span class="lbl">Key idea — two lessons in one</span> First: <strong>do not name your modules after standard-library modules.</strong> Second: <strong>the current working directory affects imports</strong> — <em>where</em> you run Python from can change <em>which</em> file an import resolves to. Both lessons point at the same cure, which we reach in §2.8: install the package, and run from outside it, so the cwd no longer sits in front of the standard library.</div>
+
+<h4>2.7 Naming and organisation conventions</h4>
+
+<p>Beyond avoiding clashes, a few plain habits keep a package readable as it grows.</p>
+
+<ul>
+  <li><strong>snake_case module names.</strong> Lower-case words joined by underscores: <code>cell_level.py</code>, <code>string_level.py</code>, <code>array_level.py</code>. No capitals, no hyphens (a hyphen is illegal in an import name — <code>cell-level.py</code> cannot be imported).</li>
+  <li><strong>One clear responsibility per file.</strong> A reader should be able to say in a single sentence what a module is <em>for</em>. If the sentence needs the word "and" three times, the file is doing too much.</li>
+  <li><strong>Keep files small.</strong> A 700-line class that mixes five jobs — reads files, runs physics, formats numbers, draws plots, writes a report — is a <em>code smell</em>: a sign the design wants splitting. Break it along its jobs into separate modules, each in the layer where it belongs.</li>
+</ul>
+
+<div class="term"><span class="lbl">Term</span> <strong>code smell</strong> — a surface symptom that hints at a deeper design problem. It is not a bug; the code may run perfectly. It is a <em>warning sign</em> — like a giant multi-job file — that the structure will be painful to change later. "Smell" because you notice it before you can prove anything is wrong.</div>
+
+<div class="callout"><span class="lbl">Note — legacy vs. modern, side by side</span> PowerPy carries both patterns, and the contrast is the lesson. The legacy files <code>cell.py</code>, <code>string.py</code>, <code>section.py</code>, <code>panel.py</code> are large, multi-job modules — and one of them, <code>string.py</code>, is the very file behind the shadowing trap. The modern <code>simulation/</code> subpackage splits the same responsibilities into focused modules (<code>cell_level</code>, <code>string_level</code>, …). For <em>new</em> code, follow the modern pattern: small, single-job modules grouped into layered subpackages. The legacy files are kept working, but they are not the model to imitate.</div>
+
+<h4>2.8 Packaging: making it installable</h4>
+
+<p>The deepest fix for the cwd trap is not to memorise rules about where to stand when you launch Python — it is to make the package <em>installable</em>, so Python can find it by name from anywhere, with no help from the current directory.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong><code>pyproject.toml</code> / <code>setup</code></strong> — the configuration file that describes your package to Python's packaging tools: its name, version, dependencies, and which folders are the package. <code>pyproject.toml</code> is the modern form (older projects used a <code>setup.py</code>/<code>setup.cfg</code>). It is what lets <code>pip</code> install your code like any other library.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>editable install — <code>pip install -e .</code></strong> — installs the package in <em>editable</em> (a.k.a. "development") mode. Instead of copying the files into site-packages, pip drops a <em>link</em> there pointing back at your source folder, and registers the package by name on <code>sys.path</code>. The "<code>-e</code>" is for <em>editable</em> and the "<code>.</code>" means "the package described in this directory." Result: <code>import powerpy</code> works from <em>any</em> directory, and edits to your source take effect immediately — no reinstall.</div>
+
+<div class="keyidea"><span class="lbl">Key idea — installing dissolves the trap</span> Once PowerPy is installed, it lives on <code>sys.path</code> as a <em>named</em> package, reachable as <code>powerpy.simulation.string_level</code>, and you run your programs from a normal working directory — not from inside the package. The package folder is therefore no longer sitting at <code>sys.path[0]</code> in front of the standard library, so a bare <code>import string</code> resolves to the real standard-library <code>string</code> again. The cwd stops mattering because imports now go through the installed name, not through "whatever folder I happen to be standing in." Install the package and the whole class of "it works on my machine, in this folder" bugs disappears.</div>
+
+<h4>2.9 Dependencies and data files</h4>
+
+<p>A simulator ships data, not just code: PowerPy keeps cell, diode, and substrate specifications as JSON under a <code>data/</code> folder. How you <em>reach</em> that data matters as much as where you put it.</p>
+
+<div class="pitfall"><span class="lbl">Pitfall — hard-coded paths break after install</span> The tempting, wrong way is to open the data with a fixed relative path like <code>open("data/cells.json")</code>. That only works if the cwd happens to be the project root — the very assumption we just spent §2.8 escaping. After an editable or real install, the files live wherever pip put the package, and <code>"data/cells.json"</code> points at nothing. The path-based open is the data twin of the import-shadowing bug: both rely on where you launched from.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>package-resource lookup — <code>importlib.resources</code></strong> <span class="badge api">API</span> — the standard-library way to open a data file <em>relative to the package it ships with</em>, regardless of where that package is installed. You ask, in effect, "give me <code>cells.json</code> from inside the <code>powerpy</code> data," and Python locates it next to the installed code. No cwd, no hard-coded absolute path. This is what makes the data still load after <code>pip install</code>.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> Code finds <em>its own</em> data through the package, not through the filesystem's current position. <code>data/</code> rides along inside the package; <code>importlib.resources</code> asks the package where its files are. The rule mirrors imports exactly: <strong>don't depend on the current directory — depend on the package.</strong></div>
+
+<h4>2.10 Worked example: a tiny package, inside vs outside</h4>
+
+<p>Here is a minimal package, small enough to hold in your head, that exhibits everything above — including, deliberately, the trap.</p>
+
+<pre>mypkg/
+├── __init__.py     # marks mypkg as a package; can expose the public API
+├── core.py         # the real work
+├── io.py           # reads/writes data   &lt;-- NOTE: 'io' is itself a stdlib name!
+└── tests/
+    ├── __init__.py
+    └── test_core.py</pre>
+
+<p>The files connect with imports. Inside <code>__init__.py</code> we promote one name to the front door:</p>
+
+<pre># mypkg/__init__.py
+from .core import run        # relative: 'run' from the core module beside me</pre>
+
+<p>Inside <code>core.py</code>, the physics asks its sibling to load data:</p>
+
+<pre># mypkg/core.py
+from .io import load_table   # relative: the io module in my own package
+
+def run(path):
+    data = load_table(path)
+    return summarise(data)</pre>
+
+<p>And a test, run from <em>outside</em>, uses the clean public name the package chose to expose:</p>
+
+<pre># tests/test_core.py
+from mypkg import run        # absolute: works because mypkg is importable by name
+assert run("sample.json") is not None</pre>
+
+<div class="callout"><span class="lbl">Note — <code>io.py</code> is a live instance of the trap</span> The data module above is named <code>io.py</code>, and the standard library <em>also</em> has an <code>io</code> module (it underlies file objects). Inside the package we are safe, because <code>from .io import load_table</code> has a leading dot — it explicitly means "<em>my</em> io," so there is no ambiguity. The danger is a bare <code>import io</code> executed while standing in the package folder: that could pick up <code>mypkg/io.py</code> instead of the real one. The same medicine applies — prefer a less collision-prone name (<code>data_io.py</code>), and install the package so you are never running from inside it.</div>
+
+<p>Now watch the difference between <em>where</em> you run Python from.</p>
+
+<div class="worked"><span class="lbl">Worked — running from outside vs inside</span>
+<div class="step"><strong>From outside (the right way).</strong> Your cwd is the parent folder, above <code>mypkg/</code> (or the package is installed). You run <code>python -m mypkg.tests.test_core</code>. <code>sys.path[0]</code> is the parent, not the package interior, so a bare <code>import io</code> anywhere resolves to the <em>standard-library</em> <code>io</code>. Everything behaves.</div>
+<div class="step"><strong>From inside (the trap).</strong> You <code>cd</code> into <code>mypkg/</code> and run <code>python io.py</code> or just start <code>python</code> there. Now <code>sys.path[0]</code> is the <em>inside</em> of the package. A bare <code>import io</code> — yours, or one buried in a library you imported — finds <code>mypkg/io.py</code> first. The standard <code>io</code> is shadowed, and code that expected the real one misbehaves, often far from the apparent cause.</div>
+<div class="check">Identical files, identical code — only the launch directory differs, and that alone flips which <code>io</code> (or <code>string</code>) gets imported. That is the whole shadowing bug in one comparison, and the cure is to stop running from inside: install the package (§2.8) and launch from a neutral directory.</div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice D2-1</span>
+You inherit a flat pile of files dumped in one folder: <code>cell.py</code>, <code>read_json.py</code>, <code>physics.py</code>, <code>plotting.py</code>, <code>report.py</code>, <code>shapes.py</code> (dataclasses describing the data).
+(a) Group them into a layered package like PowerPy's, naming each subpackage and saying which files go in it. &nbsp;(b) Draw the dependency arrows between your layers (which may import which). &nbsp;(c) One file name in the pile is a latent stdlib-clash risk if the project is ever run from inside the folder — which one, and why?
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice D2-2</span>
+A teammate adds a small helper module and, because it deals with JSON, names it <code>json.py</code>, placing it inside the package. The next day, unrelated code that does <code>import json</code> (to use <code>json.loads</code>) starts failing with an <code>AttributeError</code>, but <em>only</em> when they run it from the project folder.
+(a) Explain, in terms of <code>sys.path</code> order, exactly what breaks and why the failure depends on the launch directory. &nbsp;(b) Why does the standard library's own code still "have" the real <code>json</code> even though theirs is shadowed in this process? &nbsp;(c) Give two independent fixes — one about the filename, one about how the project is run/installed.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<span class="lbl">Practice D2-3</span>
+Inside the <code>simulation</code> subpackage, a module needs the function <code>ng_sim</code> from a sibling module <code>electric.py</code>, and it also needs the <code>cell</code> dataclass from the <code>schemas</code> subpackage one level up.
+(a) Write the relative import for <code>ng_sim</code>. &nbsp;(b) Write an absolute import for <code>cell</code>. &nbsp;(c) A colleague wrote <code>from power.cell import cell</code> and got <code>ModuleNotFoundError: No module named 'power'</code> — what is the one-character class of fix, and what is the corrected line if <code>cell</code> really lives beside the file?
+<div class="answerspace lines-8"></div>
+</div>
+
+<h4>2.11 Ladder — why the launch directory changes which module loads</h4>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — from "what is a module" to "why does WHERE you run Python change which module imports, and how do we stop it mattering?"</div>
+
+<div class="socratic">
+<div class="q">Rung 1 — What is a module, concretely, on disk?</div>
+<div class="answer">A single <code>.py</code> file. <code>import string</code> means "find a file <code>string.py</code> (or the stdlib <code>string</code>), run it once, give me the resulting object." Because a module is just a file Python has to <em>locate</em>, the question of <em>which</em> file becomes live the moment two files share a name.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 2 — How does Python decide which file an <code>import</code> gets?</div>
+<div class="answer">It walks <code>sys.path</code>, an ordered list of folders, and takes the <strong>first</strong> one containing a match — it does not privilege the standard library. And the folder you launched from is inserted at the <em>front</em> (<code>sys.path[0]</code>): the script's own folder for <code>python script.py</code>, the cwd for the REPL. So "where you are" gets first vote.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 3 — So what is shadowing, in this machinery?</div>
+<div class="answer">If your launch folder holds <code>string.py</code>, it sits at <code>sys.path[0]</code>, <em>ahead</em> of the standard library. Every <code>import string</code> in the process — including one hidden inside <code>dateutil</code>, hence <code>pandas</code> — finds <em>your</em> file first. Your file <em>shadows</em> the real one: the standard <code>string</code> is still installed, just never reached. The result is a breakage in code you never touched.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 4 — How does installing the package make the launch directory stop mattering?</div>
+<div class="answer"><code>pip install -e .</code> registers the package by <em>name</em> on <code>sys.path</code> (via site-packages) and lets you run from a neutral directory instead of from inside the package. The package interior is no longer at <code>sys.path[0]</code> in front of the stdlib, so a bare <code>import string</code> resolves to the standard library again. Imports now travel through the installed <em>name</em> (<code>powerpy.…</code>), which is the same wherever you stand — so the cwd no longer changes the outcome. <strong>That is the answer to the whole ladder: it is sys.path order, the launch folder rides at the front, and installing replaces "the folder I'm in" with "the package by name."</strong></div>
+</div>
+</div>
+
+<div class="pitfall"><span class="lbl">Pitfall — the two habits that cause this whole family of bugs</span> (1) <strong>Naming a module after a standard-library module</strong> — <code>string.py</code>, <code>random.py</code>, <code>types.py</code>, <code>json.py</code>, <code>io.py</code>, <code>email.py</code>, <code>code.py</code>. Any of these can shadow the real one and break libraries that import it. Check a candidate name against the standard library before you use it. (2) <strong>Relying on the current directory for imports (or data) instead of installing the package.</strong> Code that only works when launched from one magic folder is fragile and "works on my machine"-shaped. Make the package installable (<code>pyproject.toml</code> + <code>pip install -e .</code>), reach data through <code>importlib.resources</code>, and run from a neutral directory — then neither the filename clash nor the cwd can bite.</div>

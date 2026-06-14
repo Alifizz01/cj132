@@ -1,0 +1,371 @@
+<h3>4 &nbsp; Making it fast: performance and time-efficiency</h3>
+
+<p>The previous sections were about writing code that is <em>clear and correct</em>. This one is about making correct code <em>fast enough</em> — and the very first thing to learn about performance is that almost everyone gets it wrong by starting in the wrong place. They guess where the program is slow, rewrite that part to be clever, and discover the program is exactly as slow as before because the real bottleneck was somewhere they never looked. Performance work is not about being clever; it is about being <em>empirical</em>. You measure, you find the one place that actually costs the time, you fix <em>that</em>, and you measure again. Everything in this section hangs off that discipline.</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> <strong>Measure before you optimise.</strong> A program's runtime is almost never spread evenly — it nearly always hides in a small <em>hot spot</em>, a handful of lines that run millions of times or call something expensive. Your job is to <em>find that hot spot by measurement</em> (profiling), then attack it with the biggest lever available: usually a better <em>algorithm</em> (so the work grows more slowly with problem size) or <em>vectorisation</em> (so a whole array is processed in one compiled operation instead of a slow Python loop). Cleverness applied anywhere else is wasted effort that only makes the code harder to read. This section defines every term from scratch, works the numbers with units, and shows where PowerPy itself is fast and where it is slow.</p>
+</div>
+
+<p>We build the vocabulary in the order you would actually use it: first <em>profiling</em> (how to find the hot spot), then <em>Big-O</em> (why the algorithm dominates for large problems), then <em>vectorisation</em> (the single biggest win in scientific Python), then a cluster of "stop doing redundant work" techniques (<em>caching</em>, <em>hoisting</em>, <em>copying cost</em>, <em>batching</em> external calls), then <em>data structures</em>, then <em>parallelism</em>, and finally the discipline of <em>when not to optimise at all</em>. Two fully worked numeric examples and a Socratic ladder tie it together.</p>
+
+<h4>4.1 &nbsp; The golden rule: measure first, with a profiler</h4>
+
+<p>The temptation, when something feels slow, is to stare at the code, form a theory ("it must be the matrix multiply"), and start optimising on the strength of that theory. This is how most performance effort is wasted. Human intuition about where time goes is famously bad: the bottleneck is routinely a line you would never have suspected — a string being reparsed in a loop, an object being deep-copied on every iteration, an engine being spun up and torn down thousands of times. The cure is to stop guessing and <em>measure</em>.</p>
+
+<div class="term"><strong>Profiling.</strong> Measuring <em>where a program actually spends its time</em> (and sometimes its memory) while it runs — which functions are called, how often, and how many seconds accumulate in each. A profiler instruments your code and hands you a ranked table: "this function took 71% of the total." That table, not your intuition, tells you what to optimise. Profiling turns "I think it's slow here" into "it <em>is</em> slow here, by measurement."</div>
+
+<p>Python gives you two tiers of tool, for two different questions.</p>
+
+<ul>
+<li><strong>Timing one snippet</strong> — "how long does <em>this</em> small piece take?" Use <code>time.perf_counter()</code>, a high-resolution clock, around the code; or the <code>timeit</code> module, which runs the snippet many times and reports an average (so a single noisy measurement does not fool you). Good for comparing two implementations of the same small thing.</li>
+<li><strong>Profiling a whole run</strong> — "across this entire simulation, where does the time go?" Use <code>cProfile</code>, Python's built-in profiler. You run the whole program under it and it produces a per-function breakdown — call counts and cumulative time — so the hot spot rises to the top of the table on its own.</li>
+</ul>
+
+<pre>
+# Tier 1 — time a single snippet with perf_counter
+import time
+start = time.perf_counter()
+result = solve_thermal(cells)            # the piece under suspicion
+elapsed = time.perf_counter() - start    # seconds, wall-clock
+print(f"solve_thermal took {elapsed*1e3:.1f} ms")
+
+# Tier 1 — or let timeit average away the noise (many repetitions)
+import timeit
+t = timeit.timeit("solve_thermal(cells)", globals=globals(), number=100)
+print(f"mean {t/100*1e3:.2f} ms over 100 runs")
+
+# Tier 2 — profile a WHOLE run; the hot function floats to the top
+import cProfile
+cProfile.run("run_monte_carlo(n=1000)", sort="cumulative")
+</pre>
+
+<div class="callout">
+<strong>"Don't guess, profile."</strong> This is the oldest slogan in performance work, and it survives because it keeps being true. Run <code>cProfile</code> first, read the top line of the table, and you will usually find that one function — often one you did not suspect — accounts for the bulk of the runtime. Optimise <em>that</em>. A 2× speed-up of a function that is 5% of the runtime buys you 2.5% overall; a 2× speed-up of the function that is 80% of the runtime buys you 40%. The profiler tells you which function is the 80% one. Without it you are optimising blind.
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 150" xmlns="http://www.w3.org/2000/svg" font-size="9.5">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .b{fill:#eef5fb;stroke:#0b3d63;stroke-width:1.3}</style>
+<rect class="b" x="20" y="40" width="104" height="40" rx="5"/><rect class="b" x="140" y="40" width="104" height="40" rx="5"/><rect class="b" x="260" y="40" width="104" height="40" rx="5"/><rect class="b" x="380" y="40" width="104" height="40" rx="5"/>
+<text class="tx" x="72" y="58" text-anchor="middle" font-size="9">run</text><text class="tx" x="72" y="72" text-anchor="middle" font-size="9">cProfile</text><text class="tx" x="192" y="58" text-anchor="middle" font-size="9">read top</text><text class="tx" x="192" y="72" text-anchor="middle" font-size="9">hot function</text><text class="tx" x="312" y="58" text-anchor="middle" font-size="9">optimise</text><text class="tx" x="312" y="72" text-anchor="middle" font-size="9">only that</text><text class="tx" x="432" y="58" text-anchor="middle" font-size="9">re-</text><text class="tx" x="432" y="72" text-anchor="middle" font-size="9">measure</text>
+<path d="M124 60 H140" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="140,60 134,56 134,64" fill="#b9851a"/><path d="M244 60 H260" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="260,60 254,56 254,64" fill="#b9851a"/><path d="M364 60 H380" stroke="#b9851a" stroke-width="2" fill="none"/><polygon points="380,60 374,56 374,64" fill="#b9851a"/>
+<path d="M384 80 V110 H72 V82" stroke="#0b3d63" stroke-width="1.4" fill="none" stroke-dasharray="4 3"/><polygon points="72,82 68,90 76,90" fill="#0b3d63"/>
+<text class="tx" x="235" y="106" text-anchor="middle" font-size="9" fill="#0b3d63">loop — measure, don't guess</text>
+</svg>
+<figcaption>Figure 7 — Profile, optimise only the proven hot function, then re-measure — a loop, not a guess.</figcaption></figure>
+
+<h4>4.2 &nbsp; Algorithmic complexity: Big-O notation</h4>
+
+<p>Once the profiler has pointed you at the hot spot, the first and biggest question is not "can I shave a few microseconds off each iteration?" but "is this the right <em>algorithm</em>?" — because for a large problem, a better algorithm beats every micro-optimisation combined, by margins no amount of clever code can close. The tool for reasoning about this is Big-O notation.</p>
+
+<div class="term"><strong>Big-O notation.</strong> A way of describing how an algorithm's running time (or memory) <em>grows as the size of its input grows</em>. We call the input size <code>N</code> (number of cells, number of Monte-Carlo runs, number of voltage points). Big-O captures the <em>shape</em> of that growth, ignoring constant factors and small terms, because for large <code>N</code> the shape is what dominates. Reading "O(...)": you say "order of".</div>
+
+<p>The handful of growth rates you must recognise on sight, from gentle to catastrophic:</p>
+
+<ul>
+<li><strong>O(1) — constant.</strong> Time does not depend on <code>N</code> at all. Looking up one value in a dict, reading <code>array[0]</code>. Double the input, same time.</li>
+<li><strong>O(N) — linear.</strong> Time grows in direct proportion to <code>N</code>. One pass over a list. Double the input, double the time. A position sweep over <code>N</code> cells is O(N).</li>
+<li><strong>O(N²) — quadratic.</strong> Time grows as the <em>square</em> of <code>N</code> — typically a loop nested inside another loop, each over <code>N</code>. Double the input, <em>quadruple</em> the time. Tolerable for <code>N</code> in the hundreds, painful in the thousands, hopeless in the millions.</li>
+<li><strong>O(2^N) — exponential.</strong> Time <em>doubles every time you add one</em> to <code>N</code>. This is the wall: at <code>N = 60</code> you already need more operations than there are atoms you could ever count. Any O(2^N) approach is usable only for tiny <code>N</code>.</li>
+</ul>
+
+<div class="keyidea">
+<strong>Why the algorithm dominates.</strong> Constant factors — how fast each individual step is — matter, but they are a <em>fixed multiplier</em>. The growth rate is a <em>multiplier that gets worse with N</em>. So for large enough <code>N</code>, an O(N) algorithm in slow Python beats an O(N²) algorithm in hand-tuned C, and an O(2^N) algorithm loses to <em>everything</em>. Pick the right complexity class first; tune the constant factor second. Getting this order backwards — polishing the constant on a fundamentally bad algorithm — is the most expensive mistake in the section.
+</div>
+
+<p><strong>PowerPy's example.</strong> Suppose you wanted to know the probability that a solar array still meets its power budget given that some cells have failed. The brute-force idea is to enumerate <em>every possible combination</em> of working-and-failed cells. With <code>N</code> cells, each either working or failed, there are <code>2^N</code> combinations — for a realistic array of several hundred cells that is a number with a hundred-plus digits, utterly impossible to enumerate. <em>This is exactly why Chapter 2's reliability analysis uses Monte-Carlo sampling instead</em>: rather than visit all <code>2^N</code> cases, it draws a few thousand <em>random</em> failure patterns and estimates the probability from the sample. Monte-Carlo trades an impossible O(2^N) exact computation for a tractable, tunable O(number-of-samples) estimate. By contrast, sweeping a fault through each cell position one at a time is only O(N) — <code>N</code> independent runs — which is why a position sweep is cheap while exhaustive enumeration is not.</p>
+
+<div class="pitfall">
+<strong>Pitfall — polishing the constant on an exponential algorithm.</strong> Making each step of an O(2^N) enumeration twice as fast does not rescue it: at <code>N = 300</code> it is still <code>2^300</code> steps, and halving an impossible number leaves an impossible number. The only fix for a bad complexity class is a <em>different algorithm</em> (here, sampling instead of enumeration). Recognise the class <em>before</em> you optimise, or you will tune something that can never finish.
+</div>
+
+<h4>4.3 &nbsp; Vectorisation: the big win in scientific Python</h4>
+
+<p>This is the single most important performance technique for numeric Python, and it is the one that turns PowerPy's thermal model from slow to fast. The idea is to stop looping over array elements in Python and instead express the whole computation as <em>operations on entire arrays</em>, which a compiled library (numpy) executes in one shot.</p>
+
+<div class="term"><strong>Vectorisation.</strong> Replacing an explicit Python <code>for</code> loop that processes array elements <em>one at a time</em> with a single <em>array operation</em> that processes the whole array at once in compiled C code (via numpy). Instead of <code>for i in range(n): out[i] = a[i] + b[i]</code>, you write <code>out = a + b</code> — and that one line loops over all elements down in C, not in the Python interpreter.</p></div>
+
+<p>Why is that faster, when it does the <em>same arithmetic</em>? Because of where the loop runs and what the loop costs <em>per step</em>. In a Python loop, every single iteration pays a tax the interpreter cannot avoid: it has to look up what type each object is, unwrap ("unbox") the float out of its Python object, do the add, wrap the result back into a new Python object, and advance the loop machinery. That overhead is often <em>larger than the arithmetic itself</em>, and you pay it <code>N</code> times. A vectorised numpy operation pays the per-element overhead essentially <em>once for the whole array</em>: it knows up front that the array is a contiguous block of, say, 8-byte floats all of the same type, so it runs a tight compiled loop with no per-element type checks or boxing. The arithmetic is identical; the bookkeeping around it nearly vanishes.</p>
+
+<div class="keyidea">
+<strong>The mechanism in one sentence.</strong> A Python loop pays the interpreter's per-iteration overhead (type check + unbox + rebox + loop step) <em>once per element</em>; a vectorised numpy call pays that overhead <em>once for the entire array</em> and does the real arithmetic in compiled code — so the more elements you have, the bigger the win.
+</div>
+
+<h5>Case study — PowerPy's thermal solver (Chapter 2 §2)</h5>
+
+<p>Here is the win on real PowerPy code. A solar array has many cells (call it <code>N</code>), and the thermal model must find each cell's equilibrium temperature — the temperature where heat in equals heat out, which is the root of a nonlinear energy-balance equation.</p>
+
+<div class="worked">
+<strong>Case study — before and after.</strong>
+
+<div class="step"><strong>Legacy — one solver call per cell, in a Python loop.</strong> The old code calls <code>scipy.fsolve</code> (a general-purpose root finder) <em>once for every single cell</em>, inside a Python <code>for</code> loop. Each call spins up the solver afresh, iterates to a root for that one cell, and tears down — then the loop moves to the next cell and does it all again. For <code>N</code> cells that is <code>N</code> independent solver spin-ups <em>and</em> <code>N</code> trips round the slow Python loop.</div>
+
+<div class="step"><strong>New — one vectorised Newton step over ALL cells.</strong> The new solver treats every cell's temperature as one entry in a numpy <em>array</em> and applies <em>Newton's method to the whole array at once</em>: each iteration computes the residual and its derivative for all <code>N</code> cells as array operations, and updates all <code>N</code> temperatures in a single vectorised step. A handful of iterations converge every cell together. The entire solve is roughly <strong>~6 array operations</strong> — no per-cell loop, no per-cell solver spin-up.</div>
+
+<div class="check"><strong>The shape of the change.</strong> The legacy version turns one physical problem into <code>N</code> solver start-ups <em>plus</em> <code>N</code> Python iterations; the new version turns it into about six array operations that run in compiled C regardless of how many cells there are — so the cost stops scaling with the number of cells. ✓</div>
+</div>
+
+<div class="callout">
+<strong>Why this is the textbook vectorisation case.</strong> The per-cell calculations are <em>independent</em> — cell 12's equilibrium temperature does not depend on cell 13's — so there is nothing forcing them to happen one after another. That independence is exactly the condition that lets you stack all the cells into an array and solve them in one vectorised sweep. (Hold onto this: when the per-element work is <em>not</em> independent, vectorisation across that dimension is not available — we return to it in §4.10 and the final pitfall.)
+</div>
+
+<h5>An order-of-magnitude timing sketch</h5>
+
+<p>Let us put rough numbers on it. These are <em>illustrative order-of-magnitude estimates to show the shape of the win, not measured benchmarks.</em></p>
+
+<div class="formula">
+Suppose one <code>fsolve</code> call costs about <strong>1 ms</strong>. For an array of <strong>N = 600 cells</strong>:<br>
+&nbsp;&nbsp;legacy thermal work per run = 600 cells × 1 ms/cell = <strong>600 ms ≈ 0.6 s per run</strong><br>
+&nbsp;&nbsp;vectorised thermal work per run ≈ <strong>1–2 ms total</strong> (a few array operations, independent of cell count)
+<div class="where">where "per run" means one full thermal solve of the whole 600-cell array; 1 ms/fsolve and ~2 ms/vectorised-solve are stand-in figures chosen to illustrate the order of magnitude.</div>
+</div>
+
+<p>That is a speed-up in the <strong>~100× class</strong> for a single thermal solve (≈600 ms collapsing to a couple of ms). And it <em>compounds</em>: the reliability study in Chapter 2 runs the whole thing inside a Monte-Carlo sweep of, say, 1000 runs. The thermal work alone then goes from <code>1000 × 0.6 s = 600 s</code> (ten minutes) down to <code>1000 × 2 ms ≈ 2 s</code>. Same physics, same answer — the wait drops from "go get a coffee" to "already done." (We compute the exact ratio in Worked Example (b).)</p>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 440 170" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<style>.tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<line stroke="#1d2733" x1="120" y1="140" x2="420" y2="140"/>
+<rect x="150" y="20" width="80" height="120" fill="#9a3b3b"/><text class="tx" x="190" y="15" text-anchor="middle" font-size="9" fill="#9a3b3b">~600 ms</text><text class="tx" x="190" y="155" text-anchor="middle" font-size="9">N fsolve calls</text><text class="tx" x="190" y="166" text-anchor="middle" font-size="8" fill="#5d6b79">(Python loop)</text>
+<rect x="300" y="138" width="80" height="2" fill="#1f6a6a"/><text class="tx" x="340" y="130" text-anchor="middle" font-size="9" fill="#1f6a6a">~2 ms</text><text class="tx" x="340" y="155" text-anchor="middle" font-size="9">one vectorised</text><text class="tx" x="340" y="166" text-anchor="middle" font-size="8" fill="#5d6b79">Newton</text>
+<text class="tx" x="220" y="60" fill="#b9851a" font-size="9">~100× — and ×1000 runs</text>
+<text class="tx" x="220" y="74" fill="#b9851a" font-size="9">in a Monte-Carlo sweep</text>
+<text class="tx" x="40" y="80" transform="rotate(-90 40 80)" text-anchor="middle" font-size="9" fill="#1d2733">thermal time / run</text>
+</svg>
+<figcaption>Figure 8 — N per-cell fsolve calls versus one vectorised Newton solve: an order-of-magnitude saving that multiplies across a Monte-Carlo sweep.</figcaption></figure>
+
+<h4>4.4 &nbsp; Avoid redundant work (1): caching and memoisation</h4>
+
+<p>The fastest computation is the one you never do. A large class of speed-ups comes not from doing work faster but from <em>not repeating work you have already done</em>. The headline technique is caching.</p>
+
+<div class="term"><strong>Memoisation (caching).</strong> Storing the result of a computation the first time you do it, keyed by its inputs, and <em>returning the stored result</em> the next time the same inputs come in — instead of recomputing. "Caching" is the general idea; "memoisation" is the specific case of caching a <em>function's return value</em> keyed by its arguments. The trade is memory for time: you spend a little space holding past results to avoid spending time redoing them.</div>
+
+<p>Python makes function memoisation almost free with a decorator from the standard library:</p>
+
+<pre>
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
+def cell_iv_curve(area, isc_ref, temperature):
+    # expensive: builds and solves the cell's subcircuit
+    ...
+    return curve
+
+# First call with these args: computes and stores the curve.
+# Any later call with the SAME (area, isc_ref, temperature): returns
+# the stored curve instantly, no recomputation.
+</pre>
+
+<p><code>lru_cache</code> ("Least Recently Used cache") remembers recent calls and serves repeats from memory. It only works when the function is <em>pure</em> in the §3 sense — same inputs must always give the same output — because that is exactly what makes a stored result safe to reuse.</p>
+
+<div class="callout">
+<strong>PowerPy already caches by content.</strong> PowerPy hashes a cell's parameters into an <em>md5 digest</em> (a short fixed-length fingerprint of the argument values) and uses that as the cell's name. The effect: two cells with <em>identical</em> parameters hash to the <em>same</em> name, so the corresponding subcircuit is recognised as already built and is not constructed a second time. That <em>is</em> caching — keyed by the <em>content</em> of the parameters rather than by call order. In an array where many cells share the same specification, this quietly avoids rebuilding the same subcircuit hundreds of times.
+</div>
+
+<h4>4.5 &nbsp; Avoid redundant work (2): hoisting, copying cost, and batching</h4>
+
+<h5>Hoist invariant work out of loops</h5>
+
+<p>If something inside a loop produces the <em>same value every iteration</em>, computing it inside the loop wastes that work <code>N</code> times over. <strong>Hoisting</strong> means lifting that loop-invariant computation <em>out</em> of the loop, computing it once, and reusing it.</p>
+
+<pre>
+# SLOW — recomputes a constant factor on every one of N iterations
+for cell in cells:
+    factor = boltzmann * t_ref / charge      # identical every pass!
+    cell.adjust(factor)
+
+# FAST — hoist the invariant out; compute it ONCE
+factor = boltzmann * t_ref / charge          # once, before the loop
+for cell in cells:
+    cell.adjust(factor)
+</pre>
+
+<p>The arithmetic of <code>factor</code> happens once instead of <code>N</code> times. The rule generalises: anything inside a loop that does not depend on the loop variable should usually live outside it.</p>
+
+<h5>Copying cost</h5>
+
+<p>Copying data is not free, and copying <em>big</em> data repeatedly can quietly dominate a runtime. A <em>deep copy</em> duplicates an object and everything it refers to, all the way down — so a deep copy of a large nested configuration allocates and fills a whole second structure.</p>
+
+<div class="callout">
+<strong>PowerPy's deep-copy habit.</strong> PowerPy frequently deep-copies objects by <em>serialising them to JSON and parsing them back</em> — a convenient way to get a fully independent copy. For a small configuration that is perfectly fine; the cost is negligible. But the same trick becomes expensive if it is done <em>per cell, per iteration</em> inside a hot loop: serialising and re-parsing a structure thousands of times adds up fast. The guideline: <strong>copy only what actually changes.</strong> If a loop mutates one field of a big object, copy that field — not the entire object — each pass.
+</div>
+
+<h5>Expensive external calls — batch and amortise</h5>
+
+<p>The most expensive thing PowerPy does per call is talk to <em>ngspice</em>, an external circuit simulator. Each invocation of the wrapper <code>ng_sim</code> <em>creates a fresh ngspice engine instance and destroys it again</em> when done. Spinning an engine up and tearing it down has a fixed cost that has nothing to do with the actual circuit — and if you pay that cost <em>per cell, per voltage point</em>, it utterly dominates.</p>
+
+<div class="term"><strong>Batching (and amortising).</strong> <em>Batching</em> means grouping many small operations into one larger operation so a fixed per-operation overhead is paid <em>once</em> instead of once-per-item. <em>Amortising</em> means spreading that fixed cost across all the items it now serves, so the cost <em>per item</em> becomes small. Pay a setup cost once and use it for 600 things, and the amortised setup cost per thing is 1/600th of what it was.</div>
+
+<p>Applied to ngspice: instead of one <code>.op</code> (operating-point) call per voltage per cell — thousands of engine spin-ups — solve a <em>whole circuit or a whole IV sweep in a single ngspice run</em>, and <em>reuse the engine</em> across points where you can. The engine start-up is then paid once and amortised over the entire sweep, instead of being re-paid thousands of times.</p>
+
+<div class="worked">
+<strong>Mini worked figure — amortising engine start-up.</strong>
+<div class="step">Say an ngspice engine takes ~50 ms to spin up and tear down, and the actual solve of one operating point is ~1 ms.
+<div class="formula">
+per-point approach (engine per <code>.op</code>): (50 + 1) ms × 100 points = <strong>5100 ms</strong><br>
+batched approach (one engine, 100 points in it): 50 ms + (100 × 1 ms) = <strong>150 ms</strong>
+<div class="where">where 50 ms is the fixed engine setup, 1 ms is one operating-point solve, 100 is the number of voltage points in the sweep.</div>
+</div></div>
+<div class="check">The fixed 50 ms is paid 100 times in the first case (5000 ms of pure overhead) and <em>once</em> in the second. Batching cuts the sweep from ~5.1 s to ~0.15 s — roughly 34× — entirely by amortising a fixed cost. ✓</div>
+</div>
+
+<h4>4.6 &nbsp; Data structures and memory</h4>
+
+<p>The container you choose for numeric data affects both speed and memory. The key contrast is a Python <code>list</code> of floats versus a numpy <code>array</code> of floats.</p>
+
+<ul>
+<li><strong>A Python list of floats</strong> is a list of <em>pointers</em> to individual float <em>objects</em> scattered in memory; each float carries object overhead, and iterating touches them one boxed object at a time. Flexible, but heavy and cache-unfriendly for numbers.</li>
+<li><strong>A numpy array of floats</strong> is one <em>contiguous, typed</em> block of raw 8-byte values — no per-element object overhead, laid out so the CPU can stream through it, and the substrate that makes vectorisation (§4.3) possible.</li>
+</ul>
+
+<p>So for numeric work, prefer numpy arrays: they are smaller in memory <em>and</em> faster to compute on. Memory matters in its own right for the big result tables a Monte-Carlo sweep produces — thousands of runs × many quantities per run. Two levers keep that under control: <strong>compact dtypes</strong> (store values in the smallest type that suffices — e.g. <code>float32</code> instead of <code>float64</code> halves the table when full double precision is not needed) and <strong>columnar storage</strong> (store each quantity as its own contiguous column rather than as rows of mixed-type records, which is both more compact and faster to scan one quantity at a time). This links directly to Chapter 2 §7's handling of Monte-Carlo result tables.</p>
+
+<h4>4.7 &nbsp; Parallelism (briefly)</h4>
+
+<p>Some work can be split across several CPU cores and done at the same time. Monte-Carlo is the ideal case for it.</p>
+
+<div class="term"><strong>Embarrassingly parallel.</strong> A workload made of pieces that are <em>completely independent</em> — none needs any result from another — so they can run simultaneously on different cores with essentially no coordination. The 1000 runs of a Monte-Carlo sweep are embarrassingly parallel: each run draws its own random sample and computes its own result, sharing nothing, so you can hand run 1 to one core, run 2 to another, and so on. With <code>C</code> cores you approach a <code>C</code>× ("near-linear") speed-up.</div>
+
+<p>In Python you reach for <code>joblib</code> (a thin, friendly wrapper, popular in scientific code) or the standard-library <code>multiprocessing</code> to spread independent runs across cores. But there is a Python-specific catch you must understand to choose the right tool.</p>
+
+<div class="term"><strong>GIL — Global Interpreter Lock.</strong> A lock inside CPython (the standard Python interpreter) that allows <em>only one thread to execute Python bytecode at a time</em>, even on a multi-core machine. It exists to keep the interpreter's internals safe, but its consequence for performance is blunt: multiple Python <em>threads</em> cannot run Python computation truly in parallel — they take turns holding the lock. So threads do <em>not</em> speed up CPU-bound Python work.</div>
+
+<div class="keyidea">
+<strong>Processes, not threads, for CPU-bound work.</strong> Because the GIL serialises threads, the way to get real parallelism for <em>computation</em> is to use multiple <em>processes</em> — each a separate Python interpreter with its <em>own</em> GIL — so they genuinely run at once on separate cores. <code>joblib</code> and <code>multiprocessing</code> default to processes for exactly this reason. (Threads still help for <em>I/O-bound</em> work — waiting on disk or network — because a thread waiting on I/O releases the GIL. But a Monte-Carlo sweep is CPU-bound, so it wants processes.)
+</div>
+
+<h4>4.8 &nbsp; When NOT to optimise</h4>
+
+<p>Everything above is about <em>how</em> to make code fast. This subsection is about <em>when not to bother</em> — which is most of the time.</p>
+
+<div class="term"><strong>Premature optimisation.</strong> Making code more complicated in the name of speed <em>before</em> you have measured that the speed is actually needed <em>there</em>. It is the habit of rewriting clear code into clever code on a hunch — and it almost always trades real, permanent readability for imaginary or trivial performance, because the "optimised" spot was usually not the bottleneck at all.</div>
+
+<div class="keyidea">
+<strong>Optimise the proven hot spot, and nothing else.</strong> Clear code has a real, ongoing value: it is easier to trust, debug, and change (§3). Speed has value only where it is <em>measurably</em> lacking. So the rule closes the loop with §4.1: <em>profile first</em>, find the one function that genuinely costs the time, optimise <em>that</em> one — accepting some added complexity there because it buys a measured win — and leave the other 95% of the code clear and simple. Optimising code that is not hot makes the program harder to read for no benefit you can measure. The hot spot earns its complexity; nothing else does.
+</div>
+
+<h4>4.9 &nbsp; Worked example (a) — Big-O and parallel wall-clock <span class="badge hot">EXAM-HOT</span></h4>
+
+<div class="worked">
+<strong>Worked example (a) — a 600-position fault sweep.</strong> You want to sweep a single-cell fault through every position in a 600-cell array: for each position, mark that one cell failed and run the full simulation. Each full run takes <strong>0.5 s</strong>. Question: what is the wall-clock time on 1 core, and on 8 cores?
+
+<div class="step"><strong>Identify the complexity.</strong> One run per position, 600 positions, runs independent of one another → the sweep is <strong>O(N)</strong> with <code>N = 600</code>. (Contrast the impossible O(2^N) of enumerating all failure <em>combinations</em> in §4.2 — here we change one cell at a time, not every subset.)</div>
+
+<div class="step"><strong>Single-core wall-clock.</strong> The runs happen one after another:
+<div class="formula">
+T₁ = N × (time per run) = 600 runs × 0.5 s/run = <strong>300 s</strong> (= 5 minutes)
+<div class="where">where N = 600 positions, 0.5 s = duration of one full simulation run, and "× 1" because one core does them sequentially.</div>
+</div></div>
+
+<div class="step"><strong>Eight-core wall-clock.</strong> The 600 runs are <em>embarrassingly parallel</em> (each position is independent), so 8 cores share the load near-linearly:
+<div class="formula">
+T₈ ≈ T₁ / cores = 300 s / 8 = <strong>37.5 s ≈ 38 s</strong>
+<div class="where">where 300 s is the single-core total and 8 is the number of cores; the ÷8 assumes ideal near-linear scaling.</div>
+</div></div>
+
+<div class="check"><strong>Check and caveat.</strong> 600 × 0.5 s = 300 s on one core; spread over 8 independent workers, ≈ 38 s — an ~8× reduction, which is the near-linear speed-up an embarrassingly-parallel workload allows. The 38 s is an <em>idealised floor</em>: real scaling is slightly worse because of process start-up and result-gathering overhead, so expect a little above 38 s, not below. Because the runs are CPU-bound, this uses 8 <em>processes</em> (not threads — the GIL would serialise threads). ✓</div>
+</div>
+
+<h4>4.10 &nbsp; Worked example (b) — quantifying the vectorisation saving <span class="badge hot">EXAM-HOT</span></h4>
+
+<div class="worked">
+<strong>Worked example (b) — fsolve-per-cell vs one vectorised solve, across a Monte-Carlo sweep.</strong> Using the case-study figures from §4.3: an array of <strong>600 cells</strong>; the legacy thermal solve calls <code>fsolve</code> once per cell at <strong>~1 ms</strong> per call; the vectorised solve does the whole array in <strong>~2 ms</strong> total; the reliability study runs <strong>1000</strong> Monte-Carlo runs. (Order-of-magnitude figures, not benchmarks.)
+
+<div class="step"><strong>Legacy cost per run.</strong> One <code>fsolve</code> per cell, 600 cells:
+<div class="formula">
+legacy/run = 600 cells × 1 ms/cell = 600 ms = <strong>0.6 s per run</strong>
+<div class="where">where 600 = cells in the array (one fsolve each) and 1 ms = cost of a single fsolve call.</div>
+</div></div>
+
+<div class="step"><strong>Legacy cost across the whole sweep.</strong> 1000 independent runs:
+<div class="formula">
+legacy total = 1000 runs × 0.6 s/run = <strong>600 s</strong> (= 10 minutes of thermal work)
+<div class="where">where 1000 = Monte-Carlo runs and 0.6 s = legacy thermal cost of one run.</div>
+</div></div>
+
+<div class="step"><strong>Vectorised cost across the whole sweep.</strong> ~2 ms total per run, 1000 runs:
+<div class="formula">
+vectorised total = 1000 runs × 2 ms/run = 2000 ms = <strong>2 s</strong>
+<div class="where">where 2 ms = vectorised thermal solve of the whole 600-cell array in one run.</div>
+</div></div>
+
+<div class="step"><strong>The saving, quantified.</strong>
+<div class="formula">
+speed-up = 600 s / 2 s = <strong>≈ 300×</strong>; &nbsp; time saved = 600 s − 2 s = <strong>598 s</strong> (just under 10 minutes)
+<div class="where">ratio of legacy total to vectorised total; equivalently 0.6 s/run ÷ 2 ms/run ≈ 300× per run.</div>
+</div></div>
+
+<div class="check"><strong>Check and honest framing.</strong> The numbers divide to ≈300×, so the <em>thermal work</em> of the whole 1000-run study collapses from ~600 s to ~2 s. We describe this as a <strong>"~100× class" of speed-up</strong> — an order-of-magnitude statement — rather than a hard figure, because the inputs (1 ms/fsolve, 2 ms/vectorised) are illustrative stand-ins, not measured times; the real ratio depends on the machine and the cell count. The point that survives any reasonable choice of inputs: turning <code>N</code> Python-loop solver calls into ~6 array operations removes an entire factor of <code>N</code> from the cost, and that factor multiplies across every Monte-Carlo run. ✓</div>
+</div>
+
+<h4>4.11 &nbsp; Socratic ladder — why does vectorising the loop make it ~100× faster?</h4>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). When you run a plain Python <code>for</code> loop <code>for i in range(n): out[i] = a[i] + b[i]</code>, what does the interpreter actually <em>do</em> on every single iteration, beyond the addition itself?</div>
+<div class="answer">On each pass it does a pile of bookkeeping around the one add: it advances the loop and bounds-checks <code>i</code>; it indexes <code>a</code> and <code>b</code>, which means following pointers to two Python <em>float objects</em>; it checks the <em>type</em> of each object and <em>unboxes</em> the raw double out of it; it performs the add; it <em>boxes</em> the result into a brand-new Python float object; and it stores that back into <code>out</code>. The arithmetic is one machine instruction; everything around it — the type checks, the boxing and unboxing, the loop machinery — is many, and it repeats every iteration.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (name it). That surrounding bookkeeping has a name — what is it, and how does its cost compare to the arithmetic?</div>
+<div class="answer">It is <strong>interpreter (per-iteration) overhead</strong>: the fixed cost the Python interpreter pays to execute each step of a loop in a dynamically-typed language where every value is a boxed object of unknown type until checked. For simple numeric work this overhead is typically <em>larger</em> than the arithmetic it surrounds — often by an order of magnitude — so a Python numeric loop spends most of its time <em>not</em> doing the maths, but managing objects and the loop.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (the shift). When you replace the loop with one numpy operation <code>out = a + b</code>, what work gets pushed out of the interpreter and into compiled code, and why does that kill the overhead?</div>
+<div class="answer">numpy knows in advance that <code>a</code> and <code>b</code> are <em>contiguous, typed</em> arrays — say, blocks of 8-byte doubles all of the same type. So it can run a single tight loop <em>in compiled C</em> that strides straight through the raw memory adding doubles, with <em>no per-element type check and no boxing/unboxing</em>: the values are already raw doubles, not Python objects. The per-iteration overhead that Python paid <code>N</code> times is paid essentially <em>once</em>, at the boundary, for the whole array. Same additions; the interpreter bookkeeping around each one is gone.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;d (why it grows with N). Why does the speed-up get <em>bigger</em> as the array gets larger, rather than staying a fixed percentage?</div>
+<div class="answer">Because the Python loop's cost is roughly <code>N × (overhead + arithmetic)</code> while the vectorised cost is roughly <code>(fixed setup) + N × (arithmetic)</code>. The expensive <em>overhead</em> term scales with <code>N</code> in the loop but is paid <em>once</em> in the vectorised version. So as <code>N</code> grows, the loop keeps re-paying the overhead while numpy does not, and the ratio between them widens. At <code>N = 600</code> cells (the case study) the loop has paid the per-element tax 600 times; the vectorised solve, essentially zero times.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;e (the boundary — the target). Put it together: <em>why does rewriting a per-cell Python loop as one numpy array operation make it ~100× faster when it does the same arithmetic?</em> And what kind of computation would <em>not</em> vectorise this way?</div>
+<div class="answer"><strong>The speed-up:</strong> the arithmetic is identical, but the Python loop wraps every element in interpreter overhead — type checks, boxing/unboxing, loop machinery (Q&middot;a–b) — and pays it <code>N</code> times, whereas the numpy operation pushes the loop into compiled C over a typed contiguous block and pays that overhead essentially once (Q&middot;c). Since the dominant cost was the overhead and it no longer scales with <code>N</code>, the larger the array the larger the win (Q&middot;d) — for PowerPy's 600 independent cells, a ~100×-class collapse from ~600 ms to a couple of ms. <strong>What would NOT vectorise:</strong> a computation with a genuine <em>per-element sequential dependency</em> — where computing element <code>i</code> <em>requires the result of element <code>i−1</code></em>. You cannot do all elements "at once" if each one needs the previous one's answer first. PowerPy shows both faces of this: the thermal solve vectorises <em>across cells</em> because the cells are independent, but the Newton <em>iterations</em> within the solve are inherently sequential (each step uses the previous step's estimate), as is the coupling fixed-point loop between the electrical and thermal models. You vectorise the independent dimension (cells) and accept that the dependent one (iteration steps) stays a loop. <strong>Vectorisation removes the interpreter tax wherever the work is independent; where the work is truly sequential, that tax cannot be removed by vectorising and you need a different approach.</strong></div>
+</div>
+</div>
+
+<h4>4.12 &nbsp; Pitfalls</h4>
+
+<div class="pitfall">
+<strong>Pitfall 1 — optimising before profiling.</strong> If you optimise on a hunch instead of a measurement, you will almost certainly speed up the <em>wrong thing</em>: you pour effort into a function that turns out to be 3% of the runtime while the real 80% hot spot sits untouched, and the program is no faster — but now it is also harder to read. The fix is the golden rule (§4.1): run <code>cProfile</code> first, read the top of the table, and optimise only the function that the measurement proves is hot. <em>Don't guess, profile.</em>
+</div>
+
+<div class="pitfall">
+<strong>Pitfall 2 — "vectorising" something with a genuine sequential dependency.</strong> Vectorisation only works when the per-element computations are <em>independent</em>. If element <code>i</code> truly depends on element <code>i−1</code> — an iterative solver step that needs the previous estimate, a running cumulative total, a fixed-point loop that feeds its own output back as input — you <em>cannot</em> express it as one array operation that does everyone "at once," because the inputs for later elements do not exist yet. Forcing it produces wrong answers (silently using stale values) or simply cannot be written. The honest move is to recognise the dependency and either keep that part as a loop, or reach for a method designed for sequential structure (e.g. <code>numpy.cumsum</code> for cumulative sums, or a vectorised iteration that steps <em>all</em> elements forward together — as PowerPy's Newton solver does across cells while still iterating sequentially in time).
+</div>
+
+<h4>4.13 &nbsp; Practice</h4>
+
+<div class="practice">
+<strong>Practice D4-1.</strong> For each hot loop below, decide whether it <em>vectorises</em> into a single numpy array operation, and say in one line <em>why</em> or why not.
+<pre>
+# (i)
+for k in range(n):
+    out[k] = v[k] * 2.0 + offset
+
+# (ii)
+total[0] = x[0]
+for k in range(1, n):
+    total[k] = total[k-1] + x[k]
+</pre>
+For the one that does vectorise, write the one-line numpy replacement. For the one that does not, name the property that blocks it.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D4-2.</strong> A hot function calls <code>fsolve</code> once per cell. There are <strong>800 cells</strong> and each call costs <strong>1.5 ms</strong>; the study runs <strong>500</strong> Monte-Carlo runs. (a) Compute the legacy thermal time for the whole study. (b) A vectorised solve does the whole array in <strong>3 ms</strong> per run; compute the vectorised total and the speed-up factor. Show the arithmetic with units.
+<div class="answerspace lines-8"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D4-3.</strong> You must run 2000 independent Monte-Carlo simulations, each one CPU-bound (heavy numpy + ngspice computation, no waiting on disk or network). You have an 8-core machine. Would you parallelise with <em>threads</em> or with <em>processes</em>? Justify your choice in terms of the GIL, and estimate the best-case wall-clock if one run takes 0.4 s.
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice D4-4.</strong> A colleague has sped up a tidy 12-line configuration-parsing function into 40 lines of bit-twiddling "for performance." The profiler shows that function is 0.4% of total runtime; the Monte-Carlo thermal solve is 86%. In two or three lines, critique this decision using the section's vocabulary, and say what should have been optimised instead.
+<div class="answerspace lines-4"></div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> <strong>Measure before you optimise</strong> — <em>profiling</em> finds where time actually goes; use <code>time.perf_counter</code>/<code>timeit</code> for a snippet and <code>cProfile</code> for a whole run; <em>don't guess, profile</em>. <strong>Big-O</strong> describes how runtime grows with input size <code>N</code> — O(1) constant, O(N) linear, O(N²) quadratic, O(2^N) exponential — and for large <code>N</code> the right algorithm beats any micro-optimisation (enumerating <code>2^N</code> failure combinations is hopeless, which is why Chapter 2 samples with Monte-Carlo; a position sweep is O(N)). <strong>Vectorisation</strong> replaces a per-element Python loop with one compiled numpy array operation, paying the interpreter's per-iteration overhead (type-check + box/unbox + loop step) <em>once for the whole array</em> instead of <code>N</code> times — PowerPy's thermal solver turns <code>N</code> <code>fsolve</code> calls into ~6 array ops, a ~100×-class win (~600 ms → ~2 ms for 600 cells) that compounds across a 1000-run sweep (~600 s → ~2 s). Avoid redundant work: <em>memoise/cache</em> (<code>functools.lru_cache</code>; PowerPy's md5-of-parameters cell naming is caching by content), <em>hoist</em> loop-invariants out, watch <em>copying cost</em> (PowerPy's JSON deep-copy is fine for small configs, costly per-cell-per-iteration — copy only what changes), and <em>batch/amortise</em> expensive external calls (one ngspice run for a whole sweep, reuse the engine, not one <code>.op</code> per voltage per cell). Prefer <em>numpy arrays</em> (contiguous, typed) over lists of floats, and use compact dtypes / columnar storage for big Monte-Carlo tables (Ch2 §7). Monte-Carlo is <em>embarrassingly parallel</em>: spread it across cores with <code>joblib</code>/<code>multiprocessing</code> for near-linear speed-up, using <em>processes not threads</em> for CPU-bound work because the <strong>GIL (Global Interpreter Lock)</strong> lets only one thread run Python bytecode at a time. Finally, avoid <em>premature optimisation</em>: optimise only the profiled hot spot, and leave the rest clear.
+</div>

@@ -1,0 +1,690 @@
+<!-- ===================================================================
+     SECTION 2 — Vectorising the thermal solve:
+     Newton–Raphson over the whole array at once
+     PowerPy study notes · teaching fragment (h2 supplied by builder)
+     IDs of practice items: Q2-1, Q2-2, Q2-3 (match _sol_Q2.html)
+     =================================================================== -->
+
+<p class="lede">In Chapter&nbsp;1 we learned that every solar cell is two things at
+once — an electrical device <em>and</em> a small radiator that can only shed heat
+to cold space. We also met the little two-node energy balance that decides how hot
+a cell sits. This section takes that balance and asks a sharper, more
+<em>computational</em> question: when an array has hundreds of cells and we want to
+run thousands of Monte-Carlo trials, how do we find every cell's temperature
+<em>fast</em>? The answer is one of the most important ideas in scientific
+computing, and PowerPy leans on it heavily: stop looping in Python, and instead
+solve the same nonlinear equation for <em>all</em> cells at once with a single
+vectorised Newton–Raphson sweep. We will build that idea from the ground up —
+defining every term the moment it appears — and finish by watching it find a
+quantified hot-spot inside a four-cell array.</p>
+
+<h3>2.1 Recap — the two-node steady-state balance from Chapter&nbsp;1</h3>
+
+<p>Recall the picture from Chapter&nbsp;1. We model a single cell as <strong>two
+nodes</strong>: a <em>front</em> face (subscript&nbsp;F, the side that looks at the
+Sun) and a <em>rear</em> face (subscript&nbsp;R, the side bonded to the substrate
+that looks at the planet and deep space). Each node has its own temperature, and
+the two are linked by conduction through the thin material between them. At
+<em>steady state</em> — meaning nothing is changing in time any more — the heat
+flowing <em>into</em> each node must exactly balance the heat flowing <em>out</em>.
+"Into minus out&nbsp;=&nbsp;0" for each node gives us two equations.</p>
+
+<p>We write each balance as a <strong>residual</strong>: a single number that is
+zero when the books balance and non-zero when they do not. Call them
+<var>f</var><sub>1</sub> (front node) and <var>f</var><sub>2</sub> (rear node):</p>
+
+<div class="formula">
+<var>f</var><sub>1</sub>(<var>T</var><sub>1</sub>,&nbsp;<var>T</var><sub>2</sub>)
+= α<sub>F</sub>·<var>A</var>·<var>P</var><sub>Sun</sub>·tilt
+&minus; ε<sub>F</sub>·<var>A</var>·σ·(<var>T</var><sub>1</sub><sup>4</sup> &minus; <var>T</var><sub>sp</sub><sup>4</sup>)
+&minus; <var>P</var><sub>elec</sub>
++ <var>C</var>·<var>A</var>·(<var>T</var><sub>2</sub> &minus; <var>T</var><sub>1</sub>)
+<br>
+<var>f</var><sub>2</sub>(<var>T</var><sub>1</sub>,&nbsp;<var>T</var><sub>2</sub>)
+= (α<sub>R</sub>·<var>P</var><sub>Albedo</sub> + ε<sub>R</sub>·<var>P</var><sub>IR</sub>)·<var>A</var>·tilt
+&minus; ε<sub>R</sub>·<var>A</var>·σ·(<var>T</var><sub>2</sub><sup>4</sup> &minus; <var>T</var><sub>sp</sub><sup>4</sup>)
+&minus; <var>C</var>·<var>A</var>·(<var>T</var><sub>2</sub> &minus; <var>T</var><sub>1</sub>)
+<div class="where"><strong>where every symbol means:</strong><br>
+<var>T</var><sub>1</sub>, <var>T</var><sub>2</sub> — front- and rear-node
+temperatures, <strong>in kelvin (K)</strong> (this matters enormously — see the
+pitfall, because they are raised to the fourth power).<br>
+σ (sigma) — the <em>Stefan–Boltzmann constant</em>,
+σ&nbsp;=&nbsp;5.670367×10<sup>&minus;8</sup>&nbsp;W/m²K⁴, the universal constant
+that converts a surface's temperature-to-the-fourth into radiated power per unit
+area.<br>
+<var>T</var><sub>sp</sub> — the temperature of deep space,
+<var>T</var><sub>sp</sub>&nbsp;=&nbsp;2.7&nbsp;K (the cosmic microwave background;
+the cold sink the cell radiates <em>to</em>).<br>
+<var>A</var> — the cell <em>area</em> (m²); it scales every flux because power =
+flux&nbsp;×&nbsp;area.<br>
+<var>C</var> — the through-thickness <em>conductance</em> coefficient
+(conductivity ÷ thickness, W/m²K); <var>C</var>·<var>A</var> is how readily heat
+flows from the rear node to the front node per kelvin of temperature difference.<br>
+α<sub>F</sub>, α<sub>R</sub> (alpha) — the <em>absorptivity</em> of the front and
+rear faces: the fraction of incident light each face soaks up (0–1), a property of
+the substrate/coating.<br>
+ε<sub>F</sub>, ε<sub>R</sub> (epsilon) — the <em>emissivity</em> of the front and
+rear faces: how efficiently each face radiates heat away (0–1), also from the
+substrate.<br>
+tilt — a geometric factor (0–1) for how squarely the face meets the incoming
+flux; tilt&nbsp;=&nbsp;1 means face-on.<br>
+<var>P</var><sub>Sun</sub>, <var>P</var><sub>Albedo</sub>, <var>P</var><sub>IR</sub>
+— the incident solar, reflected-sunlight (albedo) and planetary-infrared flux
+densities (W/m²).<br>
+<var>P</var><sub>elec</sub> — the electrical power <em>extracted</em> from the cell
+(W). Sign convention: <strong>positive</strong> when the cell delivers power
+(that energy leaves as electricity instead of heat); <strong>negative</strong>
+when the cell is reverse-biased and <em>dissipating</em>, i.e. acting as a heater.
+</div>
+</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>Residual.</strong> A
+residual is the left-over imbalance of an equation you are trying to satisfy,
+written so that the target value is zero. Here each residual is
+(heat&nbsp;in)&nbsp;&minus;&nbsp;(heat&nbsp;out) for one node. If you guess a
+temperature and the residual comes out at <var>f</var><sub>1</sub>&nbsp;=&nbsp;+3,
+the front node is currently absorbing 3&nbsp;W more than it sheds, so it must warm
+up. The whole game is to nudge the temperatures until both residuals are zero.</div>
+
+<div class="keyidea"><span class="lbl">Key idea</span> <strong>Equilibrium is the
+pair (<var>T</var><sub>1</sub>,&nbsp;<var>T</var><sub>2</sub>) that makes
+<var>f</var><sub>1</sub>&nbsp;=&nbsp;<var>f</var><sub>2</sub>&nbsp;=&nbsp;0
+simultaneously.</strong> Two unknowns, two equations. Both equations are
+<em>nonlinear</em> in temperature — because of the radiated-power terms, which go
+as <var>T</var><sup>4</sup>, not <var>T</var>. That fourth power is the whole
+reason we cannot just solve this with simple algebra and need an iterative root
+finder.</div>
+
+<h3>2.2 The old approach, and why it is the bottleneck</h3>
+
+<p>How did PowerPy's <em>legacy</em> code find equilibrium? Straightforwardly, and
+slowly. For each cell it handed the pair
+(<var>f</var><sub>1</sub>,&nbsp;<var>f</var><sub>2</sub>) to
+<code>scipy.optimize.fsolve</code> — a general-purpose black-box root finder — and
+let it grind out that one cell's temperatures. Then it moved to the next cell and
+did it again. In code, the shape was simply a Python <code>for</code> loop:</p>
+
+<pre><code>for cell in array.cells:          # N iterations, in slow Python
+    T1, T2 = fsolve(residuals, x0=[300.0, 300.0], args=cell.params)
+    cell.T_front, cell.T_rear = T1, T2</code></pre>
+
+<p>This is correct, and for a handful of cells it is perfectly fine. The problem
+is <em>scale</em>. Consider what a real PowerPy study asks for:</p>
+
+<ul>
+  <li>An array might have <strong>N&nbsp;=&nbsp;hundreds</strong> of cells.</li>
+  <li>A robustness study runs <strong>many Monte-Carlo trials</strong> — thousands
+  of randomised what-if scenarios (degradation, fault patterns, tilt spreads).</li>
+  <li>And the thermal solve itself sits inside an <em>outer</em> loop (Section&nbsp;3),
+  so it is re-run again and again as temperatures and electrical loads settle.</li>
+</ul>
+
+<p>Multiply those together and the inner <code>fsolve</code> call is executed an
+enormous number of times. Two costs then dominate:</p>
+
+<div class="pitfall"><span class="lbl">Why it is slow</span> <strong>(1) Python-level
+loop overhead.</strong> Every trip round a Python <code>for</code> loop has
+interpreter cost — far slower than the same arithmetic in compiled machine code.
+Do it N&nbsp;×&nbsp;(trials) times and it adds up. <strong>(2) A full solver
+spin-up per cell.</strong> <code>fsolve</code> is a general routine that does not
+know our equations; each call must set itself up, probe the function, and often
+estimate derivatives numerically — real work, repeated from scratch for every
+single cell even though all cells obey the <em>same</em> two equations. We are
+paying a heavyweight, general-purpose price for a problem with a tiny, known,
+identical structure.</div>
+
+<p>The cure is to throw away the per-cell loop entirely. To do that we need to (a)
+understand the root-finding method well enough to write it ourselves, and (b)
+notice a structural fact about our equations that lets us apply it to every cell
+in one stroke. The next two subsections supply exactly those.</p>
+
+<h3>2.3 Newton–Raphson, from scratch</h3>
+
+<p>Newton–Raphson (often just "Newton's method") is the classic way to solve
+<var>f</var>(<var>x</var>)&nbsp;=&nbsp;0 when <var>f</var> is nonlinear. Start with
+the one-variable case, because the idea is purely geometric and easy to see.</p>
+
+<p><strong>The scalar method.</strong> You have a function <var>f</var>(<var>x</var>)
+and you want the <var>x</var> where it crosses zero (its <em>root</em>). You make a
+guess <var>x</var>, and you ask a simpler question than "where is the root of this
+curve?": you ask "where is the root of the <em>tangent line</em> to the curve at my
+current guess?" The tangent is a straight line, so that is trivial to answer — and
+because a smooth curve hugs its tangent near the point of contact, the tangent's
+root is usually a much better guess than where you started. Repeat, and you home
+in fast.</p>
+
+<p>Concretely: at the point <var>x</var> the curve has height <var>f</var>(<var>x</var>)
+and slope <var>f</var>&prime;(<var>x</var>) (the derivative). The tangent line
+through that point hits zero after a horizontal step of
+<var>f</var>(<var>x</var>)&nbsp;/&nbsp;<var>f</var>&prime;(<var>x</var>). So the
+update rule is:</p>
+
+<div class="formula">
+<var>x</var> &larr; <var>x</var> &minus;
+<var>f</var>(<var>x</var>) / <var>f</var>&prime;(<var>x</var>)
+<div class="where">Read "&larr;" as "becomes": compute the right-hand side, then
+let that be your new <var>x</var>. Geometrically you are sliding down the tangent
+line until it crosses the <var>x</var>-axis, and using that crossing as the next
+guess.</div>
+</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>Derivative
+<var>f</var>&prime;(<var>x</var>).</strong> The instantaneous slope of the curve —
+how much <var>f</var> changes per unit change in <var>x</var>. A big slope means a
+small step reaches zero; a shallow slope means you must step far. That is exactly
+why the update divides by the slope.</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>Quadratic
+convergence.</strong> Near the root, the number of <em>correct digits roughly
+doubles every iteration</em>. If you have 2 good digits now, expect ~4 next step,
+~8 the step after. This is why Newton needs only a handful of iterations: the error
+does not shrink by a fixed factor each time (that would be <em>linear</em>) — it
+shrinks roughly as the <em>square</em> of the previous error. We will literally
+watch this happen in the worked example: the residual falls
+3.96&nbsp;→&nbsp;0.38&nbsp;→&nbsp;0.013&nbsp;→&nbsp;1.5×10<sup>&minus;5</sup>&nbsp;→&nbsp;2×10<sup>&minus;11</sup>.</div>
+
+<p><strong>The system version.</strong> Our problem is not one equation in one
+unknown; it is two equations
+(<var>f</var><sub>1</sub>,&nbsp;<var>f</var><sub>2</sub>) in two unknowns
+(<var>T</var><sub>1</sub>,&nbsp;<var>T</var><sub>2</sub>). Write the unknowns as a
+vector <strong>x</strong>&nbsp;=&nbsp;(<var>T</var><sub>1</sub>,&nbsp;<var>T</var><sub>2</sub>)
+and the residuals as a vector
+<strong>f</strong>(<strong>x</strong>)&nbsp;=&nbsp;(<var>f</var><sub>1</sub>,&nbsp;<var>f</var><sub>2</sub>).
+Newton's idea is unchanged — replace the curve by its linear approximation and
+solve <em>that</em> — but the single slope <var>f</var>&prime; is replaced by a
+whole matrix of slopes, because each residual now varies with each unknown.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Jacobian
+matrix&nbsp;<var>J</var>.</strong> For a vector function
+<strong>f</strong>(<strong>x</strong>), the Jacobian is the grid of all
+first-order partial derivatives: its entry in row&nbsp;<var>i</var>,
+column&nbsp;<var>j</var> is
+<var>J</var><sub>ij</sub>&nbsp;=&nbsp;∂<var>f</var><sub>i</sub>/∂<var>x</var><sub>j</sub>
+— "how much residual&nbsp;<var>i</var> changes when only unknown&nbsp;<var>j</var>
+is nudged." It is the multi-dimensional generalisation of the scalar slope
+<var>f</var>&prime;. For our 2-equation system it is a 2×2 matrix.</div>
+
+<p>With the slope generalised to the Jacobian, division by the slope becomes
+multiplication by the <em>matrix inverse</em> <var>J</var><sup>&minus;1</sup>, and
+the update reads:</p>
+
+<div class="formula">
+<strong>x</strong> &larr; <strong>x</strong> &minus;
+<var>J</var><sup>&minus;1</sup>&nbsp;<strong>f</strong>(<strong>x</strong>)
+<div class="where">Exactly the scalar rule with "divide by the slope" upgraded to
+"apply the inverse of the slope matrix." Solve the linear system
+<var>J</var>&nbsp;Δ<strong>x</strong>&nbsp;=&nbsp;&minus;<strong>f</strong> for the
+correction Δ<strong>x</strong>, then add it to <strong>x</strong>.</div>
+</div>
+
+<h3>2.4 The 2×2 Jacobian for our cell</h3>
+
+<p>Let us actually build <var>J</var> for our two residuals by differentiating
+them. We need four partial derivatives. The trick is that <em>almost every term is
+linear</em> in <var>T</var><sub>1</sub> or <var>T</var><sub>2</sub> (its derivative
+is just a constant), and the <strong>only nonlinear term is the quartic</strong>
+<var>T</var><sup>4</sup>, whose derivative is 4<var>T</var><sup>3</sup>. Differentiate
+<var>f</var><sub>1</sub> first.</p>
+
+<p>Holding <var>T</var><sub>2</sub> fixed and differentiating
+<var>f</var><sub>1</sub> with respect to <var>T</var><sub>1</sub>: the absorbed
+solar term is constant (→&nbsp;0); the emission term
+&minus;ε<sub>F</sub><var>A</var>σ<var>T</var><sub>1</sub><sup>4</sup> gives
+&minus;4ε<sub>F</sub><var>A</var>σ<var>T</var><sub>1</sub><sup>3</sup>; the
+conduction term +<var>C</var><var>A</var>(<var>T</var><sub>2</sub>&minus;<var>T</var><sub>1</sub>)
+contributes &minus;<var>C</var><var>A</var>. Differentiating instead with respect
+to <var>T</var><sub>2</sub>: only the conduction term depends on
+<var>T</var><sub>2</sub>, giving +<var>C</var><var>A</var>. Doing the same for
+<var>f</var><sub>2</sub> yields the four entries:</p>
+
+<div class="formula">
+∂<var>f</var><sub>1</sub>/∂<var>T</var><sub>1</sub>
+= &minus;4·ε<sub>F</sub>·<var>A</var>·σ·<var>T</var><sub>1</sub><sup>3</sup>
+&minus; <var>C</var>·<var>A</var>
+&nbsp;&nbsp;&nbsp;&nbsp;
+∂<var>f</var><sub>1</sub>/∂<var>T</var><sub>2</sub> = +<var>C</var>·<var>A</var>
+<br>
+∂<var>f</var><sub>2</sub>/∂<var>T</var><sub>1</sub> = +<var>C</var>·<var>A</var>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+∂<var>f</var><sub>2</sub>/∂<var>T</var><sub>2</sub>
+= &minus;4·ε<sub>R</sub>·<var>A</var>·σ·<var>T</var><sub>2</sub><sup>3</sup>
+&minus; <var>C</var>·<var>A</var>
+</div>
+
+<p>Naming the four entries <var>a</var>, <var>b</var>, <var>c</var>, <var>d</var>
+for compactness, the Jacobian is:</p>
+
+<div class="formula">
+<var>J</var> =
+[ [&nbsp;<var>a</var>,&nbsp;<var>b</var>&nbsp;],
+&nbsp;[&nbsp;<var>c</var>,&nbsp;<var>d</var>&nbsp;] ]
+&nbsp;&nbsp;with&nbsp;&nbsp;
+<var>a</var> = &minus;4ε<sub>F</sub><var>A</var>σ<var>T</var><sub>1</sub><sup>3</sup> &minus; <var>C</var><var>A</var>,&nbsp;&nbsp;
+<var>b</var> = <var>c</var> = <var>C</var><var>A</var>,&nbsp;&nbsp;
+<var>d</var> = &minus;4ε<sub>R</sub><var>A</var>σ<var>T</var><sub>2</sub><sup>3</sup> &minus; <var>C</var><var>A</var>
+<div class="where">Notice <var>b</var>&nbsp;=&nbsp;<var>c</var>&nbsp;=&nbsp;<var>C</var><var>A</var>:
+the off-diagonal terms are equal and positive, because the single conduction link
+couples the two nodes symmetrically. The diagonal terms are <em>negative</em>:
+heating a node increases both its radiated loss and the heat it conducts away, so
+its own residual falls — physically a self-stabilising (restoring) response.</div>
+</div>
+
+<h3>2.5 The key insight — block-diagonal, therefore vectorisable</h3>
+
+<p>Here is the observation that makes the whole array tractable in one stroke. In
+the Chapter&nbsp;1 model there is <strong>no lateral conduction</strong> — no heat
+path from one cell sideways into its neighbour. Each cell radiates and conducts
+only between <em>its own</em> two nodes. Consequently <em>cell&nbsp;k's two
+equations contain only cell&nbsp;k's two temperatures</em> and nothing from any
+other cell.</p>
+
+<p>Now imagine stacking all N cells into one giant system of 2N equations in 2N
+unknowns and writing its Jacobian. Because no equation reaches across to another
+cell's unknowns, every off-cell partial derivative is zero. What survives is N
+little 2×2 blocks marching down the diagonal, with zeros everywhere else. That
+shape has a name.</p>
+
+<div class="term"><span class="lbl">Term</span> <strong>Block-diagonal
+matrix.</strong> A matrix that is zero everywhere except for square blocks placed
+along its main diagonal. Each block is an independent little matrix; there is no
+coupling between blocks. Our global thermal Jacobian is block-diagonal with N
+blocks, each a 2×2 of the
+[[<var>a</var>,<var>b</var>],[<var>c</var>,<var>d</var>]] form above — one block
+per cell.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 420 200" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<rect x="40" y="20" width="170" height="170" fill="#fff" stroke="#cfd7df"/>
+<rect x="48" y="28" width="26" height="26" fill="#cfe0ef" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="61" y="40" text-anchor="middle" font-size="7" fill="#1d2733">a b</text><text font-family="Segoe UI,Arial,sans-serif" x="61" y="50" text-anchor="middle" font-size="7" fill="#1d2733">c d</text><rect x="76" y="56" width="26" height="26" fill="#cfe0ef" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="89" y="68" text-anchor="middle" font-size="7" fill="#1d2733">a b</text><text font-family="Segoe UI,Arial,sans-serif" x="89" y="78" text-anchor="middle" font-size="7" fill="#1d2733">c d</text><rect x="104" y="84" width="26" height="26" fill="#cfe0ef" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="117" y="96" text-anchor="middle" font-size="7" fill="#1d2733">a b</text><text font-family="Segoe UI,Arial,sans-serif" x="117" y="106" text-anchor="middle" font-size="7" fill="#1d2733">c d</text><rect x="132" y="112" width="26" height="26" fill="#cfe0ef" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="145" y="124" text-anchor="middle" font-size="7" fill="#1d2733">a b</text><text font-family="Segoe UI,Arial,sans-serif" x="145" y="134" text-anchor="middle" font-size="7" fill="#1d2733">c d</text><rect x="160" y="140" width="26" height="26" fill="#cfe0ef" stroke="#0b3d63"/><text font-family="Segoe UI,Arial,sans-serif" x="173" y="152" text-anchor="middle" font-size="7" fill="#1d2733">a b</text><text font-family="Segoe UI,Arial,sans-serif" x="173" y="162" text-anchor="middle" font-size="7" fill="#1d2733">c d</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="150" y="150" fill="#5d6b79" font-size="20">0</text><text font-family="Segoe UI,Arial,sans-serif" x="70" y="60" fill="#5d6b79" font-size="20">0</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="240" y="80" fill="#1d2733">each cell → an independent</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="240" y="98" fill="#1d2733">2×2 block (no off-block terms)</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="240" y="124" fill="#1f6a6a" font-weight="bold">⇒ solve all blocks at once</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="240" y="140" fill="#1f6a6a">(vectorised, no Python loop)</text>
+</svg>
+<figcaption>Figure 2.3 — Because cells are thermally independent, the global Jacobian is block-diagonal: N independent 2×2 blocks, solved together as numpy arrays.</figcaption></figure>
+
+<div class="keyidea"><span class="lbl">Key idea</span> A block-diagonal system does
+<em>not</em> need to be assembled and inverted as one big 2N×2N matrix. The blocks
+are independent, so we can solve each 2×2 on its own. And every 2×2 has the
+<em>same closed-form inverse</em>, so instead of looping over the blocks in Python
+we evaluate that one formula for <em>all</em> N cells simultaneously, with the cell
+index living in a numpy array. That is the leap from "N solver calls" to "one
+array operation."</div>
+
+<p>We need the inverse of a 2×2 in closed form. For a matrix
+[[<var>a</var>,<var>b</var>],[<var>c</var>,<var>d</var>]] the
+<em>determinant</em> is det&nbsp;=&nbsp;<var>a</var><var>d</var>&nbsp;&minus;&nbsp;<var>b</var><var>c</var>,
+and the inverse is the swap-and-negate pattern divided by the determinant:</p>
+
+<div class="formula">
+[ [<var>a</var>,<var>b</var>], [<var>c</var>,<var>d</var>] ]<sup>&minus;1</sup>
+= (1/det)·[ [&nbsp;<var>d</var>,&nbsp;&minus;<var>b</var>&nbsp;],
+[&nbsp;&minus;<var>c</var>,&nbsp;<var>a</var>&nbsp;] ]
+&nbsp;&nbsp;,&nbsp;&nbsp;
+det = <var>a</var>·<var>d</var> &minus; <var>b</var>·<var>c</var>
+<div class="where">Swap the two diagonal entries, negate the two off-diagonal
+entries, divide everything by the determinant. (The determinant measures how much
+the matrix scales area; if it is zero the matrix squashes everything onto a line
+and has no inverse — flagged in the pitfall.)</div>
+</div>
+
+<p>Apply <var>J</var><sup>&minus;1</sup> to the residual vector
+(&minus;<strong>f</strong>) and you get the per-cell Newton correction in two
+plain scalar formulas. Because <var>b</var>&nbsp;=&nbsp;<var>c</var> here we keep
+them general anyway:</p>
+
+<div class="formula">
+det = <var>a</var>·<var>d</var> &minus; <var>b</var>·<var>c</var>
+<br>
+Δ<var>T</var><sub>1</sub> = &minus;(&nbsp;<var>d</var>·<var>f</var><sub>1</sub> &minus; <var>b</var>·<var>f</var><sub>2</sub> ) / det
+<br>
+Δ<var>T</var><sub>2</sub> = &minus;(&minus;<var>c</var>·<var>f</var><sub>1</sub> + <var>a</var>·<var>f</var><sub>2</sub> ) / det
+<br>
+<var>T</var><sub>1</sub> += Δ<var>T</var><sub>1</sub>&nbsp;&nbsp;;&nbsp;&nbsp;
+<var>T</var><sub>2</sub> += Δ<var>T</var><sub>2</sub>
+<div class="where">These are the components of
+&minus;<var>J</var><sup>&minus;1</sup><strong>f</strong>. Crucially, in PowerPy
+<em>every symbol here</em> — <var>T</var><sub>1</sub>, <var>T</var><sub>2</sub>,
+<var>a</var>, <var>b</var>, <var>c</var>, <var>d</var>, <var>f</var><sub>1</sub>,
+<var>f</var><sub>2</sub>, det — is a <strong>length-N numpy array</strong>, one
+slot per cell. The arithmetic above runs elementwise across all cells at once,
+with <em>no Python loop over cells</em>.</div>
+</div>
+
+<div class="term"><span class="lbl">Term</span> <strong>Vectorised.</strong> An
+operation is "vectorised" when a single array-level instruction replaces an
+explicit element-by-element Python loop, letting the work run inside fast,
+pre-compiled library code (here, numpy's C routines) instead of the slow Python
+interpreter. <code>T1 += dT1</code> where <code>T1</code> is an array of 400
+temperatures updates all 400 in one call — that is vectorisation.</div>
+
+<p>So the entire thermal solve collapses to: build the residual and Jacobian arrays
+for all cells, apply the closed-form 2×2 update, and repeat about
+<strong>5–8 times</strong> until the residuals are below tolerance. Five to eight
+sweeps — not N&nbsp;×&nbsp;(solver iterations) — and each sweep is a handful of
+numpy array operations. In rough code:</p>
+
+<pre><code>T1 = np.full(N, 300.0)              # all N front-node temps, kelvin
+T2 = np.full(N, 300.0)             # all N rear-node temps
+for _ in range(8):                # ~5-8 SWEEPS, not N cells
+    f1 = aF*A*Psun*tilt - eF*A*sig*(T1**4 - Tsp**4) - Pelec + C*A*(T2 - T1)
+    f2 = (aR*Palb + eR*Pir)*A*tilt - eR*A*sig*(T2**4 - Tsp**4) - C*A*(T2 - T1)
+    a  = -4*eF*A*sig*T1**3 - C*A
+    d  = -4*eR*A*sig*T2**3 - C*A
+    b  = c = C*A
+    det = a*d - b*c
+    T1 += -( d*f1 - b*f2)/det      # all N cells, elementwise
+    T2 += -(-c*f1 + a*f2)/det</code></pre>
+
+<p>Every line operates on whole arrays. The loop that remains is over
+<em>iterations</em> (a fixed handful), never over cells.</p>
+
+<h3>2.6 Worked example 1 — one Newton step by hand, then convergence</h3>
+
+<p>Let us do this with real numbers for a single cell, slowly, so the machinery is
+concrete. We use the substrate <strong>"SRP MSRO Case&nbsp;2"</strong> and an
+illuminated, idle cell.</p>
+
+<div class="worked"><span class="lbl">Worked example 2.1 — one cell, one step</span>
+<div class="step"><strong>Given.</strong> α<sub>F</sub>&nbsp;=&nbsp;0.970,
+α<sub>R</sub>&nbsp;=&nbsp;0.930, ε<sub>F</sub>&nbsp;=&nbsp;0.9,
+ε<sub>R</sub>&nbsp;=&nbsp;0.89; conductivity&nbsp;=&nbsp;10&nbsp;W/mK and
+thickness&nbsp;=&nbsp;0.01&nbsp;m, so
+<var>C</var>&nbsp;=&nbsp;10/0.01&nbsp;=&nbsp;1000&nbsp;W/m²K;
+<var>A</var>&nbsp;=&nbsp;0.003&nbsp;m² (30&nbsp;cm²);
+<var>P</var><sub>Sun</sub>&nbsp;=&nbsp;1367&nbsp;W/m², tilt&nbsp;=&nbsp;1,
+<var>P</var><sub>Albedo</sub>&nbsp;=&nbsp;<var>P</var><sub>IR</sub>&nbsp;=&nbsp;0,
+<var>P</var><sub>elec</sub>&nbsp;=&nbsp;0. Start guess
+<var>T</var><sub>1</sub>&nbsp;=&nbsp;<var>T</var><sub>2</sub>&nbsp;=&nbsp;300&nbsp;K.</div>
+
+<div class="step"><strong>Step 1 — pre-compute the constant pieces (with units).</strong><br>
+Absorbed solar power:
+α<sub>F</sub>·<var>A</var>·<var>P</var><sub>Sun</sub>
+= 0.970 × 0.003&nbsp;m² × 1367&nbsp;W/m² = <strong>3.978&nbsp;W</strong>.<br>
+Conduction coefficient:
+<var>C</var>·<var>A</var> = 1000&nbsp;W/m²K × 0.003&nbsp;m² = <strong>3&nbsp;W/K</strong>.<br>
+Front emission factor:
+ε<sub>F</sub>·<var>A</var>·σ
+= 0.9 × 0.003 × 5.670367×10<sup>&minus;8</sup>
+= <strong>1.531×10<sup>&minus;10</sup></strong> &nbsp;(so the front radiated term is
+1.531×10<sup>&minus;10</sup>·<var>T</var><sub>1</sub><sup>4</sup>&nbsp;W).<br>
+Rear emission factor:
+ε<sub>R</sub>·<var>A</var>·σ = 0.89 × 0.003 × 5.670367×10<sup>&minus;8</sup>
+= <strong>1.514×10<sup>&minus;10</sup></strong>.</div>
+<div class="check">Check: units. (W/m²K)(m²)&nbsp;=&nbsp;W/K for
+<var>C</var><var>A</var>; (m²)(W/m²K⁴)&nbsp;=&nbsp;W/K⁴ for ε<var>A</var>σ, which
+times <var>T</var><sup>4</sup>(K⁴) gives W. Good — every term lands in watts.</div>
+
+<div class="step"><strong>Step 2 — residuals at 300&nbsp;K.</strong> With
+<var>T</var><sub>1</sub>&nbsp;=&nbsp;<var>T</var><sub>2</sub>&nbsp;=&nbsp;300&nbsp;K
+the conduction term <var>C</var><var>A</var>(<var>T</var><sub>2</sub>&minus;<var>T</var><sub>1</sub>)&nbsp;=&nbsp;0
+and the tiny <var>T</var><sub>sp</sub><sup>4</sup>=2.7⁴ is negligible:<br>
+<var>f</var><sub>1</sub> = 3.978 &minus; 1.531×10<sup>&minus;10</sup>·(300)<sup>4</sup>
+= 3.978 &minus; 1.240 = <strong>2.7379&nbsp;W</strong>.<br>
+<var>f</var><sub>2</sub> = 0 &minus; 1.514×10<sup>&minus;10</sup>·(300)<sup>4</sup>
+= 0 &minus; 1.226 = <strong>&minus;1.2263&nbsp;W</strong>.</div>
+<div class="check">Physical read-out: the front node has net heat <em>in</em>
+(<var>f</var><sub>1</sub>&nbsp;&gt;&nbsp;0 → it must warm up); the rear node, which
+absorbs no light here, has net heat <em>out</em>
+(<var>f</var><sub>2</sub>&nbsp;&lt;&nbsp;0 → at 300&nbsp;K it is radiating more than
+it receives, so it will cool unless the front feeds it through conduction). Both
+signs make sense.</div>
+
+<div class="step"><strong>Step 3 — Jacobian at 300&nbsp;K.</strong><br>
+<var>a</var> = &minus;4·(1.531×10<sup>&minus;10</sup>)·(300)<sup>3</sup> &minus; 3
+= &minus;0.0165 &minus; 3 = <strong>&minus;3.0165</strong>.<br>
+<var>b</var> = <var>c</var> = <var>C</var><var>A</var> = <strong>3.0</strong>.<br>
+<var>d</var> = &minus;4·(1.514×10<sup>&minus;10</sup>)·(300)<sup>3</sup> &minus; 3
+= &minus;0.0164 &minus; 3 = <strong>&minus;3.0164</strong>.<br>
+So <var>J</var>&nbsp;=&nbsp;[[&minus;3.0165,&nbsp;3.0],[3.0,&nbsp;&minus;3.0164]].</div>
+<div class="check">Check: the radiative pieces (&minus;0.0165, &minus;0.0164) are
+small next to the conduction piece (&minus;3); the strong conductive link
+dominates the slope. Off-diagonals equal and positive, as derived.</div>
+
+<div class="step"><strong>Step 4 — determinant.</strong><br>
+det = <var>a</var><var>d</var> &minus; <var>b</var><var>c</var>
+= (&minus;3.0165)(&minus;3.0164) &minus; (3.0)(3.0)
+= 9.0989 &minus; 9 = <strong>0.0989</strong>.</div>
+<div class="check">Check: det is small but safely non-zero (≈0.1). It is small
+<em>because</em> the two rows are nearly identical (both dominated by the same
+±3 conduction terms); the radiative terms are what keep it off zero. We will
+return to this in the pitfall.</div>
+
+<div class="step"><strong>Step 5 — the Newton corrections.</strong><br>
+Δ<var>T</var><sub>1</sub>
+= &minus;(<var>d</var>·<var>f</var><sub>1</sub> &minus; <var>b</var>·<var>f</var><sub>2</sub>)/det
+= &minus;[(&minus;3.0164)(2.7379) &minus; (3.0)(&minus;1.2263)]/0.0989
+= &minus;[&minus;8.258 + 3.679]/0.0989
+= &minus;(&minus;4.579)/0.0989 = <strong>+46.29&nbsp;K</strong>.<br>
+Δ<var>T</var><sub>2</sub>
+= &minus;(&minus;<var>c</var>·<var>f</var><sub>1</sub> + <var>a</var>·<var>f</var><sub>2</sub>)/det
+= &minus;[(&minus;3.0)(2.7379) + (&minus;3.0165)(&minus;1.2263)]/0.0989
+= &minus;[&minus;8.214 + 3.699]/0.0989
+= &minus;(&minus;4.515)/0.0989 = <strong>+45.63&nbsp;K</strong>.</div>
+<div class="check">Both corrections are positive (the cell must warm from 300&nbsp;K),
+and nearly equal (~46&nbsp;K), which is right because the strong conduction keeps
+the two faces close in temperature. After step&nbsp;1:
+<var>T</var><sub>1</sub>&nbsp;≈&nbsp;346.3&nbsp;K&nbsp;=&nbsp;<strong>73.1&nbsp;°C</strong>,
+<var>T</var><sub>2</sub>&nbsp;≈&nbsp;345.6&nbsp;K&nbsp;=&nbsp;<strong>72.5&nbsp;°C</strong>.</div>
+
+<div class="step"><strong>Step 6 — convergence (watch the quadratic collapse).</strong>
+We re-evaluate the residual magnitude
+|<strong>f</strong>|&nbsp;=&nbsp;|<var>f</var><sub>1</sub>|+|<var>f</var><sub>2</sub>|
+at the start of each sweep:</p></div>
+
+<table>
+<caption>Table 2.1 — Residual magnitude |<strong>f</strong>| per Newton iteration
+for the single illuminated cell. Each value is roughly the <em>square</em> of the
+previous (scaled) — the signature of quadratic convergence.</caption>
+<tr><th>Iteration</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th></tr>
+<tr><td>|<strong>f</strong>| (W)</td>
+<td>3.96</td><td>0.38</td><td>0.013</td><td>1.5×10<sup>&minus;5</sup></td>
+<td>2×10<sup>&minus;11</sup></td></tr>
+</table>
+
+</div>
+<div class="worked"><span class="lbl">Worked example 2.1 — result</span>
+<div class="step"><strong>Converged.</strong> The cell settles at
+front&nbsp;=&nbsp;<strong>65.26&nbsp;°C</strong>, rear&nbsp;=&nbsp;<strong>64.60&nbsp;°C</strong>
+(the rear sits a fraction cooler because it receives no light and is fed only by
+conduction from the front).</div>
+<div class="check">Sanity check: a sunlit panel in vacuum sitting near
+<strong>65&nbsp;°C</strong> is entirely physically reasonable — solar panels
+routinely run 50–80&nbsp;°C in sunlight. The number is believable, the method
+converged in ~5 steps, and the residual fell to 10<sup>&minus;11</sup>. Done.</div>
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 430 180" xmlns="http://www.w3.org/2000/svg" font-size="10">
+<line stroke="#1d2733" x1="60" y1="150" x2="400" y2="150"/><line stroke="#1d2733" x1="60" y1="150" x2="60" y2="16"/>
+<line stroke="#cfd7df" stroke-width=".5" x1="60" y1="31" x2="400" y2="31"/><text font-family="Segoe UI,Arial,sans-serif" x="34" y="34" font-size="8" fill="#5d6b79">1e0</text><line stroke="#cfd7df" stroke-width=".5" x1="60" y1="63" x2="400" y2="63"/><text font-family="Segoe UI,Arial,sans-serif" x="34" y="66" font-size="8" fill="#5d6b79">1e-3</text><line stroke="#cfd7df" stroke-width=".5" x1="60" y1="96" x2="400" y2="96"/><text font-family="Segoe UI,Arial,sans-serif" x="34" y="99" font-size="8" fill="#5d6b79">1e-6</text><line stroke="#cfd7df" stroke-width=".5" x1="60" y1="128" x2="400" y2="128"/><text font-family="Segoe UI,Arial,sans-serif" x="34" y="131" font-size="8" fill="#5d6b79">1e-9</text>
+<polyline points="60.0,24.4 145.0,35.4 230.0,51.3 315.0,83.1 400.0,146.7" fill="none" stroke="#0b3d63" stroke-width="2.2"/>
+<circle cx="60" cy="24" r="3" fill="#9a3b3b"/><circle cx="145" cy="35" r="3" fill="#9a3b3b"/><circle cx="230" cy="51" r="3" fill="#9a3b3b"/><circle cx="315" cy="83" r="3" fill="#9a3b3b"/><circle cx="400" cy="147" r="3" fill="#9a3b3b"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="230" y="172" text-anchor="middle" fill="#1d2733">Newton iteration</text>
+<text font-family="Segoe UI,Arial,sans-serif" transform="translate(14,90) rotate(-90)" text-anchor="middle" fill="#1d2733">residual |f| (W)</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="250" y="40" fill="#9a3b3b" font-size="9">quadratic — digits double each step</text>
+</svg>
+<figcaption>Figure 2.4 — Newton convergence: the residual collapses quadratically to ~1e-11 in about five iterations.</figcaption></figure>
+
+<h3>2.7 Worked example 2 — the same code over a 4-cell array, and the hot-spot</h3>
+
+<p>Now the payoff. We run the <em>identical</em> vectorised routine — not four
+copies of it, one routine with length-4 arrays — over a small array of four cells.
+Everything is as before except the electrical-power term, which now differs per
+cell to model a realistic fault scenario.</p>
+
+<div class="worked"><span class="lbl">Worked example 2.2 — four cells at once</span>
+<div class="step"><strong>Setup.</strong> Same substrate and constants as
+example&nbsp;2.1, all four cells start at 300&nbsp;K. The per-cell electrical power
+is the array<br>
+<var>P</var><sub>elec</sub> = [&nbsp;+1.1,&nbsp;+1.1,&nbsp;0.0,&nbsp;&minus;9.6&nbsp;]&nbsp;W,<br>
+representing: two healthy cells each <em>extracting</em> 1.1&nbsp;W, one idle cell
+(0&nbsp;W), and one <em>reverse-biased</em> cell that is <em>dissipating</em>
+9.6&nbsp;W as heat.</div>
+
+<div class="step"><strong>Run.</strong> The arrays <var>T</var><sub>1</sub>,
+<var>T</var><sub>2</sub>, <var>f</var><sub>1</sub>, <var>f</var><sub>2</sub>,
+<var>a</var>…<var>d</var>, det are all length-4; the update sweeps all four cells
+simultaneously and converges in <strong>7 vectorised iterations</strong>.</div>
+
+<table>
+<caption>Table 2.2 — Converged front-face temperatures across the 4-cell array. One
+vectorised solve, four answers.</caption>
+<tr><th>Cell</th><th><var>P</var><sub>elec</sub></th><th>Condition</th>
+<th>Front temperature</th></tr>
+<tr><td>0</td><td>+1.1&nbsp;W</td><td>healthy, extracting</td><td>38.89&nbsp;°C</td></tr>
+<tr><td>1</td><td>+1.1&nbsp;W</td><td>healthy, extracting</td><td>38.89&nbsp;°C</td></tr>
+<tr><td>2</td><td>0&nbsp;W</td><td>idle</td><td>65.26&nbsp;°C</td></tr>
+<tr><td>3</td><td>&minus;9.6&nbsp;W</td><td>reverse-biased, dissipating
+<span class="badge hot">HOT-SPOT</span></td><td><strong>187.48&nbsp;°C</strong></td></tr>
+</table>
+
+<div class="check">Cross-check: cell&nbsp;2 (0&nbsp;W) lands at exactly
+65.26&nbsp;°C — identical to worked example 2.1, as it must, since it is the same
+idle cell. The shared code reproduces the single-cell answer inside the array
+solve. Confidence established.</div>
+
+<div class="step"><strong>The physics, read straight off the table.</strong></div>
+<ul>
+  <li><strong>Extracting power cools a cell.</strong> Cells 0 and 1 sit at
+  38.89&nbsp;°C — well below the idle cell's 65.26&nbsp;°C. That 1.1&nbsp;W of
+  absorbed sunlight leaves as <em>electricity</em> instead of becoming heat, so
+  there is less energy left to radiate away, and equilibrium is cooler. (This is
+  the <var>P</var><sub>elec</sub> term doing its job: a positive
+  <var>P</var><sub>elec</sub> subtracts heat from the front node.)</li>
+  <li><strong>A dissipating cell runs far hotter.</strong> Cell&nbsp;3, reverse-biased
+  and pouring 9.6&nbsp;W of dissipated electrical power <em>into</em> itself (on top
+  of the absorbed sunlight), reaches <strong>187.48&nbsp;°C</strong>. This is the
+  <em>hot-spot</em> — now not a vague worry but a quantified number.</li>
+</ul>
+
+</div>
+<div class="keyidea"><span class="lbl">Key idea</span> The vectorised solve does two
+jobs at once: it is <em>fast</em> (one solve, not four, scaling to N) <em>and</em>
+it naturally <em>captures the hot-spot</em>. A reverse-biased cell at
+187&nbsp;°C is exactly the kind of local extreme that might exceed the substrate's
+melt limit — a failure mode we will test against directly in Section&nbsp;5. The
+machinery that makes the simulation fast is the same machinery that flags the
+danger.</div>
+
+<h3>2.8 Where this fits — the outer electro-thermal loop</h3>
+
+<p>One honest loose end. We treated <var>P</var><sub>elec</sub> as a <em>given</em>
+input. In reality it is not known up front: a cell's electrical output depends on
+its temperature (Chapter&nbsp;1's four numbers all drift with heat), and its
+temperature depends on <var>P</var><sub>elec</sub> — a chicken-and-egg coupling. So
+PowerPy wraps this thermal solve inside an <strong>outer electro-thermal
+loop</strong>: solve the circuit at the current temperatures to get
+<var>P</var><sub>elec</sub>, feed that into the thermal solve to get new
+temperatures, re-solve the circuit, and iterate until both settle. That outer loop
+is the subject of <strong>Section&nbsp;3</strong>; for now, simply note that the
+fast vectorised thermal solver we just built is the inner engine it calls
+repeatedly — which is precisely why making it fast matters so much.</p>
+
+<h3>2.9 Socratic ladder — why can we vectorise, and what would break it?</h3>
+
+<div class="ladder">
+<div class="laddertitle">Ladder — from "what is a Jacobian" to "what single assumption would break the vectorisation"</div>
+
+<div class="socratic">
+<div class="q">Rung 1. What is a Jacobian, in one sentence?</div>
+<div class="answer">It is the matrix of all first partial derivatives of a vector
+function: entry (<var>i</var>,<var>j</var>) is
+∂<var>f</var><sub>i</sub>/∂<var>x</var><sub>j</sub>, the rate at which
+residual&nbsp;<var>i</var> changes when only unknown&nbsp;<var>j</var> moves. It is
+the many-variable version of the scalar slope <var>f</var>&prime; that Newton's
+method divides by.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 2. Why does Newton's method converge so fast (only a handful of
+iterations)?</div>
+<div class="answer">Because it converges <em>quadratically</em> near the root: each
+step roughly doubles the number of correct digits, since the new error scales as
+the square of the old error rather than shrinking by a fixed fraction. We saw the
+residual drop 3.96&nbsp;→&nbsp;0.38&nbsp;→&nbsp;0.013&nbsp;→&nbsp;10<sup>&minus;5</sup>&nbsp;→&nbsp;10<sup>&minus;11</sup>
+in five steps. It works because Newton replaces the curve with its tangent (its
+best linear approximation) and a smooth curve hugs that tangent ever more tightly
+as you near the root.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 3. What makes the <em>global</em> Jacobian for the whole array
+block-diagonal?</div>
+<div class="answer">The absence of lateral cell-to-cell conduction. Each cell's two
+residuals depend only on that cell's own two temperatures, so every partial
+derivative that would link one cell to another is zero. The Jacobian is therefore N
+independent 2×2 blocks on the diagonal with nothing off the blocks — which is
+exactly what lets us invert each 2×2 by the same closed-form formula, applied
+elementwise across all cells (vectorised) rather than cell-by-cell.</div>
+</div>
+
+<div class="socratic">
+<div class="q">Rung 4. What single physical assumption, if dropped, would break the
+vectorisation — and what would the Jacobian become?</div>
+<div class="answer">Adding <strong>lateral conduction</strong> between neighbouring
+cells. Then each cell's residual would depend on its neighbours' temperatures too,
+introducing non-zero entries <em>off</em> the diagonal blocks. The Jacobian would
+no longer be block-diagonal — it would become <em>banded</em> (coupled blocks).
+The simple elementwise 2×2 inverse would no longer be valid, and you would need a
+genuine banded/sparse linear solve at each Newton step instead. The whole speed
+trick rests on that one modelling assumption: no sideways heat flow.</div>
+</div>
+</div>
+
+<h3>2.10 Pitfalls</h3>
+
+<div class="pitfall"><span class="lbl">Pitfall — kelvin in the T⁴ term</span>
+The radiated-power terms use <var>T</var><sup>4</sup>, and that <var>T</var>
+<strong>must be in kelvin</strong>, never Celsius. The fourth power makes the error
+catastrophic, not cosmetic: at our equilibrium 65&nbsp;°C&nbsp;=&nbsp;338&nbsp;K,
+and 338<sup>4</sup>&nbsp;≈&nbsp;1.3×10<sup>10</sup> whereas 65<sup>4</sup>&nbsp;≈&nbsp;1.8×10<sup>7</sup>
+— off by a factor of ~700. Always convert to kelvin <em>before</em> raising to the
+fourth power. (The space term <var>T</var><sub>sp</sub>&nbsp;=&nbsp;2.7&nbsp;K is
+likewise kelvin.)</div>
+
+<div class="pitfall"><span class="lbl">Pitfall — dividing by det ≈ 0</span>
+The update divides by det&nbsp;=&nbsp;<var>a</var><var>d</var>&nbsp;&minus;&nbsp;<var>b</var><var>c</var>.
+If the Jacobian is near-singular, det&nbsp;→&nbsp;0 and the correction blows up
+(or returns NaN). In our problem det stays comfortably away from zero (≈&nbsp;0.1
+in the worked example, kept off zero by the radiative terms even though the two
+rows are conduction-dominated and nearly equal), so it is safe here — but a robust
+implementation should still <em>guard</em> the division: check
+<code>abs(det) &gt; tiny</code> (or clip det away from zero) before dividing, so a
+pathological cell cannot produce a NaN that silently poisons the whole array.</div>
+
+<h3>2.11 Practice</h3>
+
+<div class="practice"><span class="lbl">Practice</span>
+<p>Work these on paper; full solutions are at the back (Q2-1 … Q2-3).</p>
+<ol>
+  <li><strong>Q2-1 — write a residual and take one Newton step.</strong> A single
+  cell uses the same substrate and constants as worked example 2.1
+  (<var>C</var><var>A</var>&nbsp;=&nbsp;3&nbsp;W/K,
+  ε<sub>F</sub><var>A</var>σ&nbsp;=&nbsp;1.531×10<sup>&minus;10</sup>,
+  <var>A</var>&nbsp;=&nbsp;0.003&nbsp;m²), but now the cell is
+  <strong>shaded</strong>: take a reduced front flux
+  α<sub>F</sub>·<var>A</var>·<var>P</var><sub>Sun</sub>·tilt&nbsp;=&nbsp;2.000&nbsp;W,
+  with <var>P</var><sub>elec</sub>&nbsp;=&nbsp;0 and the rear fluxes still zero.
+  Starting from <var>T</var><sub>1</sub>&nbsp;=&nbsp;<var>T</var><sub>2</sub>&nbsp;=&nbsp;300&nbsp;K,
+  (a) write out the front residual <var>f</var><sub>1</sub> symbolically and
+  evaluate it at 300&nbsp;K; (b) compute <var>f</var><sub>2</sub> at 300&nbsp;K;
+  (c) carry out <em>one</em> Newton step and give the new
+  (<var>T</var><sub>1</sub>,&nbsp;<var>T</var><sub>2</sub>) in °C. (Reuse the
+  Jacobian from example 2.1 — at 300&nbsp;K it is unchanged, because it does not
+  depend on the flux.)</li>
+
+  <li><strong>Q2-2 — why one vectorised Newton beats N fsolve calls.</strong> In
+  two or three sentences, explain why solving the array with a single vectorised
+  Newton–Raphson is faster than calling <code>scipy.fsolve</code> once per cell in
+  a Python loop. Name the two specific costs the vectorised approach avoids.</li>
+
+  <li><strong>Q2-3 — what lateral conduction does to the Jacobian.</strong> Suppose
+  the model is extended so that each cell also conducts heat sideways to its two
+  nearest neighbours. State precisely what happens to (i) the structure of the
+  global Jacobian and (ii) the validity of the elementwise 2×2-inverse update, and
+  say what kind of linear solve you would need instead.</li>
+</ol>
+<div class="answerspace" style="min-height:9cm;border:1px dashed #c9b9b9;border-radius:5px;margin-top:.6em">&nbsp;</div>
+</div>

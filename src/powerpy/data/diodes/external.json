@@ -1,0 +1,9 @@
+{
+    "_comment": "External silicon shunt diode (real project file, 03_PowerPy_02).",
+    "diode_name": "External Silicon Shuntdiode SDC",
+    "diode_reference": "H. Nesswetter, 03.03.2021",
+    "diode_i0": 1.43e-13,
+    "diode_n": 1.022,
+    "diode_rs": 0.058,
+    "diode_t_ref": 25
+}

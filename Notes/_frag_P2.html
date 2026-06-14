@@ -1,0 +1,432 @@
+<h3>2 &nbsp; The single-diode equivalent circuit, how PowerPy fits it, and SPICE</h3>
+
+<p>A solar cell is a slab of semiconductor, not a wire and a resistor. Yet to <em>simulate</em> a cell on a computer we need to describe it with components a circuit simulator understands. The trick that makes all of PowerPy work is this: a solar cell <strong>behaves</strong> almost exactly like a small network of ideal electrical parts, so we replace the physics with that network and solve the network instead. This section builds that network one part at a time, shows how it bends into the current&ndash;voltage curve you actually measure, then shows the two ways PowerPy turns four measured numbers into the network's component values &mdash; and finally how it hands the whole thing to a real circuit simulator (SPICE / ngspice).</p>
+
+<div class="keyidea">
+<strong>The one idea.</strong> Model, don't measure-everything. If a cell behaves like <em>(current source)&nbsp;+&nbsp;(diode)&nbsp;+&nbsp;(two resistors)</em>, then once we know those four part-values we can predict the cell's current at <em>any</em> voltage, temperature or illumination &mdash; without ever building it. PowerPy's job is to find those part-values from a datasheet's four numbers and then let a simulator do the predicting.
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 470 200" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<style>.w{stroke:#1d2733;stroke-width:1.6;fill:none} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"}</style>
+<line class="w" x1="60" y1="40" x2="60" y2="160"/>
+<!-- current source -->
+<circle cx="60" cy="100" r="20" class="w" fill="#eef5fb"/><line class="w" x1="60" y1="112" x2="60" y2="88"/><polygon points="60,86 56,94 64,94" fill="#1d2733"/>
+<text class="tx" x="22" y="104">Iph</text>
+<!-- diode branch -->
+<line class="w" x1="150" y1="40" x2="150" y2="160"/>
+<polygon points="140,108 160,108 150,92" fill="#cfe0ef" stroke="#1d2733"/><line class="w" x1="140" y1="92" x2="160" y2="92"/>
+<text class="tx" x="158" y="104">D</text>
+<!-- shunt resistor -->
+<line class="w" x1="220" y1="40" x2="220" y2="78"/><rect x="211" y="78" width="18" height="44" fill="#fff" class="w"/><line class="w" x1="220" y1="122" x2="220" y2="160"/>
+<text class="tx" x="234" y="104">Rsh</text>
+<!-- top & bottom rails -->
+<line class="w" x1="60" y1="40" x2="300" y2="40"/><line class="w" x1="60" y1="160" x2="360" y2="160"/>
+<!-- series resistor to output -->
+<rect x="300" y="31" width="44" height="18" fill="#fff" class="w"/><text class="tx" x="322" y="26" text-anchor="middle">Rs</text>
+<line class="w" x1="344" y1="40" x2="400" y2="40"/>
+<circle cx="402" cy="40" r="3" fill="#1d2733"/><circle cx="402" cy="160" r="3" fill="#1d2733"/>
+<text class="tx" x="410" y="44">high (+)</text><text class="tx" x="410" y="164">low (−)</text>
+<text class="tx" x="150" y="186" text-anchor="middle" fill="#5d6b79" font-size="10"></text>
+</svg>
+<figcaption>Figure 2.1 — The single-diode equivalent circuit: a photocurrent source in parallel with the junction diode and a shunt resistor, then a series resistor to the terminals.</figcaption></figure>
+
+<figure>
+<svg width="460" height="220" viewBox="0 0 460 220" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="11">
+  <rect x="1" y="1" width="458" height="218" fill="#fff" stroke="#ccc"/>
+  <!-- top rail -->
+  <line x1="40" y1="40" x2="340" y2="40" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- bottom rail -->
+  <line x1="40" y1="180" x2="430" y2="180" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- current source II_Cell -->
+  <circle cx="70" cy="110" r="22" fill="#fff" stroke="#0b3d63" stroke-width="2"/>
+  <line x1="70" y1="98" x2="70" y2="122" stroke="#0b3d63" stroke-width="2"/>
+  <polygon points="70,92 66,100 74,100" fill="#0b3d63"/>
+  <line x1="70" y1="40" x2="70" y2="88" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="70" y1="132" x2="70" y2="180" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="20" y="114" fill="#0b3d63">II_Cell</text>
+  <text x="6" y="128" fill="#555" font-size="9">(≈ Isc)</text>
+  <!-- diode DD_Cell -->
+  <line x1="160" y1="40" x2="160" y2="88" stroke="#1a1a1a" stroke-width="2"/>
+  <polygon points="148,88 172,88 160,106" fill="#fff" stroke="#9a3b3b" stroke-width="2"/>
+  <line x1="148" y1="106" x2="172" y2="106" stroke="#9a3b3b" stroke-width="2"/>
+  <line x1="160" y1="106" x2="160" y2="180" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="176" y="100" fill="#9a3b3b">DD_Cell</text>
+  <text x="176" y="114" fill="#555" font-size="9">(p–n junction)</text>
+  <!-- shunt resistor Rsh -->
+  <line x1="250" y1="40" x2="250" y2="78" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="240" y="78" width="20" height="44" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="250" y1="122" x2="250" y2="180" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="266" y="104" fill="#1a1a1a">Rsh</text>
+  <text x="266" y="118" fill="#555" font-size="9">(leakage)</text>
+  <!-- series resistor Rs to output -->
+  <rect x="340" y="30" width="44" height="20" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="345" y="22" fill="#1a1a1a">Rs (series)</text>
+  <line x1="384" y1="40" x2="430" y2="40" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- terminals -->
+  <circle cx="432" cy="40" r="4" fill="#0b3d63"/>
+  <circle cx="432" cy="180" r="4" fill="#1a1a1a"/>
+  <text x="396" y="60" fill="#0b3d63">high (+)</text>
+  <text x="400" y="174" fill="#1a1a1a">low (−)</text>
+  <!-- load current arrow -->
+  <line x1="432" y1="70" x2="432" y2="150" stroke="#4f7a4f" stroke-width="1.5"/>
+  <polygon points="432,150 428,142 436,142" fill="#4f7a4f"/>
+  <text x="438" y="115" fill="#4f7a4f" font-size="9">I (out)</text>
+</svg>
+<figcaption style="font-size:9pt;color:#555">Single-diode equivalent circuit. The photocurrent source II_Cell pushes current up; the diode DD_Cell and shunt Rsh sit across it as internal "drains"; the series resistor Rs carries what's left to the output terminals high/low.</figcaption>
+</figure>
+
+<h4>2.1 &nbsp; Building the model one part at a time</h4>
+
+<p>Light falling on the junction frees charge carriers and drives a current. So the heart of the model is an <strong>ideal current source</strong>.</p>
+
+<div class="term"><strong>Ideal current source.</strong> A two-terminal element that pushes a <em>fixed</em> current through itself <em>no matter what voltage</em> appears across it. In the model it represents the light-generated current (the <em>photocurrent</em>), and its value is approximately the short-circuit current, <code>Isc</code> &mdash; the current you measure when you connect the cell's two terminals straight together (zero volts across them).</div>
+
+<p>But a real cell is not <em>only</em> a current source: it is built on a <strong>p&ndash;n junction</strong>, the same structure as a diode. That junction is always present, sitting across the cell, so we add a diode in parallel with the current source.</p>
+
+<div class="term"><strong>Diode.</strong> A one-way valve for current. It conducts easily when its <em>anode</em> is pushed positive relative to its <em>cathode</em> (forward bias) and blocks almost completely the other way. In the cell model it is the p&ndash;n junction itself &mdash; and crucially it is what bends the IV curve over near the top voltage.</div>
+
+<p>Real junctions also <em>leak</em>: a tiny bit of current sneaks across the junction edge or through defects even when the diode "should" block it. We capture that leak with a resistor straight across the junction.</p>
+
+<div class="term"><strong>Shunt resistance, <code>Rsh</code>.</strong> A resistor in <em>parallel</em> with the diode/current-source, representing every unwanted leakage path across the junction. "Shunt" means a side-path that current can divert through. A <em>good</em> cell has a very <em>large</em> Rsh (little leakage); a poor or shaded cell has a smaller Rsh.</div>
+
+<p>Finally, the current has to travel through the metal: the front contacts, the grid fingers, the interconnect tabs between cells. Metal is not perfectly conducting, so we add a resistor <em>in series</em> with the output.</p>
+
+<div class="term"><strong>Series resistance, <code>Rs</code>.</strong> A resistor in <em>series</em> between the junction and the output terminals, representing the resistance of contacts and interconnects. A <em>good</em> cell has a very <em>small</em> Rs. Every milliamp that flows must pay a voltage toll <code>I&middot;Rs</code> across it.</div>
+
+<div class="callout">
+<strong>Why "single-diode".</strong> Because the model uses exactly <em>one</em> diode to represent the junction. There is a more elaborate "two-diode" model (a second diode captures recombination in the depletion region) but PowerPy uses the simpler single-diode form, which is accurate enough for array-level energy studies and far cheaper to fit and simulate.
+</div>
+
+<h4>2.2 &nbsp; The diode's behaviour: the Shockley equation <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>Everything interesting about the curve's <em>shape</em> comes from how the diode conducts. That conduction is described by the <strong>Shockley diode equation</strong>:</p>
+
+<div class="formula">
+I<sub>diode</sub> = I<sub>0</sub> &middot; ( exp( V / (n &middot; V<sub>t</sub>) ) &minus; 1 )
+<div class="where">
+where<br>
+&bull; <code>I<sub>diode</sub></code> = current through the diode (A)<br>
+&bull; <code>V</code> = voltage across the diode (V)<br>
+&bull; <code>I<sub>0</sub></code> = <strong>saturation current</strong> (A): the minuscule reverse leakage of the junction. It is the thing that sets the open-circuit voltage. Typical values for a cell are tiny &mdash; <code>10<sup>&minus;12</sup></code> A or smaller.<br>
+&bull; <code>V<sub>t</sub></code> = <strong>thermal voltage</strong> = k<sub>B</sub>&middot;T / q &asymp; <code>0.02585 V</code> at T = 300 K<br>
+&bull; <code>n</code> = <strong>ideality factor</strong> (dimensionless, &asymp; 1&ndash;2 for a single junction): how far the junction departs from a perfect textbook diode. n = 1 is ideal; defects and recombination push it toward 2 (and higher for stacked junctions &mdash; see &sect;2.5).
+</div>
+</div>
+
+<div class="term"><strong>Thermal voltage, <code>V<sub>t</sub> = k<sub>B</sub>T/q</strong></code>. The natural voltage scale of a junction at temperature T.
+&bull; <code>k<sub>B</sub></code> = <em>Boltzmann constant</em> &asymp; 1.381&times;10<sup>&minus;23</sup> J/K (converts temperature into energy).<br>
+&bull; <code>T</code> = absolute temperature in <em>kelvin</em> (K). 300&nbsp;K &asymp; 27&nbsp;&deg;C, a convenient "room/spec" temperature.<br>
+&bull; <code>q</code> = <em>elementary charge</em> &asymp; 1.602&times;10<sup>&minus;19</sup> C (the charge on one electron).<br>
+Plug them in: V<sub>t</sub> = (1.381e&minus;23 &times; 300) / 1.602e&minus;19 &asymp; 0.02585 V &asymp; 25.85 mV. Because V<sub>t</sub> &propto; T, a hotter cell has a larger thermal voltage.</div>
+
+<div class="keyidea">
+<strong>Read the exponential.</strong> The term <code>exp(V/(n&middot;V<sub>t</sub>))</code> is the whole story of the curve's shape. For small V it is barely above 1, so <code>(exp(&hellip;)&minus;1)</code> &asymp; 0 and the diode carries almost nothing &mdash; the curve sits <em>flat</em>. Once V climbs to a few times n&middot;V<sub>t</sub>, the exponential explodes and the diode suddenly gulps current &mdash; this is the <em>knee</em>. The knee is not a separate component; it is just the exponential turning on.
+</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 340 140" xmlns="http://www.w3.org/2000/svg" font-size="11">
+<line stroke="#1d2733" stroke-width="1.2" x1="55" y1="120" x2="320" y2="120"/><line stroke="#1d2733" stroke-width="1.2" x1="55" y1="120" x2="55" y2="14"/>
+<polyline points="55.0,114.9 58.1,114.7 61.2,114.5 64.3,114.3 67.4,114.1 70.5,113.9 73.6,113.6 76.7,113.4 79.8,113.1 82.9,112.9 86.0,112.6 89.1,112.3 92.2,112.0 95.3,111.7 98.4,111.4 101.5,111.0 104.6,110.7 107.7,110.3 110.8,109.9 113.9,109.6 117.0,109.1 120.1,108.7 123.2,108.3 126.3,107.8 129.4,107.4 132.5,106.9 135.6,106.4 138.7,105.8 141.8,105.3 144.9,104.7 148.0,104.1 151.1,103.5 154.2,102.9 157.3,102.2 160.4,101.5 163.5,100.8 166.6,100.1 169.7,99.3 172.8,98.5 175.9,97.7 179.1,96.8 182.2,95.9 185.3,95.0 188.4,94.0 191.5,93.0 194.6,92.0 197.7,90.9 200.8,89.7 203.9,88.6 207.0,87.4 210.1,86.1 213.2,84.8 216.3,83.4 219.4,82.0 222.5,80.5 225.6,79.0 228.7,77.4 231.8,75.8 234.9,74.1 238.0,72.3 241.1,70.4 244.2,68.5 247.3,66.5 250.4,64.4 253.5,62.3 256.6,60.1 259.7,57.7 262.8,55.3 265.9,52.8 269.0,50.2 272.1,47.5 275.2,44.7 278.3,41.8 281.4,38.8 284.5,35.6 287.6,32.4 290.7,29.0 293.8,25.5 296.9,21.8 300.0,18.0" fill="none" stroke="#0b3d63" stroke-width="2.2"/>
+<text font-family="Segoe UI,Arial,sans-serif" x="190" y="136" text-anchor="middle" fill="#1d2733">diode voltage V</text>
+<text font-family="Segoe UI,Arial,sans-serif" transform="translate(16,70) rotate(-90)" text-anchor="middle" fill="#1d2733">I_diode</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="250" y="40" fill="#5d6b79" font-size="10">∝ exp(V/nVt)</text>
+<text font-family="Segoe UI,Arial,sans-serif" x="150" y="112" fill="#5d6b79" font-size="9">~flat</text><text font-family="Segoe UI,Arial,sans-serif" x="270" y="80" fill="#5d6b79" font-size="9">knee</text>
+</svg>
+<figcaption>Figure 2.2 — The diode current rises exponentially: nearly flat, then a sharp knee. This bend shapes the IV curve near Voc.</figcaption></figure>
+
+<figure>
+<svg width="380" height="170" viewBox="0 0 380 170" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="10">
+  <rect x="1" y="1" width="378" height="168" fill="#fff" stroke="#ccc"/>
+  <line x1="40" y1="140" x2="350" y2="140" stroke="#333"/>
+  <line x1="40" y1="140" x2="40" y2="20" stroke="#333"/>
+  <path d="M40,138 C140,136 210,128 250,108 S300,40 320,25" fill="none" stroke="#9a3b3b" stroke-width="2.5"/>
+  <line x1="250" y1="140" x2="250" y2="108" stroke="#999" stroke-dasharray="3 3"/>
+  <text x="226" y="153" fill="#555">knee</text>
+  <text x="300" y="153" fill="#555">V →</text>
+  <text x="46" y="30" fill="#555">I_diode →</text>
+  <text x="120" y="133" fill="#4f7a4f">~flat</text>
+  <text x="300" y="70" fill="#9a3b3b">steep</text>
+</svg>
+<figcaption style="font-size:9pt;color:#555">The diode current is nearly zero until V approaches the knee (a few &times; n&middot;V<sub>t</sub>), then rises almost vertically.</figcaption>
+</figure>
+
+<h4>2.3 &nbsp; How current source + diode make the IV curve</h4>
+
+<p>Now combine them. The current source constantly pushes <code>Isc</code> upward. Where does that current go? It splits between (i) the diode, (ii) the shunt resistor, and (iii) the output terminals. Kirchhoff's current law says the three shares always add up to <code>Isc</code>. Walk the voltage from zero up to open-circuit:</p>
+
+<ul>
+<li><strong>At V = 0 (short circuit).</strong> The diode sees ~0 V, so by the Shockley equation it carries ~0. The shunt also sees ~0 V, so it carries ~0. With nothing diverted internally, <em>almost all</em> the photocurrent leaves through the terminals: <code>I &asymp; Isc</code>. This is why the source value is &asymp; Isc.</li>
+<li><strong>Climbing toward V<sub>oc</sub>.</strong> As the output voltage rises, the diode finally reaches its knee and its exponential turns on. The diode now <em>"steals"</em> the photocurrent <em>internally</em> &mdash; current that used to leave the terminals is instead consumed by the diode. The output current falls.</li>
+<li><strong>At V = V<sub>oc</sub> (open circuit).</strong> The diode steals <em>everything</em>: all of Isc is recirculating internally through the diode (and shunt), so <em>zero</em> leaves the terminals. The voltage at which this happens is the open-circuit voltage, V<sub>oc</sub>.</li>
+</ul>
+
+<div class="term"><strong>V<sub>oc</sub> (open-circuit voltage)</strong> = terminal voltage when no current is drawn (open terminals). <strong>V<sub>mp</sub>, I<sub>mp</sub> (voltage/current at maximum power)</strong> = the operating point where the product V&middot;I is largest &mdash; the "knee" you want to sit on. <strong>P<sub>mp</sub></strong> = V<sub>mp</sub>&middot;I<sub>mp</sub>, the peak power.</div>
+
+<p>The two resistors fine-tune this picture:</p>
+<ul>
+<li><strong>Rs rounds the knee.</strong> Series resistance subtracts <code>I&middot;Rs</code> from the terminal voltage. Near the knee, current is still high, so the voltage toll is real and the sharp corner gets <em>rounded</em> and pulled left &mdash; lowering V<sub>mp</sub> and the peak power.</li>
+<li><strong>Rsh tilts the flat part.</strong> A finite shunt bleeds a little current that grows with voltage (Ohm's law through Rsh), so the "flat" plateau is not perfectly flat &mdash; it droops with a slope set by 1/Rsh. A large Rsh keeps it nearly flat.</li>
+</ul>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;a (foundation). At exactly V = 0, why is the output current equal to Isc and not zero?</div>
+<div class="answer">Because at 0 V the diode and shunt both have 0 V across them, so each carries ~0 A (Shockley gives exp(0)&minus;1 = 0; Ohm gives 0/Rsh = 0). Nothing is diverted internally, so the full source current Isc must exit through the terminals.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;b (why). As V rises toward V<sub>oc</sub>, the <em>source</em> still pushes a constant Isc. So why does the <em>output</em> current drop?</div>
+<div class="answer">The source current is fixed, but its <em>destination</em> changes. As V grows the diode's exponential turns on and the diode siphons an ever-larger share internally. Output current = Isc &minus; I<sub>diode</sub> &minus; I<sub>shunt</sub>, so as the diode's share grows, the terminals' share shrinks.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;c (deep). At V<sub>oc</sub> the cell delivers zero current yet the light is still shining and Isc is still being generated. Where did all that current go &mdash; and is the cell doing any useful work?</div>
+<div class="answer">It is all recirculating internally: every amp from the source is consumed by the diode (plus a trickle through Rsh), dissipated as heat in the junction. None reaches an external load, so the delivered power V&middot;I = V<sub>oc</sub>&middot;0 = 0. Open circuit is the <em>highest voltage</em> but <em>zero power</em> point &mdash; useful work happens between 0 and V<sub>oc</sub>, peaking at the knee (V<sub>mp</sub>, I<sub>mp</sub>).</div>
+</div>
+</div>
+
+<h4>2.4 &nbsp; From four measured numbers to circuit parameters</h4>
+
+<p>A datasheet gives you four numbers per cell: <code>isc</code>, <code>imp</code>, <code>vmp</code>, <code>voc</code>. PowerPy turns these into the model's component values. It offers two strategies.</p>
+
+<div class="callout">
+<strong>First, a name that will trip you.</strong> PowerPy calls one quantity <code>vt_cell</code>, but it is <em>not</em> the bare thermal voltage k<sub>B</sub>T/q. It is the <strong>lumped product n&middot;V<sub>t</sub></strong> &mdash; an <em>effective</em> thermal voltage that already has the ideality factor baked in. Look back at the Shockley exponent <code>V/(n&middot;V<sub>t</sub>)</code>: <code>vt_cell</code> fills the <em>whole</em> <code>n&middot;V<sub>t</sub></code> slot. That is exactly why, later, we recover the ideality factor by dividing it back out: <code>n = vt_cell / V_T_Spice</code>, where <code>V_T_Spice</code> is the bare V<sub>t</sub>. Keep <em>effective</em> (<code>vt_cell</code> = n&middot;V<sub>t</sub>) and <em>bare</em> (<code>V_T_Spice</code> &asymp; 0.02585 V) firmly apart.
+</div>
+
+<h5>RSeriesModel &mdash; the default <span class="badge api">RSeriesModel</span></h5>
+
+<p>This model throws away the shunt (sets it astronomically large) and puts <em>all</em> the non-ideality into a closed-form series resistance. No equation-solving is needed &mdash; every value is a direct formula. That is why it is the default: fast and robust.</p>
+
+<div class="formula">
+vt_cell = vmp &middot; (isc &minus; imp) / imp
+<div class="where">The effective thermal voltage n&middot;V<sub>t</sub>, fixed by the spacing between imp and isc. Intuition: the closer imp sits to isc (a "boxy", high-fill-factor curve), the smaller (isc&minus;imp) and so the smaller vt_cell &mdash; a sharper knee. Units: V &times; (A/A) = V. ✓</div>
+</div>
+
+<div class="formula">
+i0_cell = isc / ( exp( voc / vt_cell ) &minus; 1 )
+<div class="where">The saturation current, obtained by demanding that at V = voc the diode carries the whole isc. Rearranged Shockley: the huge exponential in the denominator makes i0_cell tiny. Units: A / (dimensionless) = A. ✓</div>
+</div>
+
+<div class="formula">
+r_cell_shunt = 1&times;10<sup>9</sup> &Omega;
+<div class="where">A deliberately enormous shunt &mdash; effectively "no shunt at all". With 10<sup>9</sup> &Omega; across the cell, the leakage current at a couple of volts is ~10<sup>&minus;9</sup> A, utterly negligible next to an amp of photocurrent. So RSeriesModel <em>ignores</em> shunt leakage by construction.</div>
+</div>
+
+<div class="formula">
+r_cell_high = (vt_cell / imp) &middot; ln( (isc &minus; imp) / i0_cell ) &minus; vmp / imp
+<div class="where">The <em>series</em> resistance (the variable is named <code>r_cell_high</code> in the code). It is found by forcing the model to pass <em>exactly</em> through the measured maximum-power point (vmp, imp): solve the cell equation at that point for Rs. The <code>ln</code> term is the junction voltage the diode would need to carry (isc&minus;imp); subtracting vmp/imp converts the leftover into a resistance per amp. Units: (V/A)&middot;(dimensionless) &minus; (V/A) = &Omega;. ✓</div>
+</div>
+
+<div class="keyidea">
+<strong>What each formula is really doing.</strong> Two of the four model constraints come from the curve's endpoints and one from its knee: <code>i0_cell</code> nails the curve at V<sub>oc</sub> (top), the source value <code>isc</code> nails it at V = 0 (bottom), and <code>r_cell_high</code> nails it at the maximum-power knee (vmp, imp). The shunt is simply removed. Four measurements &rarr; four placements &rarr; a curve pinned through all the points that matter.
+</div>
+
+<div class="worked">
+<strong>Worked example (a) &mdash; full parameter extraction.</strong> Given a triple-junction-style cell: <code>isc = 0.50 A</code>, <code>imp = 0.48 A</code>, <code>vmp = 2.35 V</code>, <code>voc = 2.67 V</code>. Find vt_cell, i0_cell, r_cell_high.
+
+<div class="step"><strong>Step 1 &mdash; vt_cell.</strong>
+isc &minus; imp = 0.50 &minus; 0.48 = 0.02 A.<br>
+vt_cell = vmp &middot; (isc&minus;imp)/imp = 2.35 V &times; (0.02 A / 0.48 A) = 2.35 &times; 0.041667 = <strong>0.0979 V</strong>.<br>
+<em>Units:</em> the (A/A) ratio is dimensionless, so the answer is in volts. ✓</div>
+
+<div class="step"><strong>Step 2 &mdash; the exponent first.</strong> Before the saturation current, evaluate the exponent it needs:
+voc / vt_cell = 2.67 V / 0.0979 V = <strong>27.3</strong> (dimensionless &mdash; volts cancel). ✓</div>
+
+<div class="step"><strong>Step 3 &mdash; i0_cell.</strong>
+exp(27.3) &asymp; 7.2&times;10<sup>11</sup>. Subtract 1 (negligible): denominator &asymp; 7.2&times;10<sup>11</sup>.<br>
+i0_cell = isc / (exp(27.3) &minus; 1) = 0.50 A / 7.2&times;10<sup>11</sup> &asymp; <strong>6.9&times;10<sup>&minus;13</sup> A</strong>.<br>
+<em>Sanity:</em> a sub-picoamp saturation current is exactly the "tiny leakage" the theory promised. ✓</div>
+
+<div class="step"><strong>Step 4 &mdash; the log term for r_cell_high.</strong>
+(isc&minus;imp)/i0_cell = 0.02 A / 6.9&times;10<sup>&minus;13</sup> A = 2.9&times;10<sup>10</sup> (dimensionless).<br>
+ln(2.9&times;10<sup>10</sup>) &asymp; <strong>24.1</strong>.</div>
+
+<div class="step"><strong>Step 5 &mdash; assemble r_cell_high.</strong>
+First term: (vt_cell/imp)&middot;ln(&hellip;) = (0.0979 V / 0.48 A) &times; 24.1 = 0.2040 (V/A) &times; 24.1 = <strong>4.91 &Omega;</strong>.<br>
+Second term: vmp/imp = 2.35 V / 0.48 A = <strong>4.90 &Omega;</strong>.<br>
+r_cell_high = 4.91 &minus; 4.90 = <strong>&asymp; 0.01 &Omega;</strong> (a small fraction of an ohm).</div>
+
+<div class="check"><strong>Sanity check.</strong> A good cell should have a <em>small</em> series resistance &mdash; a few hundredths of an ohm here. ✓ Notice the danger: r_cell_high is the <em>difference of two nearly equal numbers</em> (4.91 &minus; 4.90). That fragility is the whole point of the pitfall below &mdash; a slightly off input can make the two terms cross over and the result go negative.</div>
+</div>
+
+<h5>RShuntModel &mdash; the alternative <span class="badge api">RShuntModel</span></h5>
+
+<p>Sometimes the leakage <em>matters</em> &mdash; a cell with real shunt paths, partial shading, or a low fill factor. Then you do <em>not</em> want to throw the shunt away. RShuntModel keeps a <strong>finite</strong> shunt resistance. The price: the equations no longer rearrange into a neat closed form. The model must solve a <strong>transcendental equation</strong> &mdash; an equation where the unknown appears both inside and outside an exponential/log, so no algebra isolates it.</p>
+
+<div class="term"><strong>Transcendental equation.</strong> One that cannot be solved by rearrangement (e.g. <code>x = e<sup>&minus;x</sup></code>). You must find the root <em>numerically</em>: guess, check, refine, repeat until the two sides match.</div>
+
+<div class="term"><strong>Root-finder / Brent's method (<code>brentq</code>).</strong> An algorithm that finds where a function crosses zero. <em>Brent's method</em> is a robust bracketing root-finder (combining bisection with faster interpolation) exposed in SciPy as <code>brentq</code>. PowerPy hands it the cell's residual equation; it returns the <code>vt_cell</code> that makes the model pass through (vmp, imp) <em>with</em> the finite shunt present. From that <code>vt_cell</code> the model then derives <code>i0_cell</code> and the finite <code>r_cell_shunt</code>.</div>
+
+<div class="callout">
+<strong>Which to use.</strong> Use <span class="badge api">RSeriesModel</span> (default) for clean, high-quality cells &mdash; it is faster and never fails to converge. Switch to <span class="badge api">RShuntModel</span> when shunt/leakage behaviour matters. You select it on a cell object with <code>cell.setModel("RShuntModel")</code>.
+</div>
+
+<div class="practice">
+<strong>Practice P2-1.</strong> A different cell measures <code>isc = 0.52 A</code>, <code>imp = 0.49 A</code>, <code>vmp = 2.30 V</code>, <code>voc = 2.62 V</code>. Compute <code>vt_cell</code>, then the ideality factor <code>n = vt_cell / 0.02585 V</code>. Show units at each step.
+<div class="answerspace lines-6"></div>
+</div>
+
+<h4>2.5 &nbsp; The ideality factor and triple-junction cells</h4>
+
+<p>Once <code>vt_cell</code> (= n&middot;V<sub>t</sub>) is known, recovering the ideality factor is one division &mdash; divide out the <em>bare</em> thermal voltage:</p>
+
+<div class="formula">
+n = vt_cell / V_T_Spice
+<div class="where"><code>V_T_Spice</code> = k<sub>B</sub>&middot;300 / q &asymp; 0.02585 V is the bare thermal voltage at 300 K (the same V<sub>t</sub> from &sect;2.2). Dividing the lumped <code>vt_cell</code> by it strips out V<sub>t</sub> and leaves n alone. Dimensionless. </div>
+</div>
+
+<div class="worked">
+<strong>Worked example (b) &mdash; ideality factor.</strong> Using vt_cell = 0.0979 V from (a):
+<div class="step"><strong>Step 1.</strong> n = vt_cell / V_T_Spice = 0.0979 V / 0.02585 V = <strong>3.79</strong> (volts cancel &rarr; dimensionless). ✓</div>
+<div class="check"><strong>Reconcile with "n &asymp; 1&ndash;2".</strong> Back in &sect;2.2 we said a <em>single</em> junction has n &asymp; 1&ndash;2, yet here n &asymp; 3.79. No contradiction: this is a <strong>triple-junction</strong> cell &mdash; three p&ndash;n junctions stacked <em>in series</em>. Their junction voltages add (which is why voc &asymp; 2.67 V, not ~0.7 V), and so do their effective idealities, giving roughly 3&times; a single junction's value. An n near 3&times;(1&ndash;2) &asymp; 3&ndash;4 is exactly what a healthy triple-junction stack should show. ✓</div>
+</div>
+
+<div class="pitfall">
+<strong>Pitfall &mdash; negative series resistance is a data smell.</strong> <code>r_cell_high</code> is built as a <em>difference of two nearly equal terms</em> (in example (a): 4.91 &minus; 4.90). If the four measured numbers are not mutually self-consistent &mdash; e.g. a vmp that is too high for the given imp/isc/voc &mdash; the second term can exceed the first and <code>r_cell_high</code> comes out <strong>slightly negative</strong>. A negative physical resistance is impossible, so treat it as a red flag that <code>isc</code>, <code>imp</code>, <code>vmp</code>, <code>voc</code> don't describe one real curve. Don't "fix" it by clamping to zero &mdash; recheck the inputs. (This is the same fragility flagged in the sanity check of example (a).)
+</div>
+
+<div class="practice">
+<strong>Practice P2-2.</strong> In example (a) you found r_cell_high &asymp; 0.01 &Omega;. Suppose a measurement error reports <code>vmp = 2.40 V</code> instead of 2.35 V (everything else unchanged). Without fully recomputing i0_cell, explain in words why this pushes <code>r_cell_high</code> toward &mdash; or past &mdash; zero, and what that tells you about the data. (Hint: which of the two terms 4.91 / 4.90 does a larger vmp change most?)
+<div class="answerspace lines-6"></div>
+</div>
+
+<div class="practice">
+<strong>Practice P2-3.</strong> Qualitatively, what does <em>raising</em> Rs do to (i) the shape of the IV <em>knee</em> and (ii) the maximum power P<sub>mp</sub>? Answer in one or two sentences each, and say which datasheet number (vmp or imp) moves most.
+<div class="answerspace lines-4"></div>
+</div>
+
+<h4>2.6 &nbsp; Handing the model to SPICE / ngspice <span class="badge hot">EXAM-HOT</span></h4>
+
+<p>Having the four part-values is not the same as <em>solving</em> the circuit &mdash; the diode's exponential makes it nonlinear. PowerPy therefore exports the model to a genuine circuit simulator and lets it do the numerical heavy lifting.</p>
+
+<div class="term"><strong>SPICE.</strong> The decades-old standard family of analog circuit simulators ("Simulation Program with Integrated Circuit Emphasis"). You describe a circuit as a <em>text</em> <strong>netlist</strong> (a list of components and which nodes they connect) and SPICE solves the node voltages and branch currents.</div>
+
+<div class="term"><strong>ngspice / <code>NgSpiceShared</code>.</strong> <em>ngspice</em> is the open-source SPICE engine PowerPy uses. <code>NgSpiceShared</code> is the in-process interface that lets Python feed it a netlist and read results back without spawning an external program.</div>
+
+<div class="term"><strong>Subcircuit (<code>.subckt</code>).</strong> A reusable named block in a netlist &mdash; here, one solar <em>cell</em> &mdash; with named external terminals. PowerPy's builder routine <code>cellBuilder</code> emits a <code>.subckt</code> with two terminals named <code>high</code> and <code>low</code>, then stamps the model components between them.</div>
+
+<figure class="fig-frame">
+<svg width="100%" viewBox="0 0 480 190" xmlns="http://www.w3.org/2000/svg" font-size="10.5">
+<style>.w{stroke:#1d2733;stroke-width:1.5;fill:none} .nd{fill:#0b3d63} .tx{fill:#1d2733;font-family="Segoe UI,Arial,sans-serif"} .el{fill:#eef5fb;stroke:#1d2733}</style>
+<rect x="10" y="10" width="460" height="170" rx="6" fill="none" stroke="#cfd7df" stroke-dasharray="4 3"/>
+<text class="tx" x="20" y="26" fill="#5d6b79">.subckt cell  high low</text>
+<!-- nodes -->
+<circle class="nd" cx="70" cy="150" r="4"/><text class="tx" x="56" y="168">low</text>
+<circle class="nd" cx="200" cy="60" r="4"/><text class="tx" x="190" y="52">nc</text>
+<circle class="nd" cx="300" cy="60" r="4"/><text class="tx" x="292" y="52">nd</text>
+<circle class="nd" cx="430" cy="60" r="4"/><text class="tx" x="424" y="52">high</text>
+<!-- II_Cell low->nc -->
+<line class="w" x1="70" y1="150" x2="70" y2="60"/><line class="w" x1="70" y1="60" x2="200" y2="60"/>
+<circle class="el" cx="120" cy="60" r="12"/><text class="tx" x="106" y="44">II_Cell</text>
+<!-- DD_Cell nc->low -->
+<line class="w" x1="200" y1="60" x2="200" y2="150"/><polygon points="192,108 208,108 200,96" fill="#cfe0ef" stroke="#1d2733"/><text class="tx" x="208" y="106">DD_Cell</text>
+<!-- RR_CH nc->nd -->
+<rect class="el" x="235" y="51" width="30" height="18"/><text class="tx" x="250" y="44" text-anchor="middle">RR_CH</text>
+<line class="w" x1="200" y1="60" x2="235" y2="60"/><line class="w" x1="265" y1="60" x2="300" y2="60"/>
+<!-- RR_Cell_Shunt nd->low -->
+<line class="w" x1="300" y1="60" x2="300" y2="150"/><rect class="el" x="291" y="95" width="18" height="30"/><text class="tx" x="312" y="114" font-size="9">RR_Cell_Shunt</text>
+<!-- DD_Shunt low->nd (bypass) -->
+<line class="w" x1="350" y1="150" x2="350" y2="60"/><line class="w" x1="300" y1="150" x2="350" y2="150"/><line class="w" x1="350" y1="60" x2="300" y2="60"/>
+<polygon points="342,108 358,108 350,120" fill="#fbe3df" stroke="#9a3b3b"/><text class="tx" x="356" y="120" fill="#9a3b3b">DD_Shunt</text>
+<!-- RR_Iconn nd->high -->
+<rect class="el" x="360" y="51" width="34" height="18"/><text class="tx" x="377" y="44" text-anchor="middle">RR_Iconn</text>
+<line class="w" x1="300" y1="60" x2="360" y2="60"/><line class="w" x1="394" y1="60" x2="430" y2="60"/>
+<line class="w" x1="70" y1="150" x2="350" y2="150"/>
+</svg>
+<figcaption>Figure 2.3 — The ngspice subcircuit built by cellBuilder, between terminals high and low.</figcaption></figure>
+
+<figure>
+<svg width="470" height="240" viewBox="0 0 470 240" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif" font-size="10.5">
+  <rect x="1" y="1" width="468" height="238" fill="#fff" stroke="#ccc"/>
+  <!-- internal node 'mid' rail -->
+  <line x1="60" y1="50" x2="300" y2="50" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="60" y1="200" x2="430" y2="200" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="150" y="42" fill="#1f6a8c" font-size="9">internal node "mid"</text>
+  <!-- II_Cell -->
+  <circle cx="80" cy="125" r="20" fill="#fff" stroke="#0b3d63" stroke-width="2"/>
+  <line x1="80" y1="50" x2="80" y2="105" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="80" y1="145" x2="80" y2="200" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="92" y="120" fill="#0b3d63">II_Cell</text>
+  <text x="92" y="133" fill="#555" font-size="8.5">= isc</text>
+  <!-- DD_Cell -->
+  <line x1="150" y1="50" x2="150" y2="100" stroke="#1a1a1a" stroke-width="2"/>
+  <polygon points="138,100 162,100 150,118" fill="#fff" stroke="#9a3b3b" stroke-width="2"/>
+  <line x1="138" y1="118" x2="162" y2="118" stroke="#9a3b3b" stroke-width="2"/>
+  <line x1="150" y1="118" x2="150" y2="200" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="164" y="112" fill="#9a3b3b">DD_Cell (Dc)</text>
+  <!-- RR_Cell_Shunt -->
+  <line x1="230" y1="50" x2="230" y2="88" stroke="#1a1a1a" stroke-width="2"/>
+  <rect x="220" y="88" width="20" height="44" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <line x1="230" y1="132" x2="230" y2="200" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="244" y="114" fill="#1a1a1a" font-size="9">RR_Cell_Shunt</text>
+  <!-- RR_CH series from mid to node 'h2' -->
+  <rect x="300" y="40" width="44" height="20" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="300" y="33" fill="#1a1a1a" font-size="9">RR_CH</text>
+  <line x1="344" y1="50" x2="380" y2="50" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- RR_Iconn series from h2 to high -->
+  <rect x="380" y="40" width="44" height="20" fill="#fff" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="372" y="78" fill="#1a1a1a" font-size="9">RR_Iconn</text>
+  <line x1="424" y1="50" x2="448" y2="50" stroke="#1a1a1a" stroke-width="2"/>
+  <!-- DD_Shunt bypass across high-low (reverse) -->
+  <line x1="448" y1="50" x2="448" y2="100" stroke="#1a1a1a" stroke-width="2"/>
+  <polygon points="436,118 460,118 448,100" fill="#fff" stroke="#4f7a4f" stroke-width="2"/>
+  <line x1="436" y1="118" x2="460" y2="118" stroke="#4f7a4f" stroke-width="2"/>
+  <line x1="448" y1="118" x2="448" y2="200" stroke="#1a1a1a" stroke-width="2"/>
+  <text x="356" y="135" fill="#4f7a4f" font-size="9">DD_Shunt (Ds, bypass)</text>
+  <!-- terminals -->
+  <circle cx="450" cy="50" r="4" fill="#0b3d63"/>
+  <circle cx="432" cy="200" r="4" fill="#1a1a1a"/>
+  <text x="430" y="24" fill="#0b3d63">high</text>
+  <text x="436" y="216" fill="#1a1a1a">low</text>
+</svg>
+<figcaption style="font-size:9pt;color:#555">The <code>.subckt</code> emitted by <code>cellBuilder</code>. Source, junction diode and shunt sit on the internal node; RR_CH then RR_Iconn carry current out to <code>high</code>; the bypass diode DD_Shunt sits across the terminals for reverse protection.</figcaption>
+</figure>
+
+<p>Between <code>high</code> and <code>low</code>, <code>cellBuilder</code> stamps these elements:</p>
+
+<table>
+<thead><tr><th>Netlist name</th><th>Component</th><th>Value</th></tr></thead>
+<tbody>
+<tr><td><code>II_Cell</code></td><td>current source (the photocurrent)</td><td>= <code>isc</code></td></tr>
+<tr><td><code>DD_Cell</code></td><td>junction diode, model <code>Dc</code></td><td><code>IS = i0_cell</code>, <code>n = vt_cell / V_T_Spice</code></td></tr>
+<tr><td><code>RR_CH</code></td><td>series resistor</td><td>= <code>r_cell_high</code></td></tr>
+<tr><td><code>RR_Cell_Shunt</code></td><td>shunt resistor</td><td>= <code>r_cell_shunt</code></td></tr>
+<tr><td><code>RR_Iconn</code></td><td>interconnect resistor</td><td>= <code>r_interconnect</code> (from the cell file)</td></tr>
+<tr><td><code>DD_Shunt</code></td><td>bypass / shunt diode, model <code>Ds</code></td><td>reverse-protection (detailed in a later section)</td></tr>
+</tbody>
+</table>
+
+<div class="keyidea">
+<strong>Notice where the ideality factor lands.</strong> SPICE's diode model takes its own <code>n</code>. PowerPy sets the diode's <code>n = vt_cell / V_T_Spice</code> &mdash; the very division from &sect;2.5. So the "effective thermal voltage" we fitted is communicated to SPICE precisely by handing the diode that ideality factor on top of the bare thermal voltage SPICE already assumes. The two halves (bare V<sub>t</sub> inside SPICE, ideality n from us) multiply back to the n&middot;V<sub>t</sub> we measured.
+</div>
+
+<p>With the subcircuit defined, two API calls drive everything:</p>
+
+<ul>
+<li><span class="badge api">currentAtVoltage(V)</span> &mdash; <code>cell.currentAtVoltage(V)</code> builds the subckt, attaches a test <em>voltage source</em> set to <code>V</code> across <code>high</code>/<code>low</code>, runs an <strong>operating-point analysis</strong> (<code>.op</code> &mdash; SPICE solves the single steady DC state), and reads back the branch current. One voltage in, one current out.</li>
+<li><span class="badge api">calcIVCurve()</span> &mdash; <code>cell.calcIVCurve()</code> performs a <strong>DC sweep</strong> (<code>.dc</code>) of the test source from V = 0 up to V<sub>oc</sub>, collecting the current at each step, to produce the <em>entire</em> IV curve in one run.</li>
+</ul>
+
+<div class="term"><strong>Operating-point (<code>.op</code>) vs DC sweep (<code>.dc</code>).</strong> A <code>.op</code> solves the circuit at <em>one</em> fixed set of sources &mdash; a single (V, I) point. A <code>.dc</code> repeats that solve while <em>stepping</em> a source across a range &mdash; many points, i.e. a curve. So <code>currentAtVoltage</code> is one <code>.op</code>; <code>calcIVCurve</code> is a <code>.dc</code> built from many such solves.</div>
+
+<div class="callout">
+<strong>The full pipeline in one breath.</strong> Four datasheet numbers &rarr; a model (RSeriesModel or RShuntModel) turns them into <code>vt_cell</code>, <code>i0_cell</code>, <code>r_cell_shunt</code>, <code>r_cell_high</code> &rarr; <code>cellBuilder</code> writes a <code>.subckt</code> with II_Cell / DD_Cell / RR_CH / RR_Cell_Shunt / RR_Iconn / DD_Shunt &rarr; ngspice solves it via <code>.op</code> (one point) or <code>.dc</code> (whole curve) &rarr; out comes current vs voltage. Every later capability in PowerPy &mdash; strings, shading, temperature &mdash; is built on this single-cell pipeline.
+</div>
+
+<div class="ladder">
+<div class="socratic">
+<div class="q">Q&middot;d (foundation). What does the ideal current source in the model actually <em>do</em>?</div>
+<div class="answer">It forces a fixed current (&asymp; Isc, the light-generated current) through itself regardless of the voltage across it. It is the model's stand-in for photons liberating charge carriers.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;e (why). What does the diode do <em>near V<sub>oc</sub></em>, and why does that matter?</div>
+<div class="answer">Near V<sub>oc</sub> its exponential turns on and it diverts (steals) the photocurrent internally, dropping the output current to zero. This is what creates the knee and caps the cell's voltage &mdash; without it the output would never bend over.</div>
+</div>
+<div class="socratic">
+<div class="q">Q&middot;f (deep why). So why model the cell as <em>a current source with a diode across it</em> rather than as a battery?</div>
+<div class="answer">A battery holds a roughly <em>constant voltage</em> and will source whatever current a load demands &mdash; the wrong behaviour entirely. A real cell instead holds a roughly <em>constant current</em> (set by light) up to a knee, then collapses in voltage; under shading its current drops, and under heavy load its voltage falls away. Only the current-source-plus-diode pair reproduces that: the source fixes the current floor, the diode bends the voltage ceiling, and Rs/Rsh shape the corner. A battery model would mispredict every operating point off open-circuit &mdash; exactly the points where a solar array actually delivers power.</div>
+</div>
+</div>
+
+<div class="callout">
+<strong>Section recap.</strong> A solar cell &asymp; current source ∥ diode ∥ shunt, then a series resistor to the terminals. The Shockley exponential bends the curve; <code>i0_cell</code> sets V<sub>oc</sub>, the source sets Isc, Rs rounds the knee, Rsh tilts the plateau. RSeriesModel fits all of this in closed form (and discards the shunt); RShuntModel keeps a finite shunt and solves a transcendental equation with <code>brentq</code>. Watch the <code>vt_cell</code> = n&middot;V<sub>t</sub> naming, and remember a negative <code>r_cell_high</code> means inconsistent inputs. PowerPy then writes a <code>.subckt</code> and lets ngspice solve it &mdash; one point with <code>.op</code>, the whole curve with <code>.dc</code>.
+</div>

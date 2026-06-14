@@ -1,0 +1,23 @@
+\section{<< section.title | tex >>}
+
+<<% if losses %>>
+{\centering
+\rowcolors{2}{white}{tablerowgrey}
+\begin{xltabular}{\linewidth}{|L|l|l|r|}
+  \hline
+  \reporthead{\textbf{Name} & \textbf{Phase} & \textbf{Level} & \textbf{Factor}}\\ \hline
+  \endfirsthead
+  \reporthead{\textbf{Name} & \textbf{Phase} & \textbf{Level} & \textbf{Factor}}\\ \hline
+  \endhead
+\endfoot
+  \endlastfoot
+<<% for l in losses %>>
+  << l.name | tex >> & << l.phase.value | tex >>
+                     & << l.level.value | tex >>
+                     & << l.value | num(".4f") >>\\ \hline
+<<% endfor %>>
+\end{xltabular}
+\par}
+<<% else %>>
+\textit{No loss factors defined.}
+<<% endif %>>

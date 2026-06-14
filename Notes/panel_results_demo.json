@@ -1,0 +1,630 @@
+{
+  "summary": {
+    "name": "Example asymmetric panel (notch + bare edges)",
+    "grid": [
+      6,
+      8
+    ],
+    "pitch_mm": 55.0,
+    "g_lat": 0.04,
+    "t_limit_c": 150.0,
+    "peak_t_c": 86.59,
+    "peak_tile": [
+      2,
+      4
+    ],
+    "mean_t_c": 51.11,
+    "margin_to_limit_c": 63.41,
+    "n_over_limit": 0,
+    "n_tiles": 48,
+    "n_cells": 34,
+    "verdict": "PASS",
+    "converged": true
+  },
+  "tiles": [
+    {
+      "row": 0,
+      "col": 0,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 42.41,
+      "t_rear_c": 41.93,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 43.36,
+      "t_rear_c": 42.88,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 45.29,
+      "t_rear_c": 44.82,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 47.87,
+      "t_rear_c": 47.4,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 4,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 50.46,
+      "t_rear_c": 49.98,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 5,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 51.06,
+      "t_rear_c": 50.59,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 6,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 55.11,
+      "t_rear_c": 54.51,
+      "over_limit": false
+    },
+    {
+      "row": 0,
+      "col": 7,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 56.28,
+      "t_rear_c": 55.68,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 43.11,
+      "t_rear_c": 42.63,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 44.48,
+      "t_rear_c": 44.01,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 47.7,
+      "t_rear_c": 47.23,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 52.2,
+      "t_rear_c": 51.72,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 4,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 58.08,
+      "t_rear_c": 57.6,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 5,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 53.65,
+      "t_rear_c": 53.17,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 6,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 54.63,
+      "t_rear_c": 54.03,
+      "over_limit": false
+    },
+    {
+      "row": 1,
+      "col": 7,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 54.75,
+      "t_rear_c": 54.15,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 44.42,
+      "t_rear_c": 43.95,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 46.42,
+      "t_rear_c": 45.94,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 53.14,
+      "t_rear_c": 52.54,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 61.74,
+      "t_rear_c": 61.13,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 4,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 86.59,
+      "t_rear_c": 84.38,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 5,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 58.2,
+      "t_rear_c": 57.71,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 6,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 51.36,
+      "t_rear_c": 50.88,
+      "over_limit": false
+    },
+    {
+      "row": 2,
+      "col": 7,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 49.81,
+      "t_rear_c": 49.33,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 46.36,
+      "t_rear_c": 45.88,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 47.3,
+      "t_rear_c": 46.83,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 52.3,
+      "t_rear_c": 51.7,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 55.96,
+      "t_rear_c": 55.36,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 4,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 58.2,
+      "t_rear_c": 57.71,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 5,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 51.81,
+      "t_rear_c": 51.33,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 6,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 48.99,
+      "t_rear_c": 48.51,
+      "over_limit": false
+    },
+    {
+      "row": 3,
+      "col": 7,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 48.68,
+      "t_rear_c": 48.2,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "key": "D",
+      "name": "Bypass diode",
+      "is_cell": false,
+      "t_front_c": 50.99,
+      "t_rear_c": 50.38,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 48.24,
+      "t_rear_c": 47.76,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 47.97,
+      "t_rear_c": 47.49,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 3,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 48.62,
+      "t_rear_c": 48.15,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 4,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 49.11,
+      "t_rear_c": 48.64,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 5,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 48.21,
+      "t_rear_c": 47.73,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 6,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 49.0,
+      "t_rear_c": 48.52,
+      "over_limit": false
+    },
+    {
+      "row": 4,
+      "col": 7,
+      "key": "D",
+      "name": "Bypass diode",
+      "is_cell": false,
+      "t_front_c": 52.04,
+      "t_rear_c": 51.43,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 0,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 53.27,
+      "t_rear_c": 52.67,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 1,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 51.33,
+      "t_rear_c": 50.73,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 2,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 47.16,
+      "t_rear_c": 46.68,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 3,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 46.22,
+      "t_rear_c": 45.74,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 4,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 46.38,
+      "t_rear_c": 45.91,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 5,
+      "key": "A",
+      "name": "Cell type A",
+      "is_cell": true,
+      "t_front_c": 47.41,
+      "t_rear_c": 46.93,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 6,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 51.79,
+      "t_rear_c": 51.19,
+      "over_limit": false
+    },
+    {
+      "row": 5,
+      "col": 7,
+      "key": ".",
+      "name": "Bare substrate",
+      "is_cell": false,
+      "t_front_c": 53.87,
+      "t_rear_c": 53.27,
+      "over_limit": false
+    }
+  ],
+  "t_front_c": [
+    [
+      42.407,
+      43.358,
+      45.294,
+      47.872,
+      50.456,
+      51.064,
+      55.108,
+      56.276
+    ],
+    [
+      43.108,
+      44.484,
+      47.702,
+      52.195,
+      58.083,
+      53.648,
+      54.631,
+      54.749
+    ],
+    [
+      44.421,
+      46.421,
+      53.142,
+      61.742,
+      86.586,
+      58.197,
+      51.361,
+      49.805
+    ],
+    [
+      46.359,
+      47.303,
+      52.3,
+      55.958,
+      58.197,
+      51.808,
+      48.988,
+      48.678
+    ],
+    [
+      50.994,
+      48.238,
+      47.97,
+      48.622,
+      49.112,
+      48.206,
+      49.0,
+      52.044
+    ],
+    [
+      53.269,
+      51.325,
+      47.16,
+      46.22,
+      46.383,
+      47.407,
+      51.787,
+      53.872
+    ]
+  ],
+  "t_rear_c": [
+    [
+      41.931,
+      42.883,
+      44.819,
+      47.397,
+      49.981,
+      50.588,
+      54.509,
+      55.677
+    ],
+    [
+      42.632,
+      44.008,
+      47.226,
+      51.719,
+      57.597,
+      53.172,
+      54.033,
+      54.151
+    ],
+    [
+      43.946,
+      45.945,
+      52.544,
+      61.133,
+      84.383,
+      57.711,
+      50.885,
+      49.329
+    ],
+    [
+      45.883,
+      46.827,
+      51.702,
+      55.36,
+      57.71,
+      51.333,
+      48.512,
+      48.202
+    ],
+    [
+      50.383,
+      47.761,
+      47.494,
+      48.147,
+      48.637,
+      47.731,
+      48.523,
+      51.432
+    ],
+    [
+      52.669,
+      50.727,
+      46.684,
+      45.745,
+      45.908,
+      46.931,
+      51.189,
+      53.273
+    ]
+  ]
+}

@@ -1,0 +1,39 @@
+<div class="soln"><span class="sid">Q4-1.</span>
+<strong>Solar irradiance at Venus (d = 0.72 AU).</strong>
+Apply the inverse-square scaling anchored at AM0 = 1367 W/m&sup2; at 1 AU.
+<br>Square the distance: <code>d&sup2; = 0.72&sup2; = 0.5184</code> (AU&sup2;, a pure ratio).
+<br>Scale: <code>E = 1367 / 0.5184 &asymp; 2637 W/m&sup2;</code>.
+<br><strong>Comparison:</strong> this is <em>larger</em> than Earth's 1367 W/m&sup2; — about
+<code>2637 / 1367 &asymp; 1.93&times;</code>, i.e. nearly double. That is expected: Venus is <em>closer</em>
+to the Sun than Earth (0.72 AU &lt; 1 AU), and by the inverse-square law a smaller distance means a larger
+irradiance. (Units: W/m&sup2; &divide; dimensionless ratio = W/m&sup2;. &#10003;)
+</div>
+
+<div class="soln"><span class="sid">Q4-2.</span>
+<strong>Albedo flux over Earth.</strong>
+Use <code>P_Albedo = A &middot; E &middot; F</code>.
+<br>Substitute: <code>P_Albedo = 0.30 &times; 1367 &times; 0.20</code>.
+<br>Step the arithmetic: <code>0.30 &times; 1367 = 410.1</code> W/m&sup2;; then
+<code>410.1 &times; 0.20 = 82.0 W/m&sup2;</code>.
+<br><strong>Answer:</strong> <code>P_Albedo &asymp; 82 W/m&sup2;</code>.
+<br><strong>Units check:</strong> bond albedo [&ndash;] &times; irradiance [W/m&sup2;] &times; view factor [&ndash;]
+= [W/m&sup2;]. The two dimensionless factors leave the W/m&sup2; intact. &#10003; The reflected flux is a
+modest fraction (~6%) of the 1367 W/m&sup2; direct beam, as expected for reflected (not direct) light.
+</div>
+
+<div class="soln"><span class="sid">Q4-3.</span>
+<strong>Array temperature entering and leaving eclipse.</strong>
+<br><em>Entering eclipse:</em> the planet moves between the satellite and the Sun, so <code>P_Sun</code>
+drops to <strong>0</strong> and the electrical power output falls to <strong>zero</strong> — the array makes
+no electricity in shadow. With the dominant heat input (direct sun) removed, the array <strong>cools</strong>
+(radiates heat to space faster than it gains it). It does not cool to absolute zero, because the planet's
+<code>P_IR</code> keeps glowing onto it from below (the planet stays warm on its night side), which slows
+the cooling — but the trend is a steady <strong>cold-soak</strong> through the eclipse.
+<br><em>Leaving eclipse (eclipse exit):</em> the satellite emerges into sunlight, <code>P_Sun</code> jumps
+back to its full value, electrical power is restored, and the now-cold array is suddenly illuminated and
+loaded again. <code>P_IR</code> has been present throughout and changes only with view factor.
+<br><strong>Worst-case hot-spot:</strong> the moment <strong>just after eclipse exit</strong>. The array
+has been cold-soaked in shadow and is then hit with full sun and asked to deliver power at once — the
+abrupt swing in flux and load makes this the critical (and inherently <em>transient</em>) case, which a
+single fixed-sun model could never reveal. This is exactly the forward hook to a transient study.
+</div>

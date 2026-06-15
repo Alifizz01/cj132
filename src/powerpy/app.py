@@ -129,6 +129,7 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     import dataclasses
     from .loader.report import load_report_data
     from .loader.analysis import load_analysis_scope
+    from .loader.requirement import load_requirement
     from .simulation.pipeline import (
         AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
     from .simulation.array_level import build_from_report
@@ -141,6 +142,7 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
 
     report = load_report_data(params, data_dir)
     scope = load_analysis_scope(params)
+    requirement = load_requirement(params, data_dir)   # mission targets (or None)
 
     if scope:
         # SCOPE-DRIVEN: investigate exactly the configs the `analysis` sheet lists,
@@ -156,19 +158,29 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
                 env = dataclasses.replace(
                     env, current_loss=env.current_loss * cfg.string_loss)
             res = run(array, env)
+            # bus voltage: the analysis row's v_operating, else the requirement's
+            v_bus = cfg.v_operating
+            if v_bus is None and requirement is not None:
+                v_bus = requirement.voltage_operating_v
             bus = None
-            if cfg.v_operating is not None:
-                i_bus = array.current_at_voltage(cfg.v_operating)
-                bus = CompliancePoint(bus_voltage_v=cfg.v_operating,
+            if v_bus is not None:
+                i_bus = array.current_at_voltage(v_bus)
+                bus = CompliancePoint(bus_voltage_v=v_bus,
                                       current_a=float(i_bus),
-                                      power_w=float(cfg.v_operating * i_bus))
+                                      power_w=float(v_bus * i_bus))
             case = AnalysisCase(label=cfg.label, phase=cfg.phase,
                                 launch_config=cfg.launch,
                                 temperature_c=cfg.temperature_c, season=cfg.season)
             case_results.append(CaseResult(case=case, environment=env,
                                           results=res, bus=bus))
         labels = [c.label for c in scope]
-        rpt = Report.from_results(report, case_results, array=array, iv_engine=engine)
+        # requirement line on the P-V plot: the binding minimum power for the
+        # scoped phases (EOL phases -> eol_power_min, else eor_power_min).
+        requirement_w = None
+        if requirement is not None:
+            requirement_w = min(requirement.power_min_for_phase(c.phase) for c in scope)
+        rpt = Report.from_results(report, case_results, array=array,
+                                  requirement_w=requirement_w, iv_engine=engine)
         rpt.render(workdir)
         return rpt.compile_pdf(out_pdf), labels, report
 

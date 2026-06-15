@@ -35,4 +35,4 @@ where = ["src"]
 # Ship the seed substrate + example layout JSON with the package so
 # load_substrate("msro_case2") / load_layout(...) work after a wheel install.
 [tool.setuptools.package-data]
-"powerpy" = ["data/substrates/*.json", "data/layouts/*.json"]
+"powerpy" = ["data/substrates/*.json", "data/layouts/*.json", "data/circuits/*.json"]

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from powerpy.model.environment import SIGMA, albedo_flux, planetary_ir_flux
+from powerpy.model.environment import albedo_flux, planetary_ir_flux
 from powerpy.model.orbit import view_factor_to_planet
 from powerpy.schemas.mission import MissionOrbit
 
@@ -78,7 +78,7 @@ def compute_power_budget(orbit: MissionOrbit, *, season: float = 1.0,
         CalcLine(
             "Planetary IR load",
             r"P_{\mathrm{IR}} = \varepsilon\,\sigma\,T_p^4\,F",
-            r"%.2f \times %.3g \times %.0f^4 \times %.4f" % (eps, SIGMA, tp, f),
+            r"%.2f \times 5.67\times10^{-8} \times %.0f^4 \times %.4f" % (eps, tp, f),
             ir),
     )
     return PowerBudget(

@@ -146,7 +146,7 @@ SHEETS = [
         [True, 'fig_iv_panel', 'Whole-Array IV/PV Curve', None, 'figure', 'iv_panel', 'both'],
     ]),
 
-    # --- mission_orbit (15 data rows) ---
+    # --- mission_orbit (18 data rows) ---
     # columns: param | name | value | unit | type | source
     ('mission_orbit', [
         ['param', 'name', 'value', 'unit', 'type', 'source'],  # header
@@ -165,6 +165,9 @@ SHEETS = [
         ['bus_voltage', 'Bus Voltage', 101.5, 'V', 'float', None],
         ['max_string_current', 'Max String Current', 2.5, 'A', 'float', None],
         ['max_beta_angle_deg', 'Max Beta Angle', 23.5, 'deg', 'float', None],
+        ['bond_albedo', 'Bond Albedo', 0.30, '-', 'float', None],
+        ['planet_temp_k', 'Planet Temperature', 255, 'K', 'float', None],
+        ['ir_emissivity', 'Planet IR Emissivity', 1.0, '-', 'float', None],
     ]),
 
     # --- mission_param (24 data rows) ---

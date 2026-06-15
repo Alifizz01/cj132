@@ -101,5 +101,27 @@ def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
 
     pdf, labels, rep = build_electrical_report(
         _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
-    assert called["n"] >= 1     # grid path was used
+    assert called["n"] == 1     # grid path used exactly once (one panel built)
+    assert labels
+
+
+def test_report_without_grid_does_not_use_grid_builder(tmp_path, monkeypatch):
+    """Negative: the default workbook has no grid_reference_file, so the grid
+    builder must NOT be invoked (the report falls back to the ArrayLayout)."""
+    import powerpy.simulation.grid_build as gb
+    from powerpy.app import build_electrical_report
+
+    called = {"n": 0}
+    real = gb.build_array_from_grid
+
+    def spy(*a, **kw):
+        called["n"] += 1
+        return real(*a, **kw)
+
+    monkeypatch.setattr(gb, "build_array_from_grid", spy)
+
+    pdf, labels, rep = build_electrical_report(
+        _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
+    assert rep.cell.grid_reference_file is None   # default workbook: no grid
+    assert called["n"] == 0                       # grid builder NOT used
     assert labels

@@ -133,7 +133,6 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .simulation.pipeline import (
         AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
     from .simulation.array_level import build_from_report
-    from .config.layout import load_layout
     from .simulation.grid_build import build_array_from_grid
     from .render import Report
 
@@ -155,7 +154,7 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
         references one; otherwise fall back to the ArrayLayout sections."""
         grid_ref = getattr(report.cell, "grid_reference_file", None)
         if grid_ref:
-            layout = load_layout(str(grid_ref))
+            layout = load_layout(grid_ref)
             return build_array_from_grid(
                 report.cell, layout, layout.circuit_params,
                 iv_engine=engine, string_shunt_vf=string_shunt_vf)
@@ -202,6 +201,9 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
         return rpt.compile_pdf(out_pdf), labels, report
 
     # FALLBACK (no analysis sheet): one case per phase found in the loss table.
+    # NOTE: this legacy path always uses the ArrayLayout sections; a grid
+    # reference (grid-as-single-source) is honoured only in the scope-driven
+    # path above. Add an `analysis` sheet to drive the report from a grid.
     present = {f.phase for f in report.losses}
     if not present:
         raise SystemExit("ERROR: no phases found and no `analysis` sheet in the workbook.")

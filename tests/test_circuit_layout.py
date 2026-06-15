@@ -72,3 +72,32 @@ def test_load_circuit_parses_sample():
 def test_load_circuit_missing_file():
     with pytest.raises(FileNotFoundError):
         load_circuit(Path("does/not/exist.json"))
+
+
+import numpy as np
+from powerpy.loader.report import load_report_data
+from powerpy.simulation.circuit_build import build_array_from_circuit
+from powerpy.simulation.environment import Environment
+
+_DATA_DIR = Path("src/powerpy/data")
+_PARAMS = Path("params.xlsx")
+
+
+def test_build_array_from_circuit_structure_and_curve():
+    report = load_report_data(_PARAMS, _DATA_DIR)
+    circuit = load_circuit(_SAMPLE)
+    array = build_array_from_circuit(report.cell, circuit, iv_engine="analytic")
+    # one panel ("panel_1"), two sections, strings 2 + 1
+    assert len(array.panels) == 1
+    sections = list(array.iter_sections())
+    assert len(sections) == 2
+    assert [len(s.strings) for s in sections] == [2, 1]
+    # heterogeneous series counts preserved
+    assert len(sections[0].strings[0].cells) == 22
+    assert len(sections[1].strings[0].cells) == 20
+    # nominal curve is finite with a positive peak power
+    array.apply(Environment(temperature_c=28.0))
+    v, i = array.iv_curve()
+    p = v * i
+    assert np.all(np.isfinite(v)) and np.all(np.isfinite(i))
+    assert float(p.max()) > 0.0

@@ -1,0 +1,18 @@
+{
+  "name": "grid_circuit_demo",
+  "pitch_mm": 40.0,
+  "palette": {
+    "1": {"is_cell": true, "string": "s1", "block": "bA", "cell_type": "3G30LARS_GEO"},
+    "2": {"is_cell": true, "string": "s2", "block": "bA", "cell_type": "3G30LARS_GEO"},
+    "3": {"is_cell": true, "string": "s3", "block": "bB", "cell_type": "3G30LARS_GEO"},
+    ".": {"is_cell": false}
+  },
+  "layout": ["1 1 1 1", "2 2 2 2", "3 3 3 ."],
+  "circuit": {
+    "s1": {"string_shunt_diode": true},
+    "s2": {"string_shunt_diode": true},
+    "s3": {"string_shunt_diode": true},
+    "bA": {"resistance_ohm": 0.0},
+    "bB": {"resistance_ohm": 0.0}
+  }
+}

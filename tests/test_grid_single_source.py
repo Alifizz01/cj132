@@ -1,7 +1,7 @@
 from pathlib import Path
 
 import numpy as np
-from powerpy.config.layout import PanelLayout, TileType, from_dict
+from powerpy.config.layout import PanelLayout, TileType, from_dict, load_layout
 from powerpy.loader.report import load_report_data
 from powerpy.simulation.grid_build import build_array_from_grid
 from powerpy.simulation.environment import Environment
@@ -125,3 +125,23 @@ def test_report_without_grid_does_not_use_grid_builder(tmp_path, monkeypatch):
     assert rep.cell.grid_reference_file is None   # default workbook: no grid
     assert called["n"] == 0                       # grid builder NOT used
     assert labels
+
+
+_SAMPLE_GRID = Path("src/powerpy/data/layouts/grid_circuit_demo.json")
+
+
+def test_sample_grid_builds_expected_circuit():
+    report = load_report_data(_PARAMS, _DATA_DIR)
+    lay = load_layout(_SAMPLE_GRID)
+    array = build_array_from_grid(report.cell, lay, lay.circuit_params,
+                                  iv_engine="analytic")
+    sections = list(array.iter_sections())
+    # blocks bA, bB -> two sections; bA has 2 strings, bB has 1
+    assert len(sections) == 2
+    assert sorted(len(s.strings) for s in sections) == [1, 2]
+    # s1/s2 are 4 cells in series, s3 is 3 (the "." tile generates no power)
+    all_series = sorted(len(s.cells) for sec in sections for s in sec.strings)
+    assert all_series == [3, 4, 4]
+    array.apply(Environment(temperature_c=28.0))
+    v, i = array.iv_curve()
+    assert float((v * i).max()) > 0.0

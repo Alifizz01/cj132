@@ -83,3 +83,4 @@ def test_report_loads_mission_orbit():
     assert md.mission_orbit is not None
     assert md.mission_orbit.altitude_km == 35786.0          # GEO
     assert md.mission_orbit.sun_intensity_eol_min == 1322.0
+    assert len(md.mission_orbit.params) > 0

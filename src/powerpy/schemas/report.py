@@ -22,4 +22,7 @@ class ReportMetadata:
     # structure is optional -- a workbook without the sheet falls back to a
     # sane default.
     structure: ReportStructure = field(default_factory=ReportStructure.default)
+    # mission_orbit is optional at the dataclass level: the loader always
+    # supplies it, but hand-built metadata may omit it -- the analysis layer
+    # falls back to a default GEO orbit when it is None.
     mission_orbit: MissionOrbit | None = None

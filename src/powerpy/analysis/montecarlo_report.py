@@ -31,7 +31,6 @@ from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import LaunchConfig
 from powerpy.simulation.pipeline import environment_for_phase
 from powerpy.analysis.power_budget import DEFAULT_ORBIT, compute_power_budget
-from powerpy.schemas.mission import MissionOrbit
 
 
 @dataclass

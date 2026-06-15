@@ -22,3 +22,4 @@ def test_mc_report_has_power_budget():
     assert d.power_budget is not None
     assert d.power_budget.electrical_w_m2 > 0
     assert 0 < d.power_budget.albedo_w_m2 < 50
+    assert 0 < d.power_budget.ir_w_m2 < 50

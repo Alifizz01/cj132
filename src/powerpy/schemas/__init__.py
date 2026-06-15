@@ -2,7 +2,7 @@
 from powerpy.schemas._common import Phase, Level
 from powerpy.schemas.document import DocumentMetadata
 from powerpy.schemas.cell import CellParameters, CellElectrical
-from powerpy.schemas.mission import MissionParameters
+from powerpy.schemas.mission import MissionParameters, MissionOrbit
 from powerpy.schemas.layout import (
     SectionType,
     PhysicalSection,
@@ -31,6 +31,7 @@ __all__ = [
     "CellParameters",
     "CellElectrical",
     "MissionParameters",
+    "MissionOrbit",
     "SectionType",
     "PhysicalSection",
     "Topology",

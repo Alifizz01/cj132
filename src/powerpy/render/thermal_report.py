@@ -45,9 +45,11 @@ class ThermalReport:
     def from_metadata(cls, metadata: ReportMetadata, cases: list[ThermalCase],
                       *, substrate: Substrate | str = "FSP-SFLA",
                       layout_file: str | None = None,
-                      t_limit_c: float = 150.0) -> "ThermalReport":
+                      t_limit_c: float = 150.0,
+                      efficiency: float = 0.30) -> "ThermalReport":
         data = run_thermal_report(metadata, cases, substrate=substrate,
-                                  layout_file=layout_file, t_limit_c=t_limit_c)
+                                  layout_file=layout_file, t_limit_c=t_limit_c,
+                                  efficiency=efficiency)
         return cls(metadata=metadata, data=data)
 
     def render(self, workdir: str | Path, *,
@@ -84,6 +86,7 @@ class ThermalReport:
             hotspot=self.data.hotspot,
             panel_figure=panel_figure,
             layout_figure=layout_figure,
+            power_budget=self.data.power_budget,
         )
         (workdir / main_tex).write_text(tex_out, encoding="utf-8")
         return self

@@ -55,6 +55,37 @@
   \end{tabular}
 \end{table}
 
+% ---------------------------------------------------------------- 1a. power budget
+<<% if power_budget %>>
+\clearpage
+\section{Environmental Power Budget}
+\noindent Per unit area, at view factor \(F=<< power_budget.view_factor | num(".4f") >>\)
+(altitude << power_budget.altitude_km | num(".0f") >>~km).  The electrical term is
+the power withdrawn from the Sun at the space-grade cell efficiency
+\(\eta=<< power_budget.efficiency | num(".2f") >>\); the thermal solve uses the
+model's computed MPP power for temperatures.
+
+\begin{table}[H]
+  \centering
+  \rowcolors{2}{white}{tablerowgrey}
+  \begin{tabular}{|>{\raggedright\arraybackslash}p{0.52\linewidth}|r|l|}
+    \hline
+    \reporthead{\textbf{Term} & \textbf{Value} & \textbf{Unit}}\\ \hline
+    Incident solar \(S\)                 & << power_budget.incident_solar_w_m2 | num(".1f") >> & \si{\watt\per\square\metre}\\ \hline
+    Electrical extracted \(\eta S\)      & << power_budget.electrical_w_m2 | num(".1f") >> & \si{\watt\per\square\metre}\\ \hline
+    Albedo load                          & << power_budget.albedo_w_m2 | num(".2f") >> & \si{\watt\per\square\metre}\\ \hline
+    Planetary IR load                    & << power_budget.ir_w_m2 | num(".2f") >> & \si{\watt\per\square\metre}\\ \hline
+  \end{tabular}
+\end{table}
+
+\subsection*{Calculation}
+\begin{itemize}
+<<% for line in power_budget.lines %>>
+  \item \textbf{<< line.label | tex >>:}\quad\(<< line.formula >>\;=\;<< line.substitution >>\;=\;<< line.value_w_m2 | num(".2f") >>~\si{\watt\per\square\metre}\)
+<<% endfor %>>
+\end{itemize}
+<<% endif %>>
+
 % ---------------------------------------------------------------- 1b. layout
 <<% if layout_figure %>>
 \clearpage

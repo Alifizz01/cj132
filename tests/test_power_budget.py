@@ -84,3 +84,26 @@ def test_report_loads_mission_orbit():
     assert md.mission_orbit.altitude_km == 35786.0          # GEO
     assert md.mission_orbit.sun_intensity_eol_min == 1322.0
     assert len(md.mission_orbit.params) > 0
+
+
+from powerpy.analysis.power_budget import compute_power_budget, PowerBudget
+
+
+def test_power_budget_values_geo():
+    b = compute_power_budget(_orbit(), season=1.0, tilt=1.0, efficiency=0.30)
+    assert isinstance(b, PowerBudget)
+    assert b.view_factor == pytest.approx(0.02288, abs=1e-4)
+    assert b.incident_solar_w_m2 == pytest.approx(1322.0, abs=0.1)
+    assert b.electrical_w_m2 == pytest.approx(396.6, abs=0.2)   # 0.30 * 1322
+    assert b.albedo_w_m2 == pytest.approx(9.08, abs=0.05)        # 0.30*1322*F
+    assert b.ir_w_m2 == pytest.approx(5.49, abs=0.05)            # sigma*255^4*F
+
+
+def test_power_budget_lines_show_calculation():
+    b = compute_power_budget(_orbit(), season=1.0, tilt=1.0, efficiency=0.30)
+    labels = [ln.label for ln in b.lines]
+    assert "Electrical extracted" in labels
+    assert "Albedo load" in labels
+    assert "Planetary IR load" in labels
+    elec = next(ln for ln in b.lines if ln.label == "Electrical extracted")
+    assert "0.30" in elec.substitution and "1322" in elec.substitution

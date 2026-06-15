@@ -84,6 +84,7 @@ class ThermalReport:
             hotspot=self.data.hotspot,
             panel_figure=panel_figure,
             layout_figure=layout_figure,
+            power_budget=self.data.power_budget,
         )
         (workdir / main_tex).write_text(tex_out, encoding="utf-8")
         return self

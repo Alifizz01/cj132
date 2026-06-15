@@ -42,7 +42,7 @@ class PowerBudget:
     view_factor: float
     tilt: float
     altitude_km: float
-    lines: tuple
+    lines: tuple[CalcLine, ...]
 
 
 def compute_power_budget(orbit: MissionOrbit, *, season: float = 1.0,
@@ -71,10 +71,10 @@ def compute_power_budget(orbit: MissionOrbit, *, season: float = 1.0,
         CalcLine(
             "Electrical extracted",
             r"P_{\mathrm{elec}} = \eta \cdot S \cdot \cos\theta",
-            r"%.2f \times %.0f \times %.3f" % (efficiency, s, tilt), electrical),
+            r"%.2f \times %.1f \times %.3f" % (efficiency, s, tilt), electrical),
         CalcLine(
             "Albedo load", r"P_{\mathrm{alb}} = a \cdot S \cdot F",
-            r"%.2f \times %.0f \times %.4f" % (a, s, f), albedo),
+            r"%.2f \times %.1f \times %.4f" % (a, s, f), albedo),
         CalcLine(
             "Planetary IR load",
             r"P_{\mathrm{IR}} = \varepsilon\,\sigma\,T_p^4\,F",

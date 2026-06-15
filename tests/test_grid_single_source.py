@@ -69,3 +69,37 @@ def test_cellparameters_has_optional_grid_reference():
     assert hasattr(report.cell, "grid_reference_file")
     ref = report.cell.grid_reference_file
     assert ref is None or ref.name.endswith(".json")
+
+
+def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
+    import json
+    import dataclasses
+    import powerpy.simulation.grid_build as gb
+    import powerpy.loader.report as report_mod
+    from powerpy.app import build_electrical_report
+
+    grid_path = tmp_path / "grid.json"
+    grid_path.write_text(json.dumps(_demo_dict()), encoding="utf-8")
+
+    called = {"n": 0}
+    real = gb.build_array_from_grid
+
+    def spy(cell_params, layout, circuit_params=None, **kw):
+        called["n"] += 1
+        return real(cell_params, layout, circuit_params, **kw)
+
+    monkeypatch.setattr(gb, "build_array_from_grid", spy)
+
+    real_load = report_mod.load_report_data
+
+    def patched_load(params, data_dir):
+        rep = real_load(params, data_dir)
+        cell = dataclasses.replace(rep.cell, grid_reference_file=grid_path)
+        return dataclasses.replace(rep, cell=cell)
+
+    monkeypatch.setattr(report_mod, "load_report_data", patched_load)
+
+    pdf, labels, rep = build_electrical_report(
+        _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
+    assert called["n"] >= 1     # grid path was used
+    assert labels

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from powerpy.schemas.circuit import CircuitLayout, CircuitSection, CircuitString
 
@@ -47,3 +49,26 @@ def test_string_rejects_negative_values():
         _string(series_resistance_ohm=-0.1)
     with pytest.raises(ValueError):
         _string(block_diode_v_drop=-0.1)
+
+
+from powerpy.loader.circuit import load_circuit
+
+_SAMPLE = Path("src/powerpy/data/circuits/msro_nominal.json")
+
+
+def test_load_circuit_parses_sample():
+    c = load_circuit(_SAMPLE)
+    assert c.name == "msro_nominal"
+    assert [s.id for s in c.sections] == ["sec_a", "sec_b"]
+    sec_a = c.sections[0]
+    assert sec_a.panel == "panel_1"
+    assert [s.id for s in sec_a.strings] == ["s1", "s2"]
+    assert sec_a.strings[0].n_series == 22
+    assert sec_a.strings[1].block_diode_v_drop == 0.6   # default applied where omitted
+    assert c.sections[1].strings[0].n_series == 20
+    assert c.sections[1].resistance_ohm == 0.0
+
+
+def test_load_circuit_missing_file():
+    with pytest.raises(FileNotFoundError):
+        load_circuit(Path("does/not/exist.json"))

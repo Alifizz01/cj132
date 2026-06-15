@@ -1,0 +1,22 @@
+{
+  "name": "msro_nominal",
+  "sections": [
+    {
+      "id": "sec_a",
+      "panel": "panel_1",
+      "resistance_ohm": 0.0,
+      "strings": [
+        { "id": "s1", "n_series": 22, "series_resistance_ohm": 0.0,
+          "block_diode_v_drop": 0.6, "n_block_diodes": 1, "string_shunt_diode": true },
+        { "id": "s2", "n_series": 22, "string_shunt_diode": true }
+      ]
+    },
+    {
+      "id": "sec_b",
+      "panel": "panel_1",
+      "strings": [
+        { "id": "s1", "n_series": 20 }
+      ]
+    }
+  ]
+}

@@ -133,6 +133,7 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .simulation.pipeline import (
         AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
     from .simulation.array_level import build_from_report
+    from .simulation.grid_build import build_array_from_grid
     from .render import Report
 
     params = Path(params)
@@ -144,10 +145,25 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     scope = load_analysis_scope(params)
     requirement = load_requirement(params, data_dir)   # mission targets (or None)
 
+    # string shunt-diode forward drop (if the cell carries one)
+    string_shunt_vf = (report.cell.string_diode.v_forward
+                       if getattr(report.cell, "string_diode", None) else None)
+
+    def _build_array():
+        """Derive the array from a grid (grid-as-single-source) when the cell
+        references one; otherwise fall back to the ArrayLayout sections."""
+        grid_ref = getattr(report.cell, "grid_reference_file", None)
+        if grid_ref:
+            layout = load_layout(grid_ref)
+            return build_array_from_grid(
+                report.cell, layout, layout.circuit_params,
+                iv_engine=engine, string_shunt_vf=string_shunt_vf)
+        return build_from_report(report, iv_engine=engine)
+
     if scope:
         # SCOPE-DRIVEN: investigate exactly the configs the `analysis` sheet lists,
         # in its order, each at its own operating conditions.
-        array = build_from_report(report, iv_engine=engine)
+        array = _build_array()
         case_results = []
         for cfg in scope:
             env = environment_for_phase(
@@ -185,6 +201,9 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
         return rpt.compile_pdf(out_pdf), labels, report
 
     # FALLBACK (no analysis sheet): one case per phase found in the loss table.
+    # NOTE: this legacy path always uses the ArrayLayout sections; a grid
+    # reference (grid-as-single-source) is honoured only in the scope-driven
+    # path above. Add an `analysis` sheet to drive the report from a grid.
     present = {f.phase for f in report.losses}
     if not present:
         raise SystemExit("ERROR: no phases found and no `analysis` sheet in the workbook.")

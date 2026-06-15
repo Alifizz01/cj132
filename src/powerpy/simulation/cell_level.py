@@ -112,6 +112,25 @@ def _remaining_factor(curve, dose_1e14: float) -> float:
     return float(np.interp(np.log10(fluence), xs, ys))
 
 
+def _regressor_factor(reg: dict, dose_1e14: float) -> float:
+    """Remaining factor from a measured ``r_*`` regressor curve.
+
+    Unlike :func:`_remaining_factor` (which reads the coarse 3-point
+    ``degradation`` placeholder in absolute fluence), the manufacturer's
+    ``r_isc``/``r_imp``/``r_vmp``/``r_voc`` curves are stored as
+    ``{"dose": [...], "value": [...]}`` with the dose axis already in the
+    Environment's ``1e14 e-/cm^2`` units -- so the dose is read directly and
+    linearly interpolated (clamped at the ends).  Missing/empty curve -> 1.0.
+    """
+    if not reg:
+        return 1.0
+    xs = reg.get("dose")
+    ys = reg.get("value")
+    if not xs or not ys:
+        return 1.0
+    return float(np.interp(float(dose_1e14), xs, ys))
+
+
 # --------------------------------------------------------------------------
 # CellModel
 # --------------------------------------------------------------------------
@@ -146,27 +165,60 @@ class CellModel(SimNode):
     def operating_points(self) -> tuple[float, float, float, float]:
         """(Isc, Imp, Vmp, Voc) at the current environment.
 
-        Applies, to the begin-of-life schema points: the temperature
-        coefficients (``%/C`` about the reference temperature), the
-        radiation remaining-factors (current axis -> dose_i, voltage axis ->
-        dose_v) and the pre-resolved current/voltage loss products.
+        Mirrors the legacy ``cell.prepareModel`` formula: the begin-of-life
+        points are degraded by the measured radiation remaining-factors per
+        parameter (r_isc/r_imp on dose_i, r_vmp/r_voc on dose_v), then shifted by
+        the **additive**, dose-dependent temperature coefficients
+        (isc_dt/imp_dt/vmp_dt/voc_dt, in A/K or V/K, about the reference
+        temperature). Finally the current/voltage loss products and the
+        sun-intensity ``season`` (current axis) are applied multiplicatively.
+
+        When the measured regressor curves are absent the model falls back to the
+        coarse 3-point ``degradation`` placeholder with simple ``%/C`` temperature
+        coefficients.
         """
         e = self.params.electrical
         env = self._env
-        dT = env.temperature_c - env.reference_temperature_c
+        t_ref = env.reference_temperature_c
+        temp = env.temperature_c
+        dT = temp - t_ref
 
-        f_temp_i = 1.0 + (e.temp_coeff_isc / 100.0) * dT
-        f_temp_v = 1.0 + (e.temp_coeff_voc / 100.0) * dT
-        f_rad_i = _remaining_factor(e.degradation.get("isc"), env.dose_i)
-        f_rad_v = _remaining_factor(e.degradation.get("voc"), env.dose_v)
+        reg = e.regressors or {}
+        if "r_imp" in reg or "r_isc" in reg:
+            # radiation remaining-factors (current axis -> dose_i, voltage -> dose_v)
+            rf_isc = _regressor_factor(reg.get("r_isc"), env.dose_i)
+            rf_imp = _regressor_factor(reg.get("r_imp"), env.dose_i)
+            rf_voc = _regressor_factor(reg.get("r_voc"), env.dose_v)
+            rf_vmp = _regressor_factor(reg.get("r_vmp"), env.dose_v)
+            # additive, dose-dependent temperature coefficients [A/K, V/K]
+            isc_dt = _regressor_factor(reg.get("isc_dt"), env.dose_i)
+            imp_dt = _regressor_factor(reg.get("imp_dt"), env.dose_i)
+            vmp_dt = _regressor_factor(reg.get("vmp_dt"), env.dose_v)
+            voc_dt = _regressor_factor(reg.get("voc_dt"), env.dose_v)
+            # below 0 C the legacy model blends imp_dt toward isc_dt
+            if temp <= 0:
+                imp_dt = (isc_dt * (-temp) + imp_dt * t_ref) / (t_ref - temp)
+            isc = e.isc_bol * rf_isc + isc_dt * dT
+            imp = e.imp_bol * rf_imp + imp_dt * dT
+            vmp = e.vmp_bol * rf_vmp + vmp_dt * dT
+            voc = e.voc_bol * rf_voc + voc_dt * dT
+        else:
+            # placeholder fallback: 3-point degradation + simple %/C temperature
+            f_temp_i = 1.0 + (e.temp_coeff_isc / 100.0) * dT
+            f_temp_v = 1.0 + (e.temp_coeff_voc / 100.0) * dT
+            rf_i = _remaining_factor(e.degradation.get("isc"), env.dose_i)
+            rf_v = _remaining_factor(e.degradation.get("voc"), env.dose_v)
+            isc = e.isc_bol * f_temp_i * rf_i
+            imp = e.imp_bol * f_temp_i * rf_i
+            voc = e.voc_bol * f_temp_v * rf_v
+            vmp = e.vmp_bol * f_temp_v * rf_v
 
-        gain_i = f_temp_i * f_rad_i * env.current_loss
-        gain_v = f_temp_v * f_rad_v * env.voltage_loss
-
-        isc = e.isc_bol * gain_i
-        imp = e.imp_bol * gain_i
-        voc = e.voc_bol * gain_v
-        vmp = e.vmp_bol * gain_v
+        # current/voltage loss products; sun intensity (season) scales the
+        # photocurrent so it rides on the current axis.
+        isc = isc * env.current_loss * env.season
+        imp = imp * env.current_loss * env.season
+        voc = voc * env.voltage_loss
+        vmp = vmp * env.voltage_loss
         return isc, imp, vmp, voc
 
     def diode_params(self) -> DiodeParams:

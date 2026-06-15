@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -54,6 +54,10 @@ class PanelLayout:
     palette: Dict[str, TileType]
     pitch_mm: float = 40.0           # tile pitch (centre-to-centre), millimetres
     name: str = ""
+    # optional per-string / per-block electrical params (harness R, diode opts),
+    # keyed by the same `string`/`block` ids the tiles carry. Empty unless the
+    # layout JSON provides a "circuit" block.
+    circuit_params: Dict[str, dict] = field(default_factory=dict)
 
     # --- shape helpers ----------------------------------------------------
     @property
@@ -107,6 +111,32 @@ class PanelLayout:
         """Re-render the grid as a spaced character picture (for reports/specs)."""
         return "\n".join(" ".join(str(k) for k in row) for row in self.grid)
 
+    def cell_strings(self):
+        """Group cell tiles into electrical strings.
+
+        Returns ``(strings, string_block)``: ``strings`` maps a string id to the
+        row-major-ordered list of flat tile indices in that series string;
+        ``string_block`` maps a string id to its parallel-section (``block``) id.
+        Tiles sharing a ``string`` are one series string (order is row-major;
+        irrelevant to the nominal IV, which is order-independent).
+        """
+        strings: Dict[str, List[int]] = {}
+        string_block: Dict[str, str] = {}
+        for idx, key in enumerate(self.flat_keys()):
+            t = self.palette[key]
+            if not t.is_cell:
+                continue
+            sid = t.string or t.key
+            blk = t.block or "block_default"
+            strings.setdefault(sid, []).append(idx)
+            if sid in string_block and string_block[sid] != blk:
+                raise ValueError(
+                    "string %r spans conflicting blocks %r and %r -- a series "
+                    "string must belong to exactly one parallel block"
+                    % (sid, string_block[sid], blk))
+            string_block[sid] = blk
+        return strings, string_block
+
 
 def _parse_layout_rows(rows) -> np.ndarray:
     """Accept rows as space-separated strings, dense strings, or lists of keys."""
@@ -139,7 +169,8 @@ def from_dict(d: Dict) -> PanelLayout:
     if unknown:
         raise ValueError("layout uses keys not in palette: %s" % sorted(unknown))
     return PanelLayout(grid=grid, palette=palette,
-                       pitch_mm=float(d.get("pitch_mm", 40.0)), name=d.get("name", ""))
+                       pitch_mm=float(d.get("pitch_mm", 40.0)), name=d.get("name", ""),
+                       circuit_params=dict(d.get("circuit", {})))
 
 
 def load_layout(path: str) -> PanelLayout:

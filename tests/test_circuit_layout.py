@@ -2,8 +2,8 @@ import pytest
 from powerpy.schemas.circuit import CircuitLayout, CircuitSection, CircuitString
 
 
-def _string(id="s1", n=22, **kw):
-    return CircuitString(id=id, n_series=n, **kw)
+def _string(string_id="s1", n=22, **kw):
+    return CircuitString(id=string_id, n_series=n, **kw)
 
 
 def test_string_defaults_and_validation():
@@ -40,3 +40,10 @@ def test_layout_requires_sections_and_unique_ids():
             CircuitSection(id="a", strings=(_string(),)),
             CircuitSection(id="a", strings=(_string(),)),
         ))
+
+
+def test_string_rejects_negative_values():
+    with pytest.raises(ValueError):
+        _string(series_resistance_ohm=-0.1)
+    with pytest.raises(ValueError):
+        _string(block_diode_v_drop=-0.1)

@@ -23,6 +23,7 @@ from powerpy.schemas.structure import (
     ReportStructure,
 )
 from powerpy.schemas.report import ReportMetadata
+from powerpy.schemas.circuit import CircuitString, CircuitSection, CircuitLayout
 
 __all__ = [
     "Phase",
@@ -46,4 +47,7 @@ __all__ = [
     "ReportSection",
     "ReportStructure",
     "ReportMetadata",
+    "CircuitString",
+    "CircuitSection",
+    "CircuitLayout",
 ]

@@ -8,7 +8,6 @@ combine in series within a string.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Tuple
 
 
 @dataclass(frozen=True)
@@ -28,8 +27,12 @@ class CircuitString:
             raise ValueError(
                 "CircuitString %r: n_series must be >= 1, got %r"
                 % (self.id, self.n_series))
-        if self.series_resistance_ohm < 0 or self.block_diode_v_drop < 0:
-            raise ValueError("CircuitString %r: resistances/drops must be >= 0" % self.id)
+        if self.series_resistance_ohm < 0:
+            raise ValueError(
+                f"CircuitString {self.id!r}: series_resistance_ohm must be >= 0, got {self.series_resistance_ohm}")
+        if self.block_diode_v_drop < 0:
+            raise ValueError(
+                f"CircuitString {self.id!r}: block_diode_v_drop must be >= 0, got {self.block_diode_v_drop}")
         if self.n_block_diodes < 0:
             raise ValueError("CircuitString %r: n_block_diodes must be >= 0" % self.id)
 
@@ -38,7 +41,7 @@ class CircuitString:
 class CircuitSection:
     """A parallel group of strings on one panel."""
     id: str
-    strings: Tuple[CircuitString, ...]
+    strings: tuple[CircuitString, ...]
     panel: str = "panel_1"
     resistance_ohm: float = 0.0
 
@@ -58,9 +61,11 @@ class CircuitSection:
 class CircuitLayout:
     """The whole circuit: sections combined in parallel (grouped by panel)."""
     name: str
-    sections: Tuple[CircuitSection, ...]
+    sections: tuple[CircuitSection, ...]
 
     def __post_init__(self):
+        if not self.name:
+            raise ValueError("CircuitLayout.name must be non-empty")
         if not self.sections:
             raise ValueError("CircuitLayout: needs >= 1 section")
         ids = [s.id for s in self.sections]

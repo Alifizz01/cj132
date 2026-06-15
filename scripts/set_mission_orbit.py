@@ -20,6 +20,9 @@ import openpyxl
 _CHANGES = {
     "bus_voltage":        (101.5, "Bus Voltage", "V", "float"),
     "max_beta_angle_deg": (23.5,  "Max Beta Angle", "deg", "float"),
+    "bond_albedo":        (0.30,  "Bond Albedo", "-", "float"),
+    "planet_temp_k":      (255.0, "Planet Temperature", "K", "float"),
+    "ir_emissivity":      (1.0,   "Planet IR Emissivity", "-", "float"),
 }
 
 _SHEET = "mission_orbit"

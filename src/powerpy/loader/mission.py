@@ -17,12 +17,14 @@ import pandas as pd
 from powerpy.loader._common import (
     clean_optional,
     filter_included,
+    load_keyvalue_sheet,
     require_float,
+    require_keyvalue,
     require_str,
     validate_required_columns,
     validate_unique,
 )
-from powerpy.schemas.mission import MissionOperatingPoint, MissionParameters
+from powerpy.schemas.mission import MissionOperatingPoint, MissionOrbit, MissionParameters
 
 
 def load_mission_parameters(params_file: Path) -> MissionParameters:
@@ -58,3 +60,12 @@ def load_mission_parameters(params_file: Path) -> MissionParameters:
         "mission_param",
     )
     return MissionParameters(items=tuple(items))
+
+
+def load_mission_orbit(params_file: Path, data_dir: Path) -> MissionOrbit:
+    """Load the key-value ``mission_orbit`` sheet (orbit + environment params)."""
+    values = load_keyvalue_sheet(params_file, "mission_orbit", data_dir)
+    altitude_km = require_keyvalue(values, "altitude_km", "mission_orbit")
+    if altitude_km <= 0:
+        raise ValueError("mission_orbit: 'altitude_km' must be > 0")
+    return MissionOrbit(params=values)

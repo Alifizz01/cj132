@@ -79,3 +79,46 @@ class MissionParameters:
 
     def __bool__(self):
         return bool(self.items)
+
+
+@dataclass(frozen=True)
+class MissionOrbit:
+    """Key-value ``mission_orbit`` sheet: orbit + environment parameters.
+
+    Holds the raw param->value map (nothing is dropped) and exposes typed
+    accessors for the values the power budget and thermal solve need.  Optical
+    environment params absent from the workbook fall back to documented LEO/Earth
+    defaults.
+
+    The ``params`` dict is held by reference (not copied or deep-frozen); callers must not mutate it.
+    """
+    params: dict[str, object]
+
+    def get(self, key: str, default=None):
+        return self.params.get(key, default)
+
+    @property
+    def altitude_km(self) -> float:
+        if "altitude_km" not in self.params:
+            raise KeyError("mission_orbit: 'altitude_km' is required")
+        return float(self.params["altitude_km"])
+
+    @property
+    def sun_intensity_eol_min(self) -> float:
+        return float(self.params.get("sun_intensity_eol_min", 1367.0))
+
+    @property
+    def sun_intensity_bol(self) -> float:
+        return float(self.params.get("sun_intensity_bol", 1367.0))
+
+    @property
+    def bond_albedo(self) -> float:
+        return float(self.params.get("bond_albedo", 0.30))
+
+    @property
+    def planet_temp_k(self) -> float:
+        return float(self.params.get("planet_temp_k", 255.0))
+
+    @property
+    def ir_emissivity(self) -> float:
+        return float(self.params.get("ir_emissivity", 1.0))

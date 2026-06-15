@@ -30,6 +30,7 @@ from powerpy.schemas import ReportMetadata
 from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import LaunchConfig
 from powerpy.simulation.pipeline import environment_for_phase
+from powerpy.analysis.power_budget import DEFAULT_ORBIT, compute_power_budget
 
 
 @dataclass
@@ -41,6 +42,7 @@ class MCReportData:
     worst: dict            # worst_case_search result
     t_limit_c: float
     worst_grid: object = None   # (rows, cols) temperatures of the worst case
+    power_budget: object = None
 
 
 def _build_panel(md, sub, n_rows, n_cols):
@@ -69,7 +71,8 @@ def run_mc_study(md: ReportMetadata, *,
                  p_fail: float = 0.05, target_se: float = 1.5,
                  max_runs: int = 300, max_failures: int = 5,
                  g_lat: float = 0.02, seed: int = 0,
-                 workers: int = 4) -> MCReportData:
+                 workers: int = 4,
+                 efficiency: float = 0.30) -> MCReportData:
     """Run the auto-stopping MC + worst-case search and package the results."""
     sub = (substrate if isinstance(substrate, Substrate)
            else load_substrate(substrate))
@@ -91,7 +94,10 @@ def run_mc_study(md: ReportMetadata, *,
     healthy_w = p_cell
     reverse_w = -dissipation_multiple * p_cell
 
-    solve_kwargs = dict(p_sun=AM0 * season, p_albedo=0.0, p_ir=0.0,
+    orbit = md.mission_orbit if md.mission_orbit is not None else DEFAULT_ORBIT
+    budget = compute_power_budget(orbit, season=season, efficiency=efficiency)
+    solve_kwargs = dict(p_sun=AM0 * season,
+                        p_albedo=budget.albedo_w_m2, p_ir=budget.ir_w_m2,
                         c_cond=sub.c_cond, g_lat=g_lat, area=area)
 
     summary = study.auto_monte_carlo(
@@ -125,4 +131,4 @@ def run_mc_study(md: ReportMetadata, *,
     }
     return MCReportData(inputs=inputs, summary=summary, p_over_limit=p_over,
                         peaks=peaks, worst=worst, t_limit_c=t_limit_c,
-                        worst_grid=worst_grid)
+                        worst_grid=worst_grid, power_budget=budget)

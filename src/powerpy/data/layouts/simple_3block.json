@@ -1,62 +1,14 @@
 {
-    "_comment": "Simple demo: 3 blocks in series, 2 parallel strings per block, 10 cells in series per string. Each tile is tagged with its block + string, so the same file describes BOTH the physical placement and the electrical circuit.",
+    "_comment": "Simple demo: 3 blocks in series, 2 parallel strings per block, 10 cells in series per string. Each tile is tagged with its block + string, so the same file describes BOTH the physical placement and the electrical circuit. Cell optics are referenced from data/cells/<cell_type>.json (only the cell's alpha); rear/bare optics come from the substrate at solve time.",
     "name": "3 blocks x 2 parallel x 10 series",
     "pitch_mm": 40.0,
     "palette": {
-        "B1S1": {
-            "is_cell": true,
-            "string": "B1S1",
-            "block": "B1",
-            "alpha_front": 0.91,
-            "alpha_rear": 0.48,
-            "epsilon_front": 0.83,
-            "epsilon_rear": 0.76
-        },
-        "B1S2": {
-            "is_cell": true,
-            "string": "B1S2",
-            "block": "B1",
-            "alpha_front": 0.91,
-            "alpha_rear": 0.48,
-            "epsilon_front": 0.83,
-            "epsilon_rear": 0.76
-        },
-        "B2S1": {
-            "is_cell": true,
-            "string": "B2S1",
-            "block": "B2",
-            "alpha_front": 0.91,
-            "alpha_rear": 0.48,
-            "epsilon_front": 0.83,
-            "epsilon_rear": 0.76
-        },
-        "B2S2": {
-            "is_cell": true,
-            "string": "B2S2",
-            "block": "B2",
-            "alpha_front": 0.91,
-            "alpha_rear": 0.48,
-            "epsilon_front": 0.83,
-            "epsilon_rear": 0.76
-        },
-        "B3S1": {
-            "is_cell": true,
-            "string": "B3S1",
-            "block": "B3",
-            "alpha_front": 0.91,
-            "alpha_rear": 0.48,
-            "epsilon_front": 0.83,
-            "epsilon_rear": 0.76
-        },
-        "B3S2": {
-            "is_cell": true,
-            "string": "B3S2",
-            "block": "B3",
-            "alpha_front": 0.91,
-            "alpha_rear": 0.48,
-            "epsilon_front": 0.83,
-            "epsilon_rear": 0.76
-        }
+        "B1S1": {"is_cell": true, "string": "B1S1", "block": "B1", "cell_type": "3G30LARS_GEO"},
+        "B1S2": {"is_cell": true, "string": "B1S2", "block": "B1", "cell_type": "3G30LARS_GEO"},
+        "B2S1": {"is_cell": true, "string": "B2S1", "block": "B2", "cell_type": "3G30LARS_GEO"},
+        "B2S2": {"is_cell": true, "string": "B2S2", "block": "B2", "cell_type": "3G30LARS_GEO"},
+        "B3S1": {"is_cell": true, "string": "B3S1", "block": "B3", "cell_type": "3G30LARS_GEO"},
+        "B3S2": {"is_cell": true, "string": "B3S2", "block": "B3", "cell_type": "3G30LARS_GEO"}
     },
     "layout": [
         "B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1",

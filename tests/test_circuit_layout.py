@@ -146,3 +146,25 @@ def test_build_electrical_report_uses_circuit(tmp_path, monkeypatch):
         _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
     assert captured.get("sections") == [2, 1]   # circuit path was used
     assert labels                                # at least one scoped case
+
+
+def test_build_electrical_report_without_circuit_uses_arraylayout(tmp_path, monkeypatch):
+    """Regression: with no circuit_reference_file (the default workbook), the
+    report falls back to the ArrayLayout path and does NOT touch the circuit
+    builder -- so existing report output is unchanged."""
+    import powerpy.simulation.circuit_build as cb
+
+    called = {"n": 0}
+    real_build = cb.build_array_from_circuit
+
+    def spy(*a, **kw):
+        called["n"] += 1
+        return real_build(*a, **kw)
+
+    monkeypatch.setattr(cb, "build_array_from_circuit", spy)
+
+    pdf, labels, rep = build_electrical_report(
+        _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
+    assert rep.cell.circuit_reference_file is None   # default workbook: no circuit
+    assert called["n"] == 0                          # circuit builder NOT used
+    assert labels                                    # report still produced cases

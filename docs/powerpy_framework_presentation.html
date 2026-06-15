@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PowerPy — Framework Walkthrough & Presentation Script</title>
+<style>
+  :root{
+    --ink:#15202b; --muted:#5b6b7b; --line:#d8e0e8; --accent:#0a5ad6;
+    --accent2:#0b8457; --warn:#b5480f; --bg-soft:#f4f7fb; --code-bg:#0f1722;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:11pt;}
+  body{
+    font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;
+    color:var(--ink); line-height:1.5; margin:0; background:#fff;
+  }
+  @page{ size:A4; margin:17mm 15mm 16mm 15mm; }
+  .page{ page-break-after:always; }
+  .page:last-child{ page-break-after:auto; }
+  h1{font-size:25pt; line-height:1.12; margin:0 0 6px; letter-spacing:-.4px;}
+  h2{font-size:16pt; margin:26px 0 6px; padding-bottom:5px; border-bottom:2px solid var(--accent);
+     color:var(--accent); letter-spacing:-.2px; page-break-after:avoid;}
+  h3{font-size:12.5pt; margin:18px 0 4px; color:var(--ink); page-break-after:avoid;}
+  h4{font-size:11pt; margin:13px 0 3px; color:var(--accent2); text-transform:uppercase;
+     letter-spacing:.4px; page-break-after:avoid;}
+  p{margin:6px 0;}
+  small{color:var(--muted);}
+  .lede{font-size:12pt; color:var(--muted); margin-top:10px;}
+  .tag{display:inline-block; font-size:8.5pt; font-weight:700; text-transform:uppercase;
+    letter-spacing:.6px; color:#fff; background:var(--accent); padding:2px 8px; border-radius:10px;
+    vertical-align:middle;}
+  .tag.green{background:var(--accent2);} .tag.amber{background:var(--warn);} .tag.grey{background:#5b6b7b;}
+  code,pre{font-family:"Cascadia Code","Consolas","SF Mono",monospace;}
+  code{background:var(--bg-soft); padding:1px 5px; border-radius:4px; font-size:9.5pt; color:#0b3b66;}
+  pre{background:var(--code-bg); color:#e7eef7; padding:12px 14px; border-radius:8px; overflow:auto;
+    font-size:8.7pt; line-height:1.42; margin:8px 0; border:1px solid #1e2c3c;
+    page-break-inside:avoid; white-space:pre-wrap;}
+  pre .c{color:#7d8da0;} pre .k{color:#7cc4ff;} pre .s{color:#a7e0a0;} pre .n{color:#f3b06b;}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .card{border:1px solid var(--line); border-radius:9px; padding:11px 14px; background:#fff;
+    page-break-inside:avoid;}
+  .card.soft{background:var(--bg-soft);}
+  .why{border-left:4px solid var(--accent2); background:#f0f9f4; padding:8px 12px; border-radius:0 7px 7px 0;
+    margin:8px 0; page-break-inside:avoid;}
+  .why b{color:var(--accent2);}
+  .say{border-left:4px solid var(--accent); background:#eef4fe; padding:9px 13px; border-radius:0 7px 7px 0;
+    margin:9px 0; page-break-inside:avoid;}
+  .say b{color:var(--accent); display:block; font-size:9pt; text-transform:uppercase; letter-spacing:.6px; margin-bottom:3px;}
+  .qa{border:1px solid var(--line); border-radius:9px; padding:0; margin:11px 0; overflow:hidden;
+    page-break-inside:avoid;}
+  .qa .q{background:#fef6ec; padding:9px 13px; font-weight:600; border-bottom:1px solid #f0e2cf;}
+  .qa .q::before{content:"Q"; display:inline-block; width:19px; height:19px; line-height:19px; text-align:center;
+    background:var(--warn); color:#fff; border-radius:50%; font-size:9pt; margin-right:8px;}
+  .qa .a{padding:9px 13px;}
+  .qa .a::before{content:"A"; display:inline-block; width:19px; height:19px; line-height:19px; text-align:center;
+    background:var(--accent2); color:#fff; border-radius:50%; font-size:9pt; margin-right:8px; float:left;}
+  .qa .a .body{overflow:hidden;}
+  table{border-collapse:collapse; width:100%; margin:8px 0; font-size:9.3pt; page-break-inside:avoid;}
+  th,td{border:1px solid var(--line); padding:5px 8px; text-align:left; vertical-align:top;}
+  th{background:var(--bg-soft); font-weight:700;}
+  .eq{background:#fbfdff; border:1px solid var(--line); border-radius:7px; padding:10px 14px; margin:8px 0;
+    font-family:"Cambria Math","Cambria",Georgia,serif; font-size:10.5pt; page-break-inside:avoid;}
+  .eq .lbl{float:right; color:var(--muted); font-family:inherit; font-style:italic;}
+  ul,ol{margin:6px 0 6px 0; padding-left:20px;} li{margin:3px 0;}
+  .flow{font-family:"Cascadia Code",Consolas,monospace; font-size:8.6pt; background:var(--bg-soft);
+    border:1px dashed var(--line); border-radius:8px; padding:12px 14px; white-space:pre; overflow:auto;
+    page-break-inside:avoid; line-height:1.35;}
+  .pill{display:inline-block; background:#eaf0f7; border:1px solid var(--line); border-radius:20px;
+    padding:2px 10px; font-size:9pt; margin:2px 3px 2px 0;}
+  .hd{display:flex; justify-content:space-between; align-items:flex-end; border-bottom:3px solid var(--ink);
+    padding-bottom:8px; margin-bottom:4px;}
+  .hd .meta{text-align:right; color:var(--muted); font-size:9pt;}
+  .toc{columns:2; column-gap:26px; font-size:10pt;}
+  .toc a{color:var(--ink); text-decoration:none;}
+  .toc .num{color:var(--accent); font-weight:700;}
+  .foot{position:running(footer);}
+  .kbd{font-family:Consolas,monospace; background:#11202e; color:#cfe3ff; padding:1px 6px; border-radius:4px; font-size:9pt;}
+  .twocol{column-count:2; column-gap:20px;}
+  .nb{color:var(--warn); font-weight:600;}
+</style>
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<section class="page">
+  <div class="hd">
+    <div><span class="tag">Internal • Engineering</span> <span class="tag grey">v1 — June 2026</span></div>
+    <div class="meta">PowerPy thermal &amp; electrical analysis framework<br>Presentation script + technical notes</div>
+  </div>
+  <h1>PowerPy</h1>
+  <h1 style="font-size:18pt;color:var(--accent);margin-top:2px;">A physics-first framework for solar-array<br>power &amp; thermal analysis</h1>
+  <p class="lede">This document is what you take into the room. The left margin tells you <b style="color:var(--accent)">what to say</b>;
+  the green notes tell you <b style="color:var(--accent2)">why a design choice was made</b>; the code blocks are the exact
+  lines you can point at. The last two pages are a rehearsed <b>Q&amp;A</b> so nothing catches you off guard.</p>
+
+  <h2 style="border:none;color:var(--ink);">What PowerPy does, in one breath</h2>
+  <p>It takes a single Excel workbook (<code>params.xlsx</code>) plus a couple of JSON catalogues describing a solar
+  cell and a panel substrate, and produces an <b>auditable engineering report</b> answering two coupled questions:</p>
+  <div class="grid2">
+    <div class="card soft"><h4 style="margin-top:0;">Electrical</h4>
+      How much power does the array deliver — at beginning of life and after years of radiation damage,
+      across every mission phase and bus voltage? Built bottom-up: cell → string → section → panel → array.</div>
+    <div class="card soft"><h4 style="margin-top:0;">Thermal</h4>
+      How hot does each cell get, and what happens when one fails? A 2-node radiative balance per tile,
+      with optional in-plane heat spreading, plus worst-case and Monte-Carlo failure studies.</div>
+  </div>
+
+  <div class="why"><b>The one-sentence thesis to open with.</b>
+  &ldquo;PowerPy replaces a pile of ad-hoc spreadsheets and one-off scripts with a single typed pipeline:
+  one source of truth in, validated physics in the middle, a reproducible PDF out — and every number on the
+  page can be traced back to a line of code or a cell in the workbook.&rdquo;</div>
+
+  <h2 style="border:none;color:var(--ink);">Contents</h2>
+  <div class="toc">
+    <p><span class="num">1.</span> The 90-second pitch</p>
+    <p><span class="num">2.</span> Architecture &amp; data flow</p>
+    <p><span class="num">3.</span> Single source of truth: <code>params.xlsx</code> → typed schemas</p>
+    <p><span class="num">4.</span> The electrical model (single-diode + curve algebra)</p>
+    <p><span class="num">5.</span> Radiation &amp; temperature: how a cell ages</p>
+    <p><span class="num">6.</span> The thermal solver (the heart of the framework)</p>
+    <p><span class="num">7.</span> Coupling electrical → thermal</p>
+    <p><span class="num">8.</span> The layout/palette idea &amp; the recent cell-reference change</p>
+    <p><span class="num">9.</span> Failure studies: worst-case &amp; Monte-Carlo</p>
+    <p><span class="num">10.</span> Report generation: HTML heat-map &amp; LaTeX PDF</p>
+    <p><span class="num">11.</span> Why it&rsquo;s trustworthy: the 65.26&nbsp;°C oracle &amp; tests</p>
+    <p><span class="num">12.</span> Anticipated questions &amp; answers</p>
+  </div>
+</section>
+
+<!-- ============================ 1. PITCH ============================ -->
+<section class="page">
+  <h2 id="s1">1 · The 90-second pitch</h2>
+  <div class="say"><b>Say this first</b>
+  &ldquo;A solar array on a spacecraft has to meet a power requirement not on day one, but after 15 years of
+  radiation in orbit, in the worst thermal case, even with a failed cell. Proving that used to mean stitching
+  together spreadsheets and a legacy script. PowerPy does the whole chain in one tool — and it&rsquo;s built so
+  every step is independently testable and every output is reproducible from version-controlled inputs.&rdquo;</div>
+
+  <h3>The three claims worth defending</h3>
+  <table>
+    <tr><th style="width:26%">Claim</th><th>What backs it</th></tr>
+    <tr><td><b>One source of truth</b></td>
+        <td>Every input lives once in <code>params.xlsx</code> or a referenced JSON. The workbook itself is
+        regenerated from <code>build_params.py</code>, so it diffs cleanly in git — no hidden cells, no copy-paste drift.</td></tr>
+    <tr><td><b>Physics you can read</b></td>
+        <td>The solvers are a few hundred lines of NumPy. The single-diode fit and the 2-node thermal balance
+        are written exactly as the equations — no black box.</td></tr>
+    <tr><td><b>Reproducible &amp; validated</b></td>
+        <td>A single sunlit cell converges to <b>65.26&nbsp;°C</b>, a hand-worked result that is pinned by a test.
+        Any change to the solver that breaks that number fails CI.</td></tr>
+  </table>
+
+  <h3>The shape of the pipeline (memorise this line)</h3>
+  <div class="flow">params.xlsx + cell.json + substrate.json
+        │
+        ▼   load + validate                (loader/)
+   ReportMetadata        ── one frozen, typed object the rest of the code trusts 100%
+        │
+        ▼   assemble the array tree        (simulation/)
+   cell → string → section → panel → array
+        │
+        ├──▶ electrical solve   I-V curves, max-power point, per-cell power   (combine.py, cell_level.py)
+        │
+        ├──▶ thermal solve      T_front / T_rear per tile, ± heat spreading   (solve/thermal.py)
+        │
+        ├──▶ failure studies    worst-case + Monte-Carlo hot-spots            (analysis/)
+        │
+        ▼   render
+   HTML heat-map  +  LaTeX → PDF report</div>
+
+  <div class="why"><b>Why a pipeline and not one big script?</b>
+  Each box is a package that imports nothing it doesn&rsquo;t need and can be unit-tested alone. The thermal solver
+  doesn&rsquo;t know what Excel is; the loader doesn&rsquo;t know what radiation is. That separation is what lets us say
+  &ldquo;this number is correct&rdquo; about any single stage.</div>
+</section>
+
+<!-- ============================ 2. ARCHITECTURE ============================ -->
+<section class="page">
+  <h2 id="s2">2 · Architecture &amp; data flow</h2>
+  <p>Eight packages, each with one job. Point at this table when asked &ldquo;how is the code organised?&rdquo;</p>
+  <table>
+    <tr><th style="width:20%">Package</th><th>Responsibility</th></tr>
+    <tr><td><code>config/</code></td><td>Physical descriptions: the <b>substrate</b> (optics + conduction) and the <b>panel layout</b> (grid + palette).</td></tr>
+    <tr><td><code>schemas/</code></td><td>Immutable, validated dataclasses — the typed vocabulary (<code>ReportMetadata</code>, <code>CellElectrical</code>, <code>CircuitLayout</code>…). The single source of truth in memory.</td></tr>
+    <tr><td><code>loader/</code></td><td>The Excel → schema boundary. Each sheet has one loader; bad data fails <i>here</i>, loudly, not deep in a solve.</td></tr>
+    <tr><td><code>simulation/</code></td><td>Builds the array tree, resolves the per-phase environment, runs the electrical evaluation.</td></tr>
+    <tr><td><code>solve/</code></td><td>The thermal solver (2-node, independent or laterally coupled) and the electro-thermal coupling.</td></tr>
+    <tr><td><code>analysis/</code></td><td>Engineering studies: equilibrium temperatures, worst-case search, Monte-Carlo failure sampling.</td></tr>
+    <tr><td><code>render/</code></td><td>Jinja → LaTeX → PDF; matplotlib figures.</td></tr>
+    <tr><td><code>reporting/</code></td><td>The standalone thermal HTML heat-map + JSON (the <code>powerpy run</code> path).</td></tr>
+  </table>
+
+  <h3>The data model that ties it together</h3>
+  <p>Everything downstream consumes one object — <code>ReportMetadata</code> — composed by seven loaders. This is the
+  &ldquo;trust boundary&rdquo;: once it is built, no further validation is needed.</p>
+<pre><span class="c"># loader/report.py — the whole input side, in one function</span>
+<span class="k">def</span> load_report_data(params_file, data_dir) -> ReportMetadata:
+    <span class="k">return</span> ReportMetadata(
+        document         = load_document_metadata(params_file, data_dir),
+        cell             = load_cell_parameters(params_file, data_dir),   <span class="c"># + referenced JSON</span>
+        mission          = load_mission_parameters(params_file),
+        array_layout     = load_array_layout(params_file),
+        losses           = load_losses(params_file),
+        radiation_fluxes = load_radiation_fluxes(params_file),
+        structure        = load_report_structure(params_file),
+    )</pre>
+
+  <div class="why"><b>Why frozen dataclasses?</b>
+  Inputs never mutate mid-run. If <code>ReportMetadata</code> is immutable, a bug can&rsquo;t silently change a cell
+  parameter halfway through a sweep. Every derived quantity is a <i>pure function</i> of these inputs — which is
+  exactly what makes results reproducible and the Monte-Carlo seed-stable.</div>
+
+  <div class="say"><b>If asked &ldquo;why rebuild Excel from a Python script?&rdquo;</b>
+  &ldquo;Because a binary <code>.xlsx</code> is invisible to git. <code>build_params.py</code> defines every sheet, row
+  and unit in code, so a parameter change shows up as a readable diff and can be reviewed like any other code.&rdquo;</div>
+</section>
+
+<!-- ============================ 3. SOURCE OF TRUTH ============================ -->
+<section class="page">
+  <h2 id="s3">3 · Single source of truth: the workbook → typed schemas</h2>
+  <p>The workbook holds <b>mission &amp; design inputs</b>; the JSON catalogues hold <b>reusable physics</b>
+  (a cell type, a substrate). The split matters: the same cell JSON is shared by many missions.</p>
+
+  <h3>Two sheet shapes, one parser each</h3>
+  <table>
+    <tr><th>Shape</th><th>Used for</th><th>Example sheets</th></tr>
+    <tr><td><b>Key–value</b></td><td>One value per parameter</td><td><code>document</code>, <code>cell_params</code>, <code>requirement</code></td></tr>
+    <tr><td><b>Long-format</b></td><td>A value <i>per phase / per launch config / per level</i></td><td><code>mission_param</code>, <code>losses</code>, <code>radiation_fluxes</code>, <code>sections</code></td></tr>
+  </table>
+
+  <h4>What the cell catalogue carries</h4>
+  <p>The cell JSON (e.g. <code>data/cells/3G30LARS_GEO.json</code>) is loaded and mapped into a typed
+  <code>CellElectrical</code>. Note the loader accepts both modern and legacy key names — so old project files still load.</p>
+<pre><span class="c"># loader/cell.py — tolerant mapping (modern OR legacy keys)</span>
+<span class="k">def</span> pick(*keys, default=None):
+    <span class="k">for</span> k <span class="k">in</span> keys:
+        <span class="k">if</span> k <span class="k">in</span> data: <span class="k">return</span> data[k]
+    <span class="k">return</span> default
+
+<span class="k">return</span> CellElectrical(
+    isc_bol = float(pick(<span class="s">"isc_bol"</span>, <span class="s">"isc"</span>)),     voc_bol = float(pick(<span class="s">"voc_bol"</span>, <span class="s">"voc"</span>)),
+    imp_bol = float(pick(<span class="s">"imp_bol"</span>, <span class="s">"imp"</span>)),     vmp_bol = float(pick(<span class="s">"vmp_bol"</span>, <span class="s">"vmp"</span>)),
+    temp_coeff_isc = float(pick(<span class="s">"temp_coeff_isc"</span>, default=0.0)),
+    temp_coeff_voc = float(pick(<span class="s">"temp_coeff_voc"</span>, default=0.0)),
+    degradation = data.get(<span class="s">"degradation"</span>, {}),  regressors = regressors,
+    alpha   = float(pick(<span class="s">"alpha"</span>,  default=0.0)),   <span class="c"># the cell's solar absorptivity</span>
+    epsilon = float(pick(<span class="s">"epsilon"</span>, default=0.0)),
+    area_m2 = float(pick(<span class="s">"area_m2"</span>, <span class="s">"area"</span>, default=0.0)),
+)</pre>
+
+  <div class="why"><b>Why <code>pick()</code> instead of a strict schema?</b>
+  The real legacy project files use <code>isc</code>/<code>voc</code>; our newer convention uses
+  <code>isc_bol</code>/<code>voc_bol</code>. One tolerant reader means we never have to hand-migrate historical
+  datasets to demo or validate against them — they Just Work, and the typed object downstream is identical either way.</div>
+
+  <h4>What goes in the workbook (long-format example: radiation)</h4>
+  <p>Radiation dose is given <i>per launch config × per phase × per parameter</i> (current axis vs voltage axis),
+  because a GEO transfer orbit and the operational orbit accumulate very different fluences.</p>
+  <table>
+    <tr><th>launch_config</th><th>phase</th><th>param</th><th>value [e/cm²]</th></tr>
+    <tr><td>dual</td><td>End_of_Life</td><td>isc</td><td>1.0 × 10¹⁵</td></tr>
+    <tr><td>dual</td><td>End_of_Life</td><td>voc</td><td>5.0 × 10¹⁴</td></tr>
+  </table>
+  <div class="say"><b>Point to make</b>
+  &ldquo;The current axis and the voltage axis degrade <i>differently</i> under radiation, so we track two separate
+  doses. That&rsquo;s why you&rsquo;ll see <code>dose_i</code> and <code>dose_v</code> threaded through the whole electrical model.&rdquo;</div>
+</section>
+
+<!-- ============================ 4. ELECTRICAL MODEL ============================ -->
+<section class="page">
+  <h2 id="s4">4 · The electrical model — single-diode + curve algebra</h2>
+  <p>A solar cell is modelled with the classic <b>single-diode</b> equivalent circuit. The terminal relation is implicit
+  in the current because of the series-resistance drop <code>I·Rs</code>:</p>
+  <div class="eq">I = I<sub>ph</sub> − I<sub>0</sub>·( e<sup>(V + I·R<sub>s</sub>)/V<sub>t</sub></sup> − 1 ) − (V + I·R<sub>s</sub>) / R<sub>sh</sub>
+    <span class="lbl">single-diode terminal equation</span></div>
+
+  <h4>Why we don&rsquo;t need SPICE: a closed-form fit from 4 datasheet points</h4>
+  <p>Instead of fitting numerically, we recover the five parameters analytically from the four points every datasheet
+  gives us — <code>Isc, Imp, Vmp, Voc</code> — taking the shunt branch as effectively open (R-series assumption,
+  <code>Rsh ≈ 10⁹ Ω</code>). This is the legacy <code>RSeriesModel</code> algebra, re-derived:</p>
+<pre><span class="c"># simulation/cell_level.py — fit_rseries()</span>
+vt = (vmp * (isc - imp)) / imp
+i0 = isc / (np.exp(voc / vt) - 1.0)
+rs = (vt / imp) * np.log((isc - imp) / i0) - (vmp / imp)
+<span class="k">return</span> DiodeParams(iph=isc, i0=i0, vt=vt, rs=max(rs, 0.0), rsh=1e9, voc=voc)</pre>
+  <div class="eq">V<sub>t</sub> = V<sub>mp</sub>(I<sub>sc</sub>−I<sub>mp</sub>)/I<sub>mp</sub> &nbsp;·&nbsp;
+     I<sub>0</sub> = I<sub>sc</sub> / (e<sup>V<sub>oc</sub>/V<sub>t</sub></sup> − 1) &nbsp;·&nbsp;
+     R<sub>s</sub> = (V<sub>t</sub>/I<sub>mp</sub>)·ln((I<sub>sc</sub>−I<sub>mp</sub>)/I<sub>0</sub>) − V<sub>mp</sub>/I<sub>mp</sub></div>
+
+  <div class="why"><b>Why closed-form, not a numerical fit or ngspice?</b>
+  Three reasons: (1) it&rsquo;s <i>deterministic</i> — no solver tolerance to argue about; (2) it needs no external
+  binary, so the tool runs in a locked-down environment; (3) it exactly reproduces the legacy method, so results are
+  directly comparable to the spreadsheets it replaces. An ngspice path still exists and transparently falls back to this.</div>
+
+  <h4>Drawing the curve: one vectorised Newton loop</h4>
+  <p>To get the full I–V curve we sweep V and solve the implicit equation for I at every voltage at once — Newton on a
+  whole array, converging in a handful of steps:</p>
+<pre><span class="c"># simulation/cell_level.py — single_diode_iv()</span>
+V = np.linspace(0.0, p.voc, n);   I = np.full_like(V, p.iph)
+<span class="k">for</span> _ <span class="k">in</span> range(80):
+    vd = V + I * p.rs
+    e  = np.exp(np.clip(vd / p.vt, -700.0, 700.0))     <span class="c"># clip => no overflow</span>
+    f  = p.iph - p.i0 * (e - 1.0) - vd / p.rsh - I      <span class="c"># residual</span>
+    df = -p.i0 * e * (p.rs / p.vt) - p.rs / p.rsh - 1.0 <span class="c"># d f / d I</span>
+    I  = I - f / df                                     <span class="c"># Newton step</span>
+    <span class="k">if</span> np.max(np.abs(f / df)) &lt; 1e-12: <span class="k">break</span></pre>
+
+  <h4>From one cell to the whole array: two rules, applied recursively</h4>
+  <p>Every join in the tree is either series or parallel. The entire array I–V is these two functions composed:</p>
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0;">Series (cells in a string)</h4>
+      <small>Same current; <b>voltages add</b>. Limited by the smallest I<sub>sc</sub>.</small>
+<pre style="font-size:8.2pt;">isc_min = min(isc of each child)
+i_grid  = linspace(0, isc_min, n)
+v_total = Σ  interp V(I) of each child
+<span class="c"># a weak cell caps the string current</span></pre></div>
+    <div class="card"><h4 style="margin-top:0;">Parallel (strings, sections, panels)</h4>
+      <small>Same voltage; <b>currents add</b>. Limited by the smallest V<sub>oc</sub>.</small>
+<pre style="font-size:8.2pt;">voc_min = min(voc of each child)
+v_grid  = linspace(0, voc_min, n)
+i_total = Σ  interp I(V) of each child</pre></div>
+  </div>
+  <div class="say"><b>The clean line to deliver</b>
+  &ldquo;The array model is just these two rules — series adds voltage, parallel adds current — applied at four levels.
+  A string is series cells, a section is parallel strings, a panel is parallel sections, the array is parallel panels.
+  No special cases.&rdquo;</div>
+</section>
+
+<!-- ============================ 5. AGEING ============================ -->
+<section class="page">
+  <h2 id="s5">5 · Radiation &amp; temperature — how a cell ages</h2>
+  <p>The four operating points aren&rsquo;t fixed: they shift with <b>temperature</b> and degrade with accumulated
+  <b>radiation dose</b>. The model applies three multiplicative gains to the begin-of-life values:</p>
+<pre><span class="c"># simulation/cell_level.py — operating_points()</span>
+dT = env.temperature_c - env.reference_temperature_c
+f_temp_i = 1.0 + (e.temp_coeff_isc / 100.0) * dT     <span class="c"># temperature, current axis</span>
+f_temp_v = 1.0 + (e.temp_coeff_voc / 100.0) * dT     <span class="c"># temperature, voltage axis</span>
+f_rad_i  = _remaining_factor(e.degradation[<span class="s">"isc"</span>], env.dose_i)  <span class="c"># radiation, current</span>
+f_rad_v  = _remaining_factor(e.degradation[<span class="s">"voc"</span>], env.dose_v)  <span class="c"># radiation, voltage</span>
+
+gain_i = f_temp_i * f_rad_i * env.current_loss        <span class="c"># × harness/optical losses</span>
+gain_v = f_temp_v * f_rad_v * env.voltage_loss
+
+isc = e.isc_bol * gain_i;   imp = e.imp_bol * gain_i
+voc = e.voc_bol * gain_v;   vmp = e.vmp_bol * gain_v</pre>
+  <div class="eq">I<sub>sc</sub> = I<sub>sc</sub><sup>BOL</sup> · (1 + α<sub>I</sub>·ΔT) · RF<sub>I</sub>(Φ<sub>I</sub>) · L<sub>I</sub>
+     &nbsp;&nbsp;&nbsp; V<sub>oc</sub> = V<sub>oc</sub><sup>BOL</sup> · (1 + α<sub>V</sub>·ΔT) · RF<sub>V</sub>(Φ<sub>V</sub>) · L<sub>V</sub>
+     <span class="lbl">BOL → operating point</span></div>
+
+  <h4>The remaining-factor curve: interpolate in log-fluence</h4>
+  <p>Radiation damage is logarithmic in fluence — each decade of dose costs a roughly constant fraction. So the
+  degradation table is interpolated in <code>log₁₀(fluence)</code>, not linearly:</p>
+<pre><span class="c"># _remaining_factor() — Φ in units of 1e14 e-/cm^2</span>
+fluence = dose_1e14 * 1e14
+<span class="k">if</span> not curve <span class="k">or</span> fluence &lt;= 0.0: <span class="k">return</span> 1.0      <span class="c"># begin-of-life = no damage</span>
+xs = np.log10([max(p[0], 1.0) <span class="k">for</span> p <span class="k">in</span> pts])    <span class="c"># log-fluence knots</span>
+ys = [p[1] <span class="k">for</span> p <span class="k">in</span> pts]                          <span class="c"># remaining factors</span>
+<span class="k">return</span> np.interp(np.log10(fluence), xs, ys)</pre>
+
+  <div class="why"><b>Why split dose into a current axis and a voltage axis?</b>
+  Displacement damage hits the photocurrent and the junction voltage by different amounts. Using one &ldquo;dose&rdquo;
+  for both would over- or under-predict end-of-life power. The cell JSON ships separate <code>r_isc</code>/<code>r_imp</code>
+  and <code>r_voc</code>/<code>r_vmp</code> curves precisely so we can honour that asymmetry.</div>
+
+  <div class="why"><b>Why <code>±ΔT</code> about a reference temperature?</b>
+  Datasheet points are quoted at a reference (here <code>t_ref = 28 °C</code>). The temperature coefficients are the
+  measured slopes about that point — so <code>(1 + α·ΔT)</code> is a first-order, physically grounded correction, not a guess.</div>
+
+  <div class="say"><b>The headline for this slide</b>
+  &ldquo;This is where &lsquo;end of life&rsquo; becomes a number. Feed in the EOL dose and the hot-case temperature, and the
+  same four points come out shrunk — that shrunken curve is what has to still meet the power requirement.&rdquo;</div>
+</section>
+
+<!-- ============================ 6. THERMAL SOLVER ============================ -->
+<section class="page">
+  <h2 id="s6">6 · The thermal solver — the heart of the framework</h2>
+  <p>Each tile is a <b>two-node</b> object: a front face (sees the sun and deep space) and a rear face (sees albedo,
+  planet IR, deep space), joined through the substrate by a conduction term. We solve the steady state where, at each
+  node, <span class="nb">power in = power out</span>.</p>
+  <div class="eq">
+    front:&nbsp; α<sub>F</sub>A·q<sub>sun</sub> − ε<sub>F</sub>Aσ(T<sub>F</sub>⁴ − T<sub>sp</sub>⁴) − P<sub>elec</sub> + C<sub>cond</sub>(T<sub>R</sub> − T<sub>F</sub>) = 0<br>
+    rear:&nbsp;&nbsp; q<sub>R</sub> − ε<sub>R</sub>Aσ(T<sub>R</sub>⁴ − T<sub>sp</sub>⁴) − C<sub>cond</sub>(T<sub>R</sub> − T<sub>F</sub>) − g<sub>lat</sub>·Σ(T<sub>R</sub> − T<sub>neighbour</sub>) = 0
+    <span class="lbl">2-node steady-state balance</span></div>
+  <p>where <code>C_cond = c_cond·A</code> (substrate through-thickness conduction) and the radiative loss is the
+  Stefan–Boltzmann <code>εAσT⁴</code> term. <code>P_elec</code> is the electrical power leaving the front node.</p>
+
+  <h4>One entry point, one switch: <code>g_lat</code></h4>
+  <p>This is the single most important design decision in the framework, so it&rsquo;s worth dwelling on.</p>
+  <table>
+    <tr><th style="width:24%"><code>g_lat = 0</code></th><th><code>g_lat &gt; 0</code></th></tr>
+    <tr><td>Tiles are thermally independent. Each tile&rsquo;s 2×2 Jacobian is inverted <b>in closed form</b>, vectorised over the whole array — the fast path.</td>
+        <td>Neighbouring tiles share heat in-plane. We assemble one sparse <b>(2N×2N)</b> Jacobian and take Newton steps.</td></tr>
+  </table>
+  <div class="why"><b>Why build it as one solver with a switch, not two?</b>
+  Because <code>g_lat = 0</code> is a <i>strict special case</i> of the coupled model — turning lateral conduction on
+  only <i>adds</i> heat-spreading terms. So the coupled path is a superset: it can always reproduce the independent
+  answer exactly. That gives us a free, built-in regression check, and it means we never maintain two physics models
+  that could drift apart.</div>
+
+  <h4>The fast path: closed-form 2×2, vectorised (no Python loop over tiles)</h4>
+<pre><span class="c"># solve/thermal.py — the g_lat == 0 Newton update, all tiles at once</span>
+f1 = qF - eF*A*SIGMA*(T1**4 - tsp4) - Pe + CA*(T2 - T1)   <span class="c"># front residual</span>
+f2 = qR - eR*A*SIGMA*(T2**4 - tsp4)      - CA*(T2 - T1)   <span class="c"># rear  residual</span>
+
+a = -4.0*eF*A*SIGMA*T1**3 - CA;   b = CA          <span class="c"># 2x2 Jacobian per tile</span>
+c = CA;   d = -4.0*eR*A*SIGMA*T2**3 - CA
+det = a*d - b*c
+dT1 = -(d*f1 - b*f2) / det                          <span class="c"># closed-form inverse</span>
+dT2 = -(-c*f1 + a*f2) / det</pre>
+
+  <h4>The coupled path: precompute the constant structure once</h4>
+  <p>Across Newton iterations only the radiative diagonal (<code>−4εAσT³</code>) changes. The conduction and the lateral
+  coupling (a graph Laplacian of the tile-adjacency) are <b>fixed</b> — so we build them once and only add the changing
+  diagonal each step. The in-plane heat flow is then a single sparse mat-vec, no per-neighbour loop:</p>
+<pre><span class="c"># built ONCE: Laplacian L of the 4-neighbour grid + the constant Jacobian block</span>
+Lap = diags(deg) - adj
+Jconst = bmat([[-CAd - g_lat*Lap,  CAd],
+               [ CAd, -CAd - g_lat*Lap]])
+<span class="c"># each iteration: flux is one Laplacian matvec; J = Jconst + changing radiative diagonal</span>
+f1 -= g_lat * Lap.dot(T1);   J = Jconst + diags(rad);   dx = spsolve(J, -f)</pre>
+
+  <div class="say"><b>The sentence that lands this slide</b>
+  &ldquo;Turn the one knob <code>g_lat</code> from zero up, and you go from &lsquo;each cell alone&rsquo; to &lsquo;cells sharing heat
+  with their neighbours&rsquo; — same code, same equations, just more physics. A failed cell now warms the ones around it,
+  which is exactly the effect we need to catch.&rdquo;</div>
+</section>
+
+<!-- ============================ 7. COUPLING ============================ -->
+<section class="page">
+  <h2 id="s7">7 · Coupling electrical → thermal</h2>
+  <p>The two solvers meet at one term: <code>P_elec</code>, the electrical power leaving each cell. Its sign carries
+  the entire physical story.</p>
+  <div class="grid2">
+    <div class="card soft"><h4 style="margin-top:0;color:var(--accent2);">P<sub>elec</sub> &gt; 0 — a healthy cell</h4>
+      Energy leaves the tile as electricity. That power does <b>not</b> become heat → the cell runs <b>cooler</b>.
+      It equals the extracted max-power point, <code>P = I<sub>mp</sub>·V<sub>mp</sub></code>.</div>
+    <div class="card soft"><h4 style="margin-top:0;color:var(--warn);">P<sub>elec</sub> &lt; 0 — a failed cell</h4>
+      A reverse-biased / failed-open cell <b>dissipates</b> the string current pushed through it. That energy stays as
+      heat → a <b>hot spot</b>. Modelled as a negative <code>P_elec</code> on that tile.</div>
+  </div>
+
+<pre><span class="c"># analysis/thermal_report.py — power extracted by one healthy cell</span>
+<span class="k">def</span> _p_elec_per_cell(md, env) -> float:
+    cell = CellModel(md.cell);  cell.apply(env)
+    isc, imp, vmp, voc = cell.operating_points()
+    <span class="k">return</span> float(imp * vmp)          <span class="c"># the MPP cooling term [W]</span></pre>
+
+<pre><span class="c"># the solver zeroes power on tiles that can't generate (bare / diode)</span>
+Pe = np.where(props[<span class="s">"generates_power"</span>], Pe, 0.0)</pre>
+
+  <div class="why"><b>Why is a hot spot a <i>negative</i> number and not a separate &lsquo;failure mode&rsquo; flag?</b>
+  Because to the heat balance there is no difference between &ldquo;a cell that stopped cooling&rdquo; and &ldquo;a cell that&rsquo;s
+  actively dumping watts&rdquo; — both are just a power term at a node. Encoding failure as a value of <code>P_elec</code>
+  means the <i>same</i> solver handles nominal and failed cases; the failure studies in §9 just vary that one array.</div>
+
+  <h4>Bare regions: first-class citizens</h4>
+  <p>A tile with no cell still absorbs sunlight but produces no power — so all of its absorbed sun becomes heat. That&rsquo;s
+  why a cut-out or keep-out region runs <i>hotter</i> than the cells around it and, with <code>g_lat &gt; 0</code>, warms
+  its neighbours. Capturing that was a core requirement, and it&rsquo;s why the layout treats &ldquo;bare&rdquo; as a real tile type,
+  not an absence.</p>
+
+  <div class="say"><b>Worth saying out loud</b>
+  &ldquo;The coupling is deliberately one term. We don&rsquo;t run a giant co-simulation — we compute the electrical operating
+  point, hand its power to the thermal model as a per-tile number, and that&rsquo;s the interface. It&rsquo;s simple enough to
+  audit and rich enough to show hot spots.&rdquo;</div>
+</section>
+
+<!-- ============================ 8. LAYOUT / PALETTE ============================ -->
+<section class="page">
+  <h2 id="s8">8 · The layout/palette idea &amp; the recent cell-reference change</h2>
+  <p>A panel is described as a 2-D <b>grid of single-token tiles</b>, each key resolved through a <b>palette</b>. It reads
+  like ASCII art, diffs cleanly, and — crucially — the grid <i>is</i> the thermal mesh: tile (r,c) borders (r±1,c) and
+  (r,c±1), which is exactly the 4-neighbour adjacency the lateral solver needs.</p>
+<pre>{
+  <span class="s">"pitch_mm"</span>: 40.0,
+  <span class="s">"palette"</span>: {
+    <span class="s">"A"</span>: {<span class="s">"is_cell"</span>: true, <span class="s">"cell_type"</span>: <span class="s">"3G30LARS_GEO"</span>, <span class="s">"string"</span>: <span class="s">"S1"</span>},
+    <span class="s">"."</span>: {<span class="s">"is_cell"</span>: false}                       <span class="c">// bare keep-out</span>
+  },
+  <span class="s">"layout"</span>: [<span class="s">"A A . . A"</span>,
+             <span class="s">"A A A A A"</span>]
+}</pre>
+
+  <h4>The change made this session <span class="tag green">new</span></h4>
+  <p>Previously each cell palette entry <i>duplicated</i> the cell&rsquo;s optical numbers inline. Now a cell tile
+  <b>references</b> its dataset by <code>cell_type</code>, and the loader pulls the cell&rsquo;s absorptivity straight from
+  <code>data/cells/&lt;cell_type&gt;.json</code>. The rear faces and bare-tile optics come from the <b>substrate</b>:</p>
+<pre><span class="c"># config/layout.py — from_dict(d, substrate=None)</span>
+<span class="k">if</span> is_cell <span class="k">and</span> cell_type <span class="k">and</span> <span class="s">"alpha_front"</span> not <span class="k">in</span> clean:
+    clean[<span class="s">"alpha_front"</span>] = _cell_front_alpha(cell_type)   <span class="c"># the cell's alpha, from its file</span>
+<span class="k">if</span> substrate <span class="k">is</span> not None:                              <span class="c"># rear/bare optics belong to the board</span>
+    <span class="k">for</span> fld <span class="k">in</span> (<span class="s">"alpha_rear"</span>, <span class="s">"epsilon_front"</span>, <span class="s">"epsilon_rear"</span>):
+        clean.setdefault(fld, getattr(substrate, fld))
+    <span class="k">if</span> not is_cell:
+        clean.setdefault(<span class="s">"alpha_front"</span>, substrate.alpha_front)</pre>
+
+  <div class="why"><b>Why this matters (and why we did it now).</b>
+  It is the &ldquo;single source of truth&rdquo; principle applied to optics. A cell&rsquo;s absorptivity is a property of the
+  <i>cell</i>; the front/rear emissivity of the board is a property of the <i>substrate</i>. Before, the same number was
+  copy-pasted into every layout — change the cell and you had to hand-edit many files, with no guarantee they agreed.
+  Now the layout says only <i>what sits where</i>; the physics is looked up. Explicit inline values still win, so every
+  old layout keeps working unchanged.</div>
+
+  <p>From the grid, the layout hands the solver exactly three things — flat per-tile property arrays, the neighbour list,
+  and which tiles generate power:</p>
+<pre>layout.prop_arrays()  <span class="c"># {alpha_front, alpha_rear, epsilon_front, epsilon_rear, is_cell, generates_power}</span>
+layout.neighbours()   <span class="c"># [(0,1),(0,2),(1,3), ...]  the 4-neighbour adjacency = the heat mesh</span></pre>
+  <div class="say"><b>If he pushes on the design</b>
+  &ldquo;The layout file is intentionally dumb — it&rsquo;s placement plus a reference. All the physics lives in the cell and
+  substrate catalogues, which are shared and version-controlled. That&rsquo;s the whole point of the refactor.&rdquo;</div>
+</section>
+
+<!-- ============================ 9. FAILURE STUDIES ============================ -->
+<section class="page">
+  <h2 id="s9">9 · Failure studies — worst-case &amp; Monte-Carlo</h2>
+  <p>Once a failure is &ldquo;just a per-tile power array&rdquo;, exploring failures is cheap. Two complementary tools:</p>
+
+  <h4>Worst-case search — a greedy hot-spot hunter</h4>
+  <p>Start with no failures; at each step, try failing each remaining cell, keep whichever drives the highest peak
+  temperature, repeat up to <code>max_failures</code>. This deliberately finds <b>reinforcing clusters</b> — adjacent
+  failures that, through lateral conduction, heat each other — which random sampling almost always misses.</p>
+
+  <h4>Auto-stopped Monte-Carlo — sample until the answer is precise enough</h4>
+  <p>Draw random failure patterns at a per-cell probability, solve each, and keep going until the <b>standard error</b>
+  of the mean peak temperature drops below a target — then stop. No arbitrary &ldquo;run 10,000 and hope.&rdquo;</p>
+<pre><span class="c"># analysis/study.py — the two public entry points (signatures)</span>
+worst_case_search(layout, max_failures=5, t_limit_c=150.0,
+                  healthy_w=1.1, reverse_w=-9.6)        <span class="c"># greedy cluster</span>
+auto_monte_carlo(layout, p_fail=0.05, target_se=2.0,    <span class="c"># stop at SE <= 2 degC</span>
+                 batch=50, max_runs=2000, seed=0)</pre>
+
+  <div class="why"><b>Why two methods instead of one?</b>
+  They answer different questions. Worst-case search asks &ldquo;what is the <i>most damaging</i> thing that can happen?&rdquo;
+  — a deterministic bound for qualification. Monte-Carlo asks &ldquo;what does a <i>realistic random</i> set of failures do,
+  and how confident am I?&rdquo; — a statistical expectation with an error bar. An engineer wants both: the bound and the
+  distribution.</div>
+
+  <div class="why"><b>Why auto-stop on standard error?</b>
+  It makes the run self-justifying: you don&rsquo;t pick the sample count, the <i>precision target</i> does. Report a mean
+  peak of 168&nbsp;°C with a ±2&nbsp;°C standard error and the number defends itself; a fixed 500-run number doesn&rsquo;t.</div>
+
+  <p>The studies parallelise across threads — the sparse solves release the GIL — and the Monte-Carlo is seed-stable,
+  so a reported figure can be regenerated bit-for-bit.</p>
+  <div class="say"><b>Demo line if you run it live</b>
+  &ldquo;<span class="kbd">powerpy worst example_panel.json --max-failures 3</span> — watch it walk up the temperature, one
+  cell at a time, to the worst three-cell cluster on the panel.&rdquo;</div>
+</section>
+
+<!-- ============================ 10. REPORT GEN ============================ -->
+<section class="page">
+  <h2 id="s10">10 · Report generation — two outputs, two purposes</h2>
+  <div class="grid2">
+    <div class="card"><h4 style="margin-top:0;">A · Thermal HTML heat-map <span class="tag grey">powerpy run</span></h4>
+      A fast, dependency-free panel picture + a JSON &ldquo;source of truth.&rdquo; Each tile is coloured blue→amber→red by
+      temperature; over-limit tiles are flagged. Pure Python string-building, no LaTeX — ideal for a quick look.</div>
+    <div class="card"><h4 style="margin-top:0;">B · Full electrical PDF <span class="tag grey">powerpy report</span></h4>
+      The formal deliverable: Jinja templates → LaTeX → <code>pdflatex</code>, with matplotlib figures (I–V curves,
+      loss budget, layout). The workbook&rsquo;s <code>structure</code> sheet decides which sections appear and for which
+      audience (customer vs engineer).</td></div>
+  </div>
+
+  <h4>The electrical report pipeline (end to end)</h4>
+  <div class="flow">build_electrical_report(params, out_pdf)
+   ├─ load_report_data(params)            → ReportMetadata
+   ├─ build the array  (sections OR free-form circuit JSON)
+   ├─ for each analysis case:
+   │      env = environment_for_phase(report, phase, launch_config)
+   │      res = run(array, env)           → Isc/Voc/Imp/Vmp/Pmp at every level
+   ├─ Report.from_results(...).render(workdir)   → report.tex + figures/*.png
+   └─ .compile_pdf(out_pdf)               → pdflatex ×2 (so the TOC resolves)</div>
+
+  <h4>Why Jinja with LaTeX-safe delimiters</h4>
+  <p>Default Jinja uses <code>{{ }}</code> — which collides with TeX&rsquo;s own braces. The environment is reconfigured to
+  use <code>&lt;&lt; &gt;&gt;</code> so templates stay valid LaTeX, with filters that escape special characters and format
+  numbers (NaN-safe):</p>
+<pre><span class="c"># render/templating.py</span>
+env = jinja2.Environment(
+    block_start_string=<span class="s">"&lt;&lt;%"</span>, block_end_string=<span class="s">"%&gt;&gt;"</span>,
+    variable_start_string=<span class="s">"&lt;&lt;"</span>, variable_end_string=<span class="s">"&gt;&gt;"</span>,
+    undefined=jinja2.StrictUndefined,          <span class="c"># a missing field fails loudly</span>
+)
+env.filters[<span class="s">"tex"</span>] = escape_tex       <span class="c"># \ &amp; % $ # _ { } ~ ^</span></pre>
+
+  <h4>The thermal heat-map colour rule</h4>
+<pre><span class="c"># reporting/report.py — temperature → RGB fill</span>
+x = clamp((t - tmin) / (tmax - tmin), 0, 1)        <span class="c"># normalise</span>
+r = 40 + 215*x;  g = 90 + 120*(1 - |2x-1|);  b = 200*(1-x) + 30</pre>
+
+  <div class="why"><b>Why two report paths and not one?</b>
+  Speed vs formality. During design you iterate dozens of times — the HTML map renders instantly and needs no TeX
+  toolchain. The PDF is the signed artefact you hand to a customer, so it goes through the full templated pipeline.
+  Same physics underneath; different packaging for different moments.</div>
+  <div class="say"><b>If pdflatex isn&rsquo;t installed on his machine</b>
+  &ldquo;The tool degrades gracefully — it still writes the complete <code>.tex</code> workspace and figures, it just
+  skips the final compile. Nothing is lost.&rdquo;</div>
+</section>
+
+<!-- ============================ 11. TRUST ============================ -->
+<section class="page">
+  <h2 id="s11">11 · Why it&rsquo;s trustworthy — the oracle &amp; the tests</h2>
+  <p>The single strongest thing you can say about correctness: there is a <b>hand-worked answer</b> the code must match,
+  and it&rsquo;s pinned by a test that runs on every change.</p>
+<pre><span class="c"># the 65.26 degC oracle — a sunlit cell, no albedo/IR, no extracted power</span>
+s = load_substrate(<span class="s">"msro_case2"</span>)
+r = solve_thermal_for_substrate(s, area=0.003, p_sun=1367.0,
+                                p_albedo=0.0, p_ir=0.0, p_elec=0.0)
+<span class="k">assert</span> abs(r.t_front_c[0] - 65.26) &lt; 0.05      <span class="c"># matches the manual balance</span></pre>
+
+  <div class="why"><b>Why one number carries so much weight.</b>
+  That single equilibrium temperature exercises the entire front/rear radiative balance, the conduction term, the
+  Stefan–Boltzmann law and the substrate optics at once. If any of those were wrong, the number would move. Because
+  <code>g_lat = 0</code> is a strict special case of the coupled solver, the <i>same</i> oracle also guards the lateral
+  path — switch it on with zero conductance and you must get 65.26 °C back.</div>
+
+  <h4>What the test suite covers</h4>
+  <table>
+    <tr><th>Test file</th><th>Guards</th></tr>
+    <tr><td><code>test_thermal_vectorized.py</code></td><td>The 65.26 °C oracle; substrate loading; the vectorised balance in isolation.</td></tr>
+    <tr><td><code>test_panel_thermal.py</code></td><td>Grid + palette parsing, adjacency, and that <code>g_lat=0</code> matches the independent oracle on a whole panel.</td></tr>
+    <tr><td><code>test_panel_study.py</code></td><td>Failure sweep, worst-case search, Monte-Carlo sampling.</td></tr>
+    <tr><td><code>test_electrical.py</code> / <code>test_circuit_layout.py</code></td><td>I–V curves, MPP, series/parallel combination, circuit topology parsing.</td></tr>
+    <tr><td><code>test_loader_validation.py</code> / <code>test_cli.py</code></td><td>Workbook → schema validation; the CLI commands end to end.</td></tr>
+  </table>
+  <p><b>Current status:</b> the full suite — <b>98 tests</b> — passes, including after this session&rsquo;s cell-reference refactor.</p>
+
+  <div class="say"><b>Closing line for the technical part</b>
+  &ldquo;Every layer is testable alone, and the whole thing is anchored to a number we can compute by hand. That&rsquo;s the
+  difference between &lsquo;the script gave 65 degrees&rsquo; and &lsquo;the model is correct, and here&rsquo;s the proof that stays
+  correct.&rsquo;&rdquo;</div>
+</section>
+
+<!-- ============================ 12. Q&A ============================ -->
+<section class="page">
+  <h2 id="s12">12 · Anticipated questions &amp; how to answer</h2>
+  <p class="lede" style="margin-top:0;">Ordered roughly by how likely they are. Each answer is short enough to say out loud, with the fact that backs it.</p>
+
+  <div class="qa"><div class="q">Why not just use SPICE / a commercial tool like a real circuit simulator?</div>
+    <div class="a"><div class="body">Three reasons. The closed-form single-diode fit is <b>deterministic</b> (no solver tolerance to defend),
+    it needs <b>no external binary</b> so it runs in a locked-down environment, and it <b>exactly reproduces the legacy
+    method</b> so results are directly comparable to the spreadsheets we&rsquo;re replacing. An ngspice path still exists for
+    cross-checks and falls back to analytic automatically.</div></div></div>
+
+  <div class="qa"><div class="q">How do I know the thermal numbers are right?</div>
+    <div class="a"><div class="body">A single sunlit cell converges to <b>65.26 °C</b>, which we computed by hand from the radiative
+    balance. That value is locked by a unit test, and because the coupled solver reduces to the independent one at
+    <code>g_lat = 0</code>, the same check guards both code paths.</div></div></div>
+
+  <div class="qa"><div class="q">What exactly does &ldquo;lateral conduction&rdquo; add, and how do you set <code>g_lat</code>?</div>
+    <div class="a"><div class="body">It lets neighbouring tiles exchange heat through the facesheet, so a hot cell warms its
+    neighbours and a peak gets smeared out. <code>g_lat</code> comes from geometry —
+    <code>g_lat = k·(edge·thickness)/pitch</code> — e.g. an aluminium facesheet ~0.045 W/K. Set it to zero and you
+    recover the conservative &ldquo;each cell alone&rdquo; case.</div></div></div>
+
+  <div class="qa"><div class="q">Why is a failed cell modelled as negative power instead of a proper fault model?</div>
+    <div class="a"><div class="body">To the heat balance, a failed cell is just a node that dissipates watts instead of
+    exporting them — so it&rsquo;s one term, <code>P_elec &lt; 0</code>. That keeps a <i>single</i> validated solver for nominal
+    and failed cases; the failure studies simply vary that per-tile array. The reverse-bias power itself comes from the
+    string current the healthy cells push through the failed one.</div></div></div>
+
+  <div class="qa"><div class="q">Where do the radiation degradation curves come from, and why log-fluence?</div>
+    <div class="a"><div class="body">They&rsquo;re the manufacturer&rsquo;s measured remaining-factor data shipped in the cell JSON
+    (separate curves for the current and voltage axes). Damage scales with the logarithm of fluence — each decade of dose
+    costs a roughly constant fraction — so we interpolate in <code>log₁₀(fluence)</code>, which is both physical and
+    stable across the huge dose range.</div></div></div>
+
+  <div class="qa"><div class="q">Why split everything into so many packages? Isn&rsquo;t that over-engineered?</div>
+    <div class="a"><div class="body">Each package has one job and imports only what it needs, so it can be tested alone and
+    a failure is localised. The thermal solver doesn&rsquo;t know Excel exists; the loader doesn&rsquo;t know radiation exists.
+    That isolation is precisely what lets us make per-stage correctness claims — and it keeps <code>import powerpy</code>
+    lightweight because heavy deps (scipy, pandas, LaTeX) load only when their layer runs.</div></div></div>
+
+  <div class="qa"><div class="q">What was the change you made today, and why?</div>
+    <div class="a"><div class="body">Layout files used to copy each cell&rsquo;s optical numbers inline. I made cell tiles
+    <b>reference</b> their dataset by <code>cell_type</code>, so the absorptivity is read from
+    <code>data/cells/&lt;type&gt;.json</code> and the rear/bare optics come from the substrate. It&rsquo;s the single-source-of-truth
+    principle applied to optics: the layout now says only <i>what sits where</i>. Old layouts still work, and all 98 tests
+    pass.</div></div></div>
+
+  <div class="qa"><div class="q">Can it handle a real, irregular array — not just a tidy rectangle?</div>
+    <div class="a"><div class="body">Yes. The grid+palette handles asymmetric panels, notches and bare keep-out regions
+    directly, and for the wiring there&rsquo;s a free-form <code>CircuitLayout</code> (added recently) that decouples the
+    electrical topology from the physical grid — arbitrary strings/sections/panels described in JSON.</div></div></div>
+
+  <div class="qa"><div class="q">How reproducible is a report? If I run it twice do I get the same PDF?</div>
+    <div class="a"><div class="body">Yes. Inputs are immutable, every derived quantity is a pure function of them, and the
+    Monte-Carlo is seed-stable. Same workbook + same seed → same numbers, regenerable from version control.</div></div></div>
+
+  <div class="qa"><div class="q">What are the current limitations / what would you do next?</div>
+    <div class="a"><div class="body">It&rsquo;s steady-state thermal (a transient path exists but isn&rsquo;t the default), the
+    coupling is one-directional electrical→thermal per case rather than a fully iterated electro-thermal loop, and the
+    single-diode fit assumes an effectively-open shunt. None of these affect the qualification cases we target; they&rsquo;re
+    the honest next steps if we need finer fidelity.</div></div></div>
+
+  <div class="say"><b>If you get a question you can&rsquo;t answer</b>
+  Don&rsquo;t bluff. &ldquo;Good question — that&rsquo;s in <code>&lt;package&gt;</code>; let me pull up the exact line rather than
+  guess.&rdquo; The architecture is built so you <i>can</i> always point at the one place a behaviour lives.</div>
+</section>
+
+</body>
+</html>

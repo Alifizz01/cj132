@@ -2,8 +2,7 @@
   "name": "Example asymmetric panel (notch + bare edges)",
   "pitch_mm": 55,
   "palette": {
-    "A": {"name": "Cell type A", "is_cell": true, "cell_type": "GaAs-3J", "string": "S1",
-          "alpha_front": 0.97, "alpha_rear": 0.93, "epsilon_front": 0.90, "epsilon_rear": 0.89},
+    "A": {"name": "Cell type A", "is_cell": true, "cell_type": "3G30LARS_GEO", "string": "S1"},
     ".": {"name": "Bare substrate", "is_cell": false,
           "alpha_front": 0.88, "alpha_rear": 0.85, "epsilon_front": 0.85, "epsilon_rear": 0.85},
     "D": {"name": "Bypass diode", "is_cell": false, "is_diode": true,

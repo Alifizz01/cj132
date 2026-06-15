@@ -21,3 +21,8 @@ def test_view_factor_surface_is_one():
 
 def test_view_factor_decreases_with_altitude():
     assert view_factor_to_planet(500.0) > view_factor_to_planet(35786.0)
+
+
+def test_view_factor_negative_altitude_raises():
+    with pytest.raises(ValueError):
+        view_factor_to_planet(-1.0)

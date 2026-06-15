@@ -20,10 +20,13 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+_CELLS_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "cells")
 
 
 @dataclass(frozen=True)
@@ -127,12 +130,47 @@ def _parse_layout_rows(rows) -> np.ndarray:
     return np.array(grid, dtype="<U8")
 
 
-def from_dict(d: Dict) -> PanelLayout:
-    """Build a PanelLayout from a parsed dict (the JSON/YAML schema)."""
+def _cell_front_alpha(cell_type: str) -> float:
+    """Front solar absorptivity of a cell, read from ``data/cells/<cell_type>.json``.
+
+    A cell owns exactly one optic -- its solar absorptivity ``alpha`` (the front
+    face it turns to the sun). The rear faces and a bare tile's front belong to
+    the *substrate*, not the cell, so only ``alpha`` is taken here.
+    """
+    path = os.path.join(_CELLS_DIR, cell_type + ".json")
+    with open(path, "r", encoding="utf-8") as fh:
+        return float(json.load(fh)["alpha"])
+
+
+def from_dict(d: Dict, substrate=None) -> PanelLayout:
+    """Build a PanelLayout from a parsed dict (the JSON/YAML schema).
+
+    A cell palette entry references its cell dataset by ``cell_type`` (the stem of
+    a ``data/cells/<cell_type>.json`` file); its front absorptivity is read from
+    that file's ``alpha``. The remaining optics -- the rear faces and a bare
+    tile's front -- belong to the ``substrate`` (a
+    :class:`~powerpy.config.substrate.Substrate` or a catalogue name) and are
+    filled from it. Any optic stated explicitly on the palette entry overrides the
+    resolved value, so old fully-inline layouts keep working unchanged.
+    """
+    if isinstance(substrate, str):
+        from .substrate import load_substrate
+        substrate = load_substrate(substrate)
     valid = {f.name for f in dataclasses.fields(TileType)} - {"key"}
     palette: Dict[str, TileType] = {}
     for key, spec in d["palette"].items():
         clean = {k: v for k, v in (spec or {}).items() if k in valid}
+        is_cell = bool(clean.get("is_cell"))
+        cell_type = clean.get("cell_type")
+        # Cell tiles: front absorptivity comes from the referenced cell file.
+        if is_cell and cell_type and "alpha_front" not in clean:
+            clean["alpha_front"] = _cell_front_alpha(cell_type)
+        # Substrate owns the rear faces (and a bare tile's front face too).
+        if substrate is not None:
+            for fld in ("alpha_rear", "epsilon_front", "epsilon_rear"):
+                clean.setdefault(fld, getattr(substrate, fld))
+            if not is_cell:
+                clean.setdefault("alpha_front", substrate.alpha_front)
         palette[key] = TileType(key=key, **clean)
     grid = _parse_layout_rows(d["layout"])
     unknown = set(np.unique(grid)) - set(palette)
@@ -142,10 +180,14 @@ def from_dict(d: Dict) -> PanelLayout:
                        pitch_mm=float(d.get("pitch_mm", 40.0)), name=d.get("name", ""))
 
 
-def load_layout(path: str) -> PanelLayout:
-    """Load a layout from a JSON file following the convention."""
+def load_layout(path: str, substrate=None) -> PanelLayout:
+    """Load a layout from a JSON file following the convention.
+
+    ``substrate`` (a :class:`~powerpy.config.substrate.Substrate` or catalogue
+    name) supplies the rear/bare optics that cell entries no longer carry.
+    """
     with open(path, "r", encoding="utf-8") as f:
-        return from_dict(json.load(f))
+        return from_dict(json.load(f), substrate=substrate)
 
 
 def panel_from_topology(n_blocks: int, n_parallel: int, n_series: int, *,

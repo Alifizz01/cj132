@@ -62,7 +62,7 @@ def orbital_period(altitude_km: float, *, body_radius_km: float = R_EARTH_M / 1e
     return float(2.0 * np.pi * np.sqrt(a ** 3 / mu))
 
 
-def view_factor_to_planet(altitude_km: float,
+def view_factor_to_planet(altitude_km: float, *,
                           body_radius_km: float = R_EARTH_M / 1e3) -> float:
     """Geometric nadir view factor of a flat plate to the planet sphere.
 

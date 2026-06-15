@@ -20,7 +20,7 @@ import openpyxl
 # Each entry: (sheet_name, [row, row, ...]); row[0] is the header row.
 SHEETS = [
 
-    # --- cell_params (18 data rows) ---
+    # --- cell_params (17 data rows) ---
     # columns: param | name | value | unit | type | source
     ('cell_params', [
         ['param', 'name', 'value', 'unit', 'type', 'source'],  # header
@@ -41,7 +41,6 @@ SHEETS = [
         ['cell_area', 'Cell Area', 70.75, 'cm2', 'float', 'datasheet'],
         ['cell_mass', 'Cell Mass', 6100, 'mg', 'float', 'datasheet'],
         ['string_shunt_diode_reference_file', "String Shunt Diode's reference File", 'diodes/aRoche.json', None, 'path', None],
-        ['circuit_reference_file', 'Circuit reference File', 'circuits/msro_nominal.json', None, 'path', None],
     ]),
 
     # --- sections (24 data rows) ---

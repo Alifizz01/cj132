@@ -168,7 +168,16 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
         if string_loss != 1.0:
             env = dataclasses.replace(env, current_loss=env.current_loss * string_loss)
         res = run(array, env)
+        # bus voltage: explicit v_operating (analysis sheet) wins; else the
+        # mission's per-phase bus_voltage (preserves the legacy no-scope path);
+        # else the requirement's operating voltage.
         v_bus = v_operating
+        if v_bus is None:
+            try:
+                v_bus = report.mission.lookup(
+                    name="bus_voltage", launch_config=launch, phase=phase)
+            except KeyError:
+                v_bus = None
         if v_bus is None and requirement is not None:
             v_bus = requirement.voltage_operating_v
         bus = None

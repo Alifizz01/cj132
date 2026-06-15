@@ -26,3 +26,39 @@ def test_view_factor_decreases_with_altitude():
 def test_view_factor_negative_altitude_raises():
     with pytest.raises(ValueError):
         view_factor_to_planet(-1.0)
+
+
+from powerpy.schemas.mission import MissionOrbit
+
+
+def _orbit():
+    return MissionOrbit(params={
+        "altitude_km": 35786.0,
+        "sun_intensity_eol_min": 1322.0,
+        "sun_intensity_bol": 1367.0,
+        "bond_albedo": 0.30,
+        "planet_temp_k": 255.0,
+        "ir_emissivity": 1.0,
+    })
+
+
+def test_mission_orbit_typed_accessors():
+    o = _orbit()
+    assert o.altitude_km == 35786.0
+    assert o.sun_intensity_eol_min == 1322.0
+    assert o.bond_albedo == 0.30
+    assert o.planet_temp_k == 255.0
+    assert o.ir_emissivity == 1.0
+
+
+def test_mission_orbit_defaults_when_missing():
+    o = MissionOrbit(params={"altitude_km": 500.0})
+    assert o.bond_albedo == 0.30        # default
+    assert o.planet_temp_k == 255.0     # default
+    assert o.ir_emissivity == 1.0       # default
+    assert o.sun_intensity_eol_min == 1367.0  # default AM0
+
+
+def test_mission_orbit_altitude_required():
+    with pytest.raises(KeyError):
+        _ = MissionOrbit(params={}).altitude_km

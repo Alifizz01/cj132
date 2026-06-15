@@ -72,6 +72,7 @@ class MonteCarloReport:
             worst=self.data.worst,
             hist_figure=hist_figure,
             worst_figure=worst_figure,
+            power_budget=self.data.power_budget,
         )
         (workdir / main_tex).write_text(tex_out, encoding="utf-8")
         return self

@@ -166,7 +166,7 @@ SHEETS = [
         ['max_string_current', 'Max String Current', 2.5, 'A', 'float', None],
         ['max_beta_angle_deg', 'Max Beta Angle', 23.5, 'deg', 'float', None],
         ['bond_albedo', 'Bond Albedo', 0.30, '-', 'float', None],
-        ['planet_temp_k', 'Planet Temperature', 255, 'K', 'float', None],
+        ['planet_temp_k', 'Planet Temperature', 255.0, 'K', 'float', None],
         ['ir_emissivity', 'Planet IR Emissivity', 1.0, '-', 'float', None],
     ]),
 

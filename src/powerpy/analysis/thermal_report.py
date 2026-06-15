@@ -27,6 +27,10 @@ from powerpy.simulation.cell_level import CellModel
 from powerpy.simulation.environment import Environment
 from powerpy.simulation.pipeline import environment_for_phase
 from powerpy.solve.thermal import solve_panel, solve_thermal
+from powerpy.analysis.power_budget import (
+    DEFAULT_ORBIT, PowerBudget, compute_power_budget,
+)
+from powerpy.schemas.mission import MissionOrbit
 
 AM0 = 1367.0  # solar irradiance at 1 AU [W/m^2]
 
@@ -69,6 +73,7 @@ class ThermalReportData:
     panel_grid_c: np.ndarray      # (nrows, ncols) front temperatures [°C]
     hotspot: HotSpot
     layout: object = None         # the PanelLayout used (for the layout figure)
+    power_budget: PowerBudget | None = None
 
 
 # ---------------------------------------------------------------- helpers
@@ -91,7 +96,9 @@ def _p_elec_per_cell(md: ReportMetadata, env: Environment) -> float:
 
 
 def equilibrium_point(md: ReportMetadata, sub: Substrate,
-                      case: ThermalCase) -> ThermalPoint:
+                      case: ThermalCase, *,
+                      orbit: MissionOrbit = DEFAULT_ORBIT,
+                      efficiency: float = 0.30) -> ThermalPoint:
     """Steady-state temperature of one representative cell for ``case``."""
     env = environment_for_phase(
         md, phase=case.phase, launch_config=case.launch_config,
@@ -99,13 +106,15 @@ def equilibrium_point(md: ReportMetadata, sub: Substrate,
     alpha_f, eps_f, area = _cell_optics(md)
     p_sun = AM0 * case.season
     p_elec = _p_elec_per_cell(md, env)
+    budget = compute_power_budget(orbit, season=case.season,
+                                  efficiency=efficiency)
 
     res = solve_thermal(
         area=area,
         alpha_front=alpha_f, alpha_rear=sub.alpha_rear,
         epsilon_front=eps_f, epsilon_rear=sub.epsilon_rear,
         c_cond=sub.c_cond,
-        p_sun=p_sun, p_albedo=0.0, p_ir=0.0,
+        p_sun=p_sun, p_albedo=budget.albedo_w_m2, p_ir=budget.ir_w_m2,
         p_elec=p_elec,
     )
     return ThermalPoint(
@@ -158,7 +167,9 @@ def hotspot_case(md: ReportMetadata, sub: Substrate, case: ThermalCase,
                  *, layout=None, area=None, n_rows: int = 9, n_cols: int = 9,
                  dissipation_multiple: float = 4.0,
                  t_limit_c: float = 150.0,
-                 g_lat: float = 0.02) -> tuple[HotSpot, np.ndarray]:
+                 g_lat: float = 0.02,
+                 orbit: MissionOrbit = DEFAULT_ORBIT,
+                 efficiency: float = 0.30) -> tuple[HotSpot, np.ndarray]:
     """Failed open-bypass-diode hot spot, returned with the panel grid.
 
     A failed bypass diode leaves one cell reverse-biased: it stops generating
@@ -182,8 +193,11 @@ def hotspot_case(md: ReportMetadata, sub: Substrate, case: ThermalCase,
     p_dissip = dissipation_multiple * p_cell
     p_elec[centre] = -p_dissip   # negative = a dissipating (reverse-biased) cell
 
+    budget = compute_power_budget(orbit, season=case.season,
+                                  efficiency=efficiency)
     res = solve_panel(
-        layout, p_sun=AM0 * case.season, p_albedo=0.0, p_ir=0.0,
+        layout, p_sun=AM0 * case.season,
+        p_albedo=budget.albedo_w_m2, p_ir=budget.ir_w_m2,
         p_elec=p_elec, c_cond=sub.c_cond, g_lat=g_lat, area=area,
     )
     grid = np.asarray(res.t_front_c)
@@ -201,7 +215,8 @@ def hotspot_case(md: ReportMetadata, sub: Substrate, case: ThermalCase,
 def run_thermal_report(md: ReportMetadata, cases: list[ThermalCase], *,
                        substrate: Substrate | str = "FSP-SFLA",
                        layout_file: str | None = None,
-                       t_limit_c: float = 150.0) -> ThermalReportData:
+                       t_limit_c: float = 150.0,
+                       efficiency: float = 0.30) -> ThermalReportData:
     """Compute every thermal-report quantity for the given cases.
 
     ``layout_file`` (a layout JSON with a 'C'/'.' grid) declares where SCAs and
@@ -210,19 +225,22 @@ def run_thermal_report(md: ReportMetadata, cases: list[ThermalCase], *,
     """
     sub = (substrate if isinstance(substrate, Substrate)
            else load_substrate(substrate))
+    orbit = md.mission_orbit if md.mission_orbit is not None else DEFAULT_ORBIT
     alpha_f, eps_f, area = _cell_optics(md)
 
     layout = None
     if layout_file is not None:
         layout, area = panel_from_grid(md, sub, load_layout_grid(layout_file))
 
-    points = [equilibrium_point(md, sub, c) for c in cases]
+    points = [equilibrium_point(md, sub, c, orbit=orbit, efficiency=efficiency)
+              for c in cases]
 
     # heat-map + hot spot use the hottest case (largest equilibrium T); a
     # single panel solve (with one failed cell) feeds both the map and table.
     ref = max(points, key=lambda p: p.t_front_c).case if points else cases[0]
     hot, grid = hotspot_case(md, sub, ref, layout=layout, area=area,
-                             t_limit_c=t_limit_c)
+                             t_limit_c=t_limit_c, orbit=orbit,
+                             efficiency=efficiency)
 
     inputs = {
         "cell_alpha": alpha_f,
@@ -236,8 +254,11 @@ def run_thermal_report(md: ReportMetadata, cases: list[ThermalCase], *,
         "substrate_c_cond": sub.c_cond,
         "am0_w_m2": AM0,
     }
+    power_budget = compute_power_budget(orbit, season=ref.season,
+                                        efficiency=efficiency)
     return ThermalReportData(
         substrate=sub, inputs=inputs, points=points,
         panel_case_label=ref.label, panel_grid_c=grid, hotspot=hot,
         layout=layout,
+        power_budget=power_budget,
     )

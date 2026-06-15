@@ -107,3 +107,20 @@ def test_power_budget_lines_show_calculation():
     assert "Planetary IR load" in labels
     elec = next(ln for ln in b.lines if ln.label == "Electrical extracted")
     assert "0.30" in elec.substitution and "1322" in elec.substitution
+
+
+from powerpy.analysis.thermal_report import run_thermal_report, ThermalCase
+from powerpy.schemas._common import Phase
+from powerpy.schemas.fluxes import LaunchConfig
+
+
+@needs_params
+def test_thermal_report_has_power_budget():
+    md = load_report_data(PARAMS, DATA)
+    cases = [ThermalCase("EOL", Phase.END_OF_LIFE, LaunchConfig.SINGLE,
+                          season=0.967)]
+    d = run_thermal_report(md, cases)
+    assert d.power_budget is not None
+    assert d.power_budget.electrical_w_m2 > 0
+    assert 0 < d.power_budget.albedo_w_m2 < 50
+    assert 0 < d.power_budget.ir_w_m2 < 50

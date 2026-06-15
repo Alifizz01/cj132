@@ -104,6 +104,10 @@ class CellParameters:
     string_diode: ShuntDiodeParameters | None = None
     string_diode_reference_file: Path | None = None
 
+    # optional grid layout JSON whose cell tiles carry string/block tags; when
+    # set, the electrical circuit is DERIVED from it (grid-as-single-source).
+    grid_reference_file: Path | None = None
+
     def __post_init__(self):
         for name in ("cell_length_mm", "cell_width_mm", "cell_thickness_um",
                      "substrate_thickness_um", "cell_area_cm2", "cell_mass_mg"):

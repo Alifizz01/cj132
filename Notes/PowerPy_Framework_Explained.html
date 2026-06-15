@@ -1,0 +1,1908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PowerPy — The Framework Explained</title>
+<link rel="stylesheet" href="print-base.css">
+<style>
+/* ============================================================
+   PowerPy — The Framework Explained
+   Engineering-handbook look, print-first. White paper, navy ink,
+   one warm accent. All design lives here; print-base.css carries
+   the A4 / colour-adjust / page-break guarantees.
+   ============================================================ */
+:root{
+  --ink:#16324f;        /* deep navy */
+  --ink2:#33506b;
+  --accent:#c05621;     /* burnt orange */
+  --accent2:#9a4715;
+  --paper:#ffffff;
+  --soft:#f4f6f8;
+  --soft2:#eef2f6;
+  --line:#d4dae0;
+  --teal:#1f6a6a;
+}
+*{box-sizing:border-box;}
+body{
+  font-family:"Georgia","Iowan Old Style",serif;
+  color:#1a2733;
+  line-height:1.6;
+  font-size:11.2pt;
+  margin:0;
+}
+h1,h2,h3,h4,.display{
+  font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  color:var(--ink);
+  line-height:1.18;
+  letter-spacing:.005em;
+}
+h2{font-size:21pt;margin:0 0 .15em;border-bottom:3px solid var(--accent);padding-bottom:.18em;}
+h3{font-size:14.5pt;margin:1.5em 0 .3em;color:var(--ink);}
+h4{font-size:11.8pt;margin:1.2em 0 .25em;color:var(--accent2);text-transform:uppercase;letter-spacing:.06em;}
+p{margin:.55em 0;}
+a{color:var(--accent2);}
+strong{color:var(--ink);}
+em{color:var(--ink2);}
+code{font-family:"Consolas","SF Mono",monospace;font-size:.86em;background:#eef0f3;padding:.05em .3em;border-radius:3px;}
+
+/* --- chapter wrapper: each part starts on a fresh page ----- */
+.chapter{break-before:page;page-break-before:page;padding-top:.2em;}
+.chapter:first-of-type{break-before:auto;}
+
+/* --- the eyebrow + part number above each H2 --------------- */
+.eyebrow{font-family:"Segoe UI",sans-serif;font-size:9pt;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--accent);font-weight:700;margin:.2em 0 .1em;}
+.part-no{font-family:"Segoe UI",sans-serif;font-weight:800;color:var(--soft2);
+  font-size:46pt;line-height:.8;float:right;color:#dde4ea;margin-top:-.1em;}
+
+/* --- cover -------------------------------------------------- */
+.cover{height:247mm;display:flex;flex-direction:column;justify-content:center;
+  padding:0 4mm;}
+.cover .kicker{font-family:"Segoe UI",sans-serif;letter-spacing:.34em;
+  text-transform:uppercase;color:var(--accent);font-weight:700;font-size:11pt;}
+.cover h1{font-size:42pt;margin:.18em 0 .1em;letter-spacing:-.01em;}
+.cover .sub{font-size:16pt;color:var(--ink2);font-family:"Segoe UI",sans-serif;font-weight:300;}
+.cover .rule{height:4px;width:70mm;background:var(--accent);margin:.9em 0 1.2em;}
+.cover .meta{font-family:"Segoe UI",sans-serif;font-size:10.5pt;color:#5a6b7a;margin-top:auto;}
+.cover .blurb{font-size:12pt;max-width:150mm;color:#33414e;}
+
+/* --- callouts --------------------------------------------- */
+.callout{padding:.7em 1em .7em 1.05em;margin:1em 0;border-radius:5px;
+  border-left:5px solid var(--ink);background:var(--soft);}
+.callout .lab{font-family:"Segoe UI",sans-serif;font-size:8.5pt;font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;display:block;margin-bottom:.25em;}
+.term{border-left-color:var(--teal);background:#eef5f5;}
+.term .lab{color:var(--teal);}
+.analogy{border-left-color:var(--accent);background:#fdf3ec;}
+.analogy .lab{color:var(--accent2);}
+.pitfall{border-left-color:#b3261e;background:#fdeeec;}
+.pitfall .lab{color:#b3261e;}
+.note{border-left-color:var(--ink2);background:var(--soft);}
+.note .lab{color:var(--ink2);}
+.worked{border:1px solid var(--line);border-left:5px solid var(--ink);
+  background:#fafbfc;padding:.8em 1.05em;margin:1.1em 0;border-radius:5px;}
+.worked .lab{font-family:"Segoe UI",sans-serif;font-size:8.5pt;font-weight:800;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--ink);display:block;margin-bottom:.4em;}
+.worked ol{margin:.3em 0 .3em 1.1em;padding:0;}
+.worked li{margin:.4em 0;}
+.chk{color:var(--teal);font-weight:700;}
+
+/* --- key math block --------------------------------------- */
+.keymath{background:#0f2233;color:#eaf1f7;border-radius:6px;padding:.85em 1.1em;
+  margin:1em 0;font-family:"Cambria Math","Georgia",serif;text-align:center;font-size:13pt;}
+.keymath .small{display:block;font-size:9.5pt;color:#9fb6c9;margin-top:.45em;
+  font-family:"Segoe UI",sans-serif;letter-spacing:.02em;}
+/* print-base flips big dark fills to light; make our math block intentionally light so it stays crisp on paper */
+.keymath{background:#eef2f6 !important;color:#10283d !important;border:1px solid var(--line);}
+.keymath .small{color:#54677a !important;}
+.mvar{font-style:italic;}
+.sub{font-size:.72em;vertical-align:-.25em;}
+.sup{font-size:.72em;vertical-align:.45em;}
+
+/* --- symbol table ----------------------------------------- */
+table.sym{border-collapse:collapse;width:100%;margin:.8em 0;font-size:10pt;}
+table.sym th,table.sym td{border:1px solid var(--line);padding:.4em .6em;text-align:left;vertical-align:top;}
+table.sym th{background:var(--soft2);font-family:"Segoe UI",sans-serif;font-size:9pt;
+  text-transform:uppercase;letter-spacing:.05em;color:var(--ink);}
+table.sym td:first-child{font-family:"Cambria Math",serif;font-style:italic;white-space:nowrap;width:18%;color:var(--accent2);}
+table.sym td:nth-child(3){white-space:nowrap;width:14%;color:#5a6b7a;font-family:"Segoe UI",sans-serif;font-size:9pt;}
+
+/* --- figure ----------------------------------------------- */
+.figure{margin:1.1em 0;text-align:center;}
+.figure img{max-width:100%;border:1px solid var(--line);border-radius:4px;padding:4px;background:#fff;}
+.figure figcaption,.cap{font-family:"Segoe UI",sans-serif;font-size:9pt;color:#5a6b7a;
+  margin-top:.4em;text-align:center;}
+.cap b{color:var(--ink);}
+svg{max-width:100%;height:auto;}
+
+/* --- contents --------------------------------------------- */
+.toc{font-family:"Segoe UI",sans-serif;font-size:10.5pt;}
+.toc .row{display:flex;justify-content:space-between;border-bottom:1px dotted var(--line);
+  padding:.32em 0;}
+.toc .row .n{color:var(--accent);font-weight:700;width:28px;}
+.toc .row .t{flex:1;}
+.toc .row .pg{color:#8a98a5;}
+.toc .grp{font-weight:800;color:var(--ink);margin:1em 0 .2em;letter-spacing:.04em;text-transform:uppercase;font-size:9pt;}
+
+/* --- lead paragraph under a chapter heading --------------- */
+.lead{font-size:12.2pt;color:#33414e;margin:.6em 0 1em;}
+
+/* --- small caption row of stats --------------------------- */
+.stats{display:flex;gap:10px;margin:1em 0;flex-wrap:wrap;}
+.stat{flex:1;min-width:90px;border:1px solid var(--line);border-radius:5px;padding:.55em .7em;background:var(--soft);}
+.stat .v{font-family:"Segoe UI",sans-serif;font-weight:800;font-size:15pt;color:var(--accent2);}
+.stat .k{font-family:"Segoe UI",sans-serif;font-size:8.5pt;text-transform:uppercase;letter-spacing:.06em;color:#5a6b7a;}
+
+ul.tight{margin:.4em 0 .4em 1.1em;padding:0;}
+ul.tight li{margin:.3em 0;}
+.glossary-entry{margin:.45em 0;}
+.glossary-entry b{color:var(--ink);}
+hr.soft{border:none;border-top:1px solid var(--line);margin:1.4em 0;}
+.kbd{font-family:"Segoe UI",sans-serif;font-size:8.5pt;background:var(--ink);color:#fff;
+  padding:.08em .5em;border-radius:3px;letter-spacing:.04em;}
+</style>
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<section class="cover">
+  <div class="kicker">Concept &amp; Theory Handbook</div>
+  <h1>PowerPy</h1>
+  <div class="sub">The Framework Explained — from one solar cell to a whole array, and why the mathematics looks the way it does</div>
+  <div class="rule"></div>
+  <p class="blurb">A patient, ground-up walkthrough of what PowerPy is, what it computes, and
+  the physics &amp; numerics underneath it: the single-diode equation, the 2×2 thermal vector,
+  lateral heat conduction, the electro-thermal loop, failure analysis, and the report engine.
+  Written to be understood, not skimmed — with everyday analogies and worked numbers from the
+  real <em>3G30LARS</em> cell dataset.</p>
+  <div class="meta">
+    Satellite Solar-Array Circuit &amp; Electro-Thermal Analysis Framework · v0.2.0<br>
+    Explanatory notes · figures generated from the live solvers
+  </div>
+</section>
+
+<!-- ============================ CONTENTS ============================ -->
+<section class="chapter">
+  <div class="eyebrow">Contents</div>
+  <h2>What’s in this handbook</h2>
+  <p class="lead">Read top to bottom — each part assumes only what the parts before it taught.
+  The three “deep dive” parts (4, 7, 8) are the mathematical heart you asked about: the diode
+  equation, the 2×2 vector, and lateral conduction.</p>
+
+  <div class="toc">
+    <div class="grp">Orientation</div>
+    <div class="row"><span class="n">1</span><span class="t">What PowerPy is and the problem it solves</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">2</span><span class="t">Foundations — the words you need first</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">3</span><span class="t">The data model — how the inputs get in</span><span class="pg">·</span></div>
+
+    <div class="grp">The physics, taught in dependency order</div>
+    <div class="row"><span class="n">4</span><span class="t"><b>Deep dive ① — the single-diode equation</b></span><span class="pg">·</span></div>
+    <div class="row"><span class="n">5</span><span class="t">Building the array — series &amp; parallel combination</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">6</span><span class="t">The space environment — sunlight, albedo, IR, orbit</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">7</span><span class="t"><b>Deep dive ② — the 2-node thermal model &amp; the 2×2 vector</b></span><span class="pg">·</span></div>
+    <div class="row"><span class="n">8</span><span class="t"><b>Deep dive ③ — lateral conduction &amp; the graph Laplacian</b></span><span class="pg">·</span></div>
+    <div class="row"><span class="n">9</span><span class="t">Electro-thermal coupling — the chicken-and-egg loop</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">10</span><span class="t">Transient thermal — watching a hot-spot climb in time</span><span class="pg">·</span></div>
+
+    <div class="grp">What the framework does with all this</div>
+    <div class="row"><span class="n">11</span><span class="t">Bypass diodes &amp; hot-spots — the failure physics</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">12</span><span class="t">Failure analysis — Monte-Carlo &amp; worst-case search</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">13</span><span class="t">Reporting &amp; outputs — figures, PDF, HTML, CLI</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">14</span><span class="t">The ngspice story — vendored SPICE &amp; the analytic fallback</span><span class="pg">·</span></div>
+    <div class="row"><span class="n">15</span><span class="t">Glossary — every term, alphabetised</span><span class="pg">·</span></div>
+  </div>
+
+  <div class="callout note">
+    <span class="lab">How to read this</span>
+    Every hard term is defined the moment it appears and again in the glossary. Equations are
+    written with every symbol named in a table directly beneath them. Worked examples use the
+    real numbers from the cell that ships with PowerPy, so you can trace each step yourself.
+  </div>
+</section>
+
+<!-- ============================ PART 1 ============================ -->
+<section class="chapter">
+  <div class="part-no">01</div>
+  <div class="eyebrow">Orientation</div>
+  <h2>What PowerPy is and the problem it solves</h2>
+  <p class="lead">PowerPy is a Python framework that predicts how a satellite’s solar array will
+  <em>perform electrically</em> and <em>survive thermally</em> across its mission — and what
+  happens when cells fail — then writes the answer into engineering reports.</p>
+
+  <h3>The thing being analysed</h3>
+  <p>A satellite gets its power from a <strong>solar array</strong>: thousands of small
+  <strong>solar cells</strong> glued onto flat <strong>panels</strong> and wired together. Each
+  cell is a postage-stamp-sized semiconductor that turns sunlight into electrical current. On
+  its own a single cell makes only about 2.7 volts and roughly one amp — useless for running a
+  spacecraft. So cells are wired in long chains to add up their voltage, and many chains are
+  placed side by side to add up their current, until the array delivers the hundreds of volts and
+  many amps the satellite bus needs.</p>
+
+  <p>Two hard truths make this more than simple arithmetic:</p>
+  <ul class="tight">
+    <li><strong>Space is a brutal environment.</strong> In sunlight a cell bakes; in the
+    shadow of the Earth (an <em>eclipse</em>) it freezes. High-energy particles slowly damage
+    the silicon (<em>radiation degradation</em>), so the same array that delivers 100% of its
+    power on day one (<em>begin-of-life</em>) might deliver only 80% fifteen years later
+    (<em>end-of-life</em>). The design must still close the power budget at end-of-life,
+    at the worst temperature, after the worst radiation dose.</li>
+    <li><strong>Cells fail, and a failed cell gets dangerously hot.</strong> When one cell in a
+    chain dies, the healthy cells behind it keep pushing current — but now there is nowhere for
+    that current to flow except <em>backwards</em> through the dead cell, which turns it into a
+    little heater. That <em>hot-spot</em> can climb past the temperature that melts the panel.
+    Engineers add <em>bypass diodes</em> to limit the damage, and they must prove the worst
+    realistic failure still stays below the melt limit.</li>
+  </ul>
+
+  <h3>What PowerPy computes</h3>
+  <div class="stats">
+    <div class="stat"><div class="v">I–V</div><div class="k">Electrical curves at any age &amp; temperature</div></div>
+    <div class="stat"><div class="v">°C</div><div class="k">Cell temperatures, steady &amp; in time</div></div>
+    <div class="stat"><div class="v">⚠</div><div class="k">Worst-case hot-spots from failures</div></div>
+    <div class="stat"><div class="v">PDF</div><div class="k">Formatted engineering reports</div></div>
+  </div>
+  <p>In one sentence: PowerPy takes a <em>description</em> of an array (which cell, how it is
+  wired, the mission’s temperatures and radiation, the panel’s materials) and produces the
+  array’s <strong>current–voltage behaviour</strong>, each cell’s <strong>temperature</strong>,
+  the <strong>worst-case hot-spot</strong> under failures, and a <strong>report</strong> a
+  reviewer can read.</p>
+
+  <h3>The job behind the job — closing the power budget</h3>
+  <p>Why compute all this? Because a satellite must <strong>close its power budget</strong>: at every
+  moment of the mission, the array must supply at least as much power as the spacecraft draws, with
+  margin to spare. The hard moment is usually <em>end-of-life, hot, just after the longest
+  eclipse</em> — when the array is degraded, running warm (so making less voltage), and the battery
+  has just been drained. PowerPy exists to answer, quantitatively, “does the array still close the
+  budget then, and does it survive the worst credible failure?” If the answer is no, the design grows
+  — more cells, more panels — which costs mass and money, so the prediction must be accurate, not
+  conservative-by-guesswork.</p>
+
+  <div class="callout note"><span class="lab">Margin, not just a number</span>
+  Engineers never design to exactly 100 %. They carry <em>margin</em> (say, the array makes 115 % of
+  the required power at the worst case) to absorb modelling error, manufacturing spread and surprises.
+  PowerPy’s job is to make the prediction trustworthy enough that the margin can be tight — every
+  unnecessary percent of margin is wasted launch mass.</div>
+
+  <h3>The shape of the framework — three layers</h3>
+  <p>It helps to picture PowerPy as a pipeline with three stages. Data comes in on the left, gets
+  turned into physics in the middle, and leaves as reports on the right.</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+        <path d="M0,0 L9,4.5 L0,9 z" fill="#16324f"/>
+      </marker>
+    </defs>
+    <!-- layer 1 -->
+    <rect x="12" y="40" width="200" height="170" rx="10" fill="#eef5f5" stroke="#1f6a6a" stroke-width="2"/>
+    <text x="112" y="64" text-anchor="middle" font-weight="800" fill="#1f6a6a" font-size="14">① DATA IN</text>
+    <text x="112" y="92" text-anchor="middle" font-size="11" fill="#1a2733">params.xlsx (the array)</text>
+    <text x="112" y="112" text-anchor="middle" font-size="11" fill="#1a2733">cell / diode / substrate</text>
+    <text x="112" y="132" text-anchor="middle" font-size="11" fill="#1a2733">JSON reference files</text>
+    <text x="112" y="160" text-anchor="middle" font-size="10" fill="#5a6b7a">schemas + loaders →</text>
+    <text x="112" y="176" text-anchor="middle" font-size="10" fill="#5a6b7a">typed, validated objects</text>
+    <!-- layer 2 -->
+    <rect x="260" y="40" width="200" height="170" rx="10" fill="#fdf3ec" stroke="#c05621" stroke-width="2"/>
+    <text x="360" y="64" text-anchor="middle" font-weight="800" fill="#c05621" font-size="14">② PHYSICS</text>
+    <text x="360" y="92" text-anchor="middle" font-size="11" fill="#1a2733">single-diode I–V</text>
+    <text x="360" y="112" text-anchor="middle" font-size="11" fill="#1a2733">series / parallel build</text>
+    <text x="360" y="132" text-anchor="middle" font-size="11" fill="#1a2733">2-node thermal solve</text>
+    <text x="360" y="152" text-anchor="middle" font-size="11" fill="#1a2733">lateral conduction</text>
+    <text x="360" y="172" text-anchor="middle" font-size="11" fill="#1a2733">coupling · transient</text>
+    <text x="360" y="192" text-anchor="middle" font-size="11" fill="#1a2733">failure analysis</text>
+    <!-- layer 3 -->
+    <rect x="508" y="40" width="200" height="170" rx="10" fill="#eef2f6" stroke="#16324f" stroke-width="2"/>
+    <text x="608" y="64" text-anchor="middle" font-weight="800" fill="#16324f" font-size="14">③ OUTPUT</text>
+    <text x="608" y="92" text-anchor="middle" font-size="11" fill="#1a2733">matplotlib figures</text>
+    <text x="608" y="112" text-anchor="middle" font-size="11" fill="#1a2733">LaTeX → PDF reports</text>
+    <text x="608" y="132" text-anchor="middle" font-size="11" fill="#1a2733">HTML + JSON heat-maps</text>
+    <text x="608" y="160" text-anchor="middle" font-size="10" fill="#5a6b7a">CLI: run · worst · sweep</text>
+    <line x1="214" y1="125" x2="256" y2="125" stroke="#16324f" stroke-width="2.5" marker-end="url(#ar)"/>
+    <line x1="462" y1="125" x2="504" y2="125" stroke="#16324f" stroke-width="2.5" marker-end="url(#ar)"/>
+    <text x="360" y="232" text-anchor="middle" font-size="10" fill="#5a6b7a" font-style="italic">Pure-Python, numpy/scipy. No paid tools; the SPICE engine is vendored in-tree.</text>
+  </svg>
+  <figcaption><b>Figure 1.1.</b> PowerPy’s three layers: describe the array, simulate the physics, emit the report.</figcaption>
+  </div>
+
+  <div class="callout analogy">
+    <span class="lab">Analogy — a wind-tunnel for solar panels</span>
+    Think of PowerPy as a <em>numerical wind tunnel</em>. You don’t fly the real satellite to see
+    if the array survives; you build a faithful mathematical model and “fly” it through every
+    temperature, every radiation dose, and every failure you can imagine — cheaply, repeatably,
+    on a laptop — until you trust the design.
+  </div>
+
+  <h3>Why this is built the way it is</h3>
+  <p>Two design choices shape everything downstream, and both come from the office reality the
+  tool lives in:</p>
+  <ul class="tight">
+    <li><strong>It must run without installing anything.</strong> The engineering environment
+    forbids <code>pip install</code>. So PowerPy is pure Python (numpy, scipy) and even the
+    circuit simulator, <em>ngspice</em>, is <em>vendored</em> — copied into the source tree —
+    rather than installed. More importantly, the entire default electrical model is
+    <em>analytic</em>: it never needs ngspice at all (Part 14 explains the SPICE story).</li>
+    <li><strong>It must be auditable.</strong> Every input is a typed, validated object; every
+    output traces back to an input row. A reviewer can open the spreadsheet, the JSON, and the
+    report and follow the chain. That is why the data model (Part 3) is so deliberate.</li>
+  </ul>
+</section>
+
+<!-- ============================ PART 2 ============================ -->
+<section class="chapter">
+  <div class="part-no">02</div>
+  <div class="eyebrow">Orientation</div>
+  <h2>Foundations — the words you need first</h2>
+  <p class="lead">Before the physics, here is the small vocabulary the rest of the handbook leans
+  on. Skim it now; each term is also repeated where it is used, and collected in the glossary.</p>
+
+  <div class="callout term"><span class="lab">Solar cell</span>
+  The smallest unit — a semiconductor chip that converts light into electric current. PowerPy’s
+  reference cell is a triple-junction <em>3G30LARS</em>: short-circuit current ≈ 1.23 A,
+  open-circuit voltage ≈ 2.68 V, area ≈ 70 cm².</div>
+
+  <div class="callout term"><span class="lab">I–V curve (current–voltage curve)</span>
+  The signature of a solar cell. It answers: “if I hold the cell at voltage <span class="mvar">V</span>,
+  how much current <span class="mvar">I</span> does it deliver?” It is a falling curve — high
+  current near zero volts, zero current at the open-circuit voltage. Every electrical question in
+  PowerPy is ultimately a question about this curve.</div>
+
+  <table class="sym">
+    <tr><th>Symbol</th><th>Name &amp; plain meaning</th><th>Unit</th></tr>
+    <tr><td>I<span class="sub">sc</span></td><td><b>Short-circuit current</b> — the current when the terminals are shorted (V = 0). The most current the cell can give.</td><td>A</td></tr>
+    <tr><td>V<span class="sub">oc</span></td><td><b>Open-circuit voltage</b> — the voltage when no current is drawn (I = 0). The highest voltage the cell reaches.</td><td>V</td></tr>
+    <tr><td>I<span class="sub">mp</span>, V<span class="sub">mp</span></td><td><b>Maximum-power point (MPP)</b> — the one spot on the curve where V·I is largest. Where you operate the array to get the most power.</td><td>A, V</td></tr>
+    <tr><td>P<span class="sub">max</span></td><td><b>Peak power</b> = V<span class="sub">mp</span>·I<span class="sub">mp</span>. For our cell ≈ 2.81 W.</td><td>W</td></tr>
+  </table>
+
+  <div class="callout term"><span class="lab">BOL / EOL (begin-of-life / end-of-life)</span>
+  Two snapshots of the array. <b>BOL</b> = freshly deployed, full performance. <b>EOL</b> =
+  after years of radiation and thermal cycling, degraded. The datasheet numbers are BOL; the
+  design must still work at EOL.</div>
+
+  <div class="callout term"><span class="lab">Fluence / dose (radiation)</span>
+  How much particle radiation the cell has absorbed, expressed as an equivalent number of
+  1 MeV electrons per cm² (PowerPy carries it in units of 10¹⁴ e⁻/cm²). More dose → lower
+  current and voltage, captured by <em>remaining-factor</em> curves in the cell file.</div>
+
+  <div class="callout term"><span class="lab">String · section · panel · array</span>
+  The wiring hierarchy. A <b>string</b> = cells in series (voltages add). A <b>section</b> =
+  strings in parallel (currents add). A <b>panel</b> = sections on one physical board. The
+  <b>array</b> = all panels together. PowerPy mirrors this hierarchy exactly in code.</div>
+
+  <div class="callout term"><span class="lab">Substrate &amp; facesheet</span>
+  The board the cells are mounted on — here an aluminium honeycomb sandwich. Its
+  <em>facesheet</em> (the thin metal skin) conducts heat sideways between neighbouring cells;
+  its thickness and conductivity set how strongly (Part 8).</div>
+
+  <div class="callout term"><span class="lab">Bypass diode</span>
+  A one-way valve wired across a group of cells. Normally off; when a cell fails and the string
+  tries to push current backwards, the diode turns on and gives that current a safe path,
+  <em>clamping</em> how hot the failed cell can get (Part 11).</div>
+
+  <div class="callout term"><span class="lab">Steady-state vs transient</span>
+  <b>Steady-state</b>: the temperature has settled — heat in equals heat out, nothing changes
+  with time. <b>Transient</b>: the temperature is still moving (e.g. just after a failure, or
+  entering eclipse). PowerPy has a solver for each (Parts 7 and 10).</div>
+
+  <div class="callout term"><span class="lab">Newton’s method &amp; the Jacobian</span>
+  A way to solve equations you <em>can’t</em> rearrange by hand. Guess, measure how wrong you
+  are, use the <em>slope</em> to make a better guess, repeat. When there are several unknowns at
+  once, the “slope” becomes a small matrix of slopes called the <b>Jacobian</b>. This is where
+  the “2×2 vector” comes from (Part 7).</div>
+</section>
+
+<!-- ============================ PART 3 ============================ -->
+<section class="chapter">
+  <div class="part-no">03</div>
+  <div class="eyebrow">Orientation</div>
+  <h2>The data model — how the inputs get in</h2>
+  <p class="lead">Before any physics runs, PowerPy turns messy human inputs (a spreadsheet, some
+  JSON files) into clean, typed, validated objects. This part is the “left edge” of Figure 1.1.</p>
+
+  <h3>Two kinds of input</h3>
+  <ul class="tight">
+    <li><strong>The workbook</strong> — a single Excel file (<code>params.xlsx</code>) that
+    describes <em>this</em> array: which cell, how it is wired, the mission’s operating points,
+    the loss factors, the radiation fluxes, and the report’s table of contents.</li>
+    <li><strong>Reference files</strong> — JSON files shipped with the package describing the
+    <em>cell</em> (its BOL points and degradation curves), the <em>diode</em>, and the
+    <em>substrate</em> materials. These rarely change; the workbook points at them by name.</li>
+  </ul>
+
+  <p>One function ties it together: <code>load_report_data(params.xlsx, data_dir)</code>. It reads
+  each sheet with a dedicated loader and returns one immutable <code>ReportMetadata</code> object
+  holding nine sub-objects — cell, mission, losses, fluxes, layout, structure, document.</p>
+
+  <h3>The two sheet conventions</h3>
+  <p>Every sheet is one of two shapes, which keeps the loaders simple:</p>
+  <ul class="tight">
+    <li><strong>Key-value sheets</strong> (singletons like the document cover or the cell
+    parameters): columns <code>param | name | value | unit | type | source</code> — one fact
+    per row.</li>
+    <li><strong>Long-format sheets</strong> (collections like losses or fluxes): one row per
+    item, with identifier columns, a <code>value</code>, context columns, and an
+    <code>include</code> flag so rows can be switched off without deleting them.</li>
+  </ul>
+
+  <div class="callout note"><span class="lab">Design choice — strings, not enums</span>
+  A recent change replaced rigid <em>enumerations</em> (a fixed list of allowed words baked into
+  the code) with plain <em>strings</em> that each workbook defines for itself — phase names like
+  <code>BOL_ATC</code> or <code>End_of_Life</code>, launch configs like <code>single</code>/<code>dual</code>.
+  Cross-sheet matching is done case-insensitively. Why? Because every project names its phases
+  differently, and the tool should adapt to the spreadsheet rather than force the spreadsheet to
+  adapt to the tool.</div>
+
+  <div class="callout analogy"><span class="lab">Analogy — the customs desk</span>
+  The loader layer is the <em>customs desk</em> of the framework. Nothing enters the physics
+  engine until its passport is checked: numbers are really numbers, fractions are in [0, 1],
+  keys are unique, file references resolve. Once stamped (validated and frozen), an object is
+  trusted everywhere downstream and can never be quietly mutated.</div>
+
+  <h3>The nine data entities</h3>
+  <p>The validated model is one <code>ReportMetadata</code> object composing nine immutable
+  sub-objects. Knowing what each holds makes the rest of the framework legible:</p>
+  <table class="sym">
+    <tr><th>Entity</th><th>What it holds</th><th>Used by</th></tr>
+    <tr><td>CellParameters</td><td>Identity, geometry, BOL points, temperature coefficients, degradation curves, shunt diode.</td><td>Part 4</td></tr>
+    <tr><td>MissionParameters</td><td>Operating points (bus voltage, power, temperature) per phase &amp; launch config.</td><td>Parts 6–9</td></tr>
+    <tr><td>LossCollection</td><td>Loss factors (name, phase, value, level) with filtering &amp; aggregation.</td><td>Part 4</td></tr>
+    <tr><td>RadiationFluxCollection</td><td>1 MeV-equivalent fluence per config/phase/axis (Isc vs Voc).</td><td>Part 4</td></tr>
+    <tr><td>ArrayLayout</td><td>Section templates, topology, harness resistance — the wiring.</td><td>Part 5</td></tr>
+    <tr><td>PanelLayout</td><td>The 2-D tile grid + palette (optical/thermal props, who-touches-whom).</td><td>Parts 7–8</td></tr>
+    <tr><td>Substrate</td><td>Optical α/ε and the derived c_cond = conductivity/thickness.</td><td>Part 7</td></tr>
+    <tr><td>ReportStructure</td><td>The report’s table of contents: ordered, typed sections.</td><td>Part 13</td></tr>
+    <tr><td>DocumentMetadata</td><td>Cover data: title, project, doc number, date, author.</td><td>Part 13</td></tr>
+  </table>
+  <p>Notice the clean split: the <em>electrical</em> world (cell, layout, losses, fluxes, mission)
+  is described in the workbook as flexible long-form rows, while the <em>thermal tile grid</em>
+  (panel layout, substrate) is a separate, lower-level description aimed at the panel solver. They
+  meet only in the physics layer.</p>
+
+  <p>Everything from here on assumes this clean, validated data exists. Now the physics.</p>
+</section>
+
+<!-- ============================ PART 4 — DEEP DIVE 1 ============================ -->
+<section class="chapter">
+  <div class="part-no">04</div>
+  <div class="eyebrow">Deep dive ① · the electrical heart</div>
+  <h2>The single-diode equation</h2>
+  <p class="lead">Everything electrical in PowerPy starts here: a compact equation that reproduces
+  a solar cell’s entire I–V curve from just four datasheet numbers. This part builds it from
+  scratch, names every symbol, gives an analogy, shows why it needs Newton’s method, and works
+  the real numbers.</p>
+
+  <h3>What a solar cell looks like to electricity</h3>
+  <p>Hold a solar cell in the dark and it behaves like an ordinary <strong>diode</strong> — a
+  component that lets current flow easily one way and blocks it the other. Shine light on it and
+  something is added: the light knocks electrons loose and drives a steady current. So a lit cell
+  is modelled as <em>a current source and a diode wired together</em>, plus two resistors that
+  account for real-world imperfections. This picture is the <strong>single-diode model</strong>
+  (“single” because it uses one diode; more elaborate models use two).</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" font-size="11">
+    <!-- current source -->
+    <circle cx="70" cy="100" r="26" fill="none" stroke="#16324f" stroke-width="2"/>
+    <line x1="70" y1="84" x2="70" y2="116" stroke="#16324f" stroke-width="2"/>
+    <path d="M70,84 l-5,9 l10,0 z" fill="#16324f"/>
+    <text x="70" y="150" text-anchor="middle" fill="#c05621" font-weight="700">I_ph</text>
+    <text x="70" y="166" text-anchor="middle" fill="#5a6b7a" font-size="9">photo-current</text>
+    <!-- diode -->
+    <line x1="170" y1="60" x2="170" y2="140" stroke="#16324f" stroke-width="2"/>
+    <path d="M170,82 l0,36 l26,-18 z" fill="#16324f"/>
+    <line x1="196" y1="82" x2="196" y2="118" stroke="#16324f" stroke-width="2"/>
+    <text x="183" y="158" text-anchor="middle" fill="#c05621" font-weight="700">D (I_0, V_t)</text>
+    <!-- shunt R -->
+    <rect x="262" y="80" width="16" height="40" fill="none" stroke="#16324f" stroke-width="2"/>
+    <text x="270" y="158" text-anchor="middle" fill="#c05621" font-weight="700">R_sh</text>
+    <!-- series R -->
+    <rect x="360" y="42" width="40" height="16" fill="none" stroke="#16324f" stroke-width="2"/>
+    <text x="380" y="34" text-anchor="middle" fill="#c05621" font-weight="700">R_s</text>
+    <!-- wires -->
+    <line x1="70" y1="74" x2="70" y2="50" stroke="#16324f" stroke-width="2"/>
+    <line x1="70" y1="50" x2="360" y2="50" stroke="#16324f" stroke-width="2"/>
+    <line x1="400" y1="50" x2="500" y2="50" stroke="#16324f" stroke-width="2"/>
+    <line x1="70" y1="126" x2="70" y2="150" stroke="#16324f" stroke-width="2"/>
+    <line x1="70" y1="150" x2="500" y2="150" stroke="#16324f" stroke-width="2"/>
+    <line x1="170" y1="50" x2="170" y2="60" stroke="#16324f" stroke-width="2"/>
+    <line x1="170" y1="140" x2="170" y2="150" stroke="#16324f" stroke-width="2"/>
+    <line x1="270" y1="50" x2="270" y2="80" stroke="#16324f" stroke-width="2"/>
+    <line x1="270" y1="120" x2="270" y2="150" stroke="#16324f" stroke-width="2"/>
+    <circle cx="500" cy="50" r="3.5" fill="#16324f"/><text x="512" y="54" fill="#16324f">+ (V)</text>
+    <circle cx="500" cy="150" r="3.5" fill="#16324f"/><text x="512" y="154" fill="#16324f">–</text>
+    <text x="430" y="100" text-anchor="middle" fill="#5a6b7a" font-size="10">terminal current I →</text>
+  </svg>
+  <figcaption><b>Figure 4.1.</b> The single-diode model: a light-driven current source, a diode,
+  a shunt resistor R<sub>sh</sub> (leakage) and a series resistor R<sub>s</sub> (wiring/contact loss).</figcaption>
+  </div>
+
+  <h3>The equation</h3>
+  <p>Writing down “current in = current out” at the terminals of Figure 4.1 gives the
+  <strong>single-diode equation</strong>. This is exactly the relation coded in
+  <code>DiodeParams</code>:</p>
+
+  <div class="keymath">
+    I = I<span class="sub">ph</span> − I<span class="sub">0</span> · ( e<span class="sup">(V + I·R<span class="sub">s</span>)/V<span class="sub">t</span></span> − 1 ) − (V + I·R<span class="sub">s</span>) / R<span class="sub">sh</span>
+    <span class="small">terminal current = light current − diode current − leakage current</span>
+  </div>
+
+  <table class="sym">
+    <tr><th>Symbol</th><th>Meaning</th><th>Unit</th></tr>
+    <tr><td>I</td><td>Terminal current the cell delivers (what we want).</td><td>A</td></tr>
+    <tr><td>V</td><td>Terminal voltage we hold the cell at (the input we sweep).</td><td>V</td></tr>
+    <tr><td>I<span class="sub">ph</span></td><td>Photo-current — the steady current the light produces. Essentially I<span class="sub">sc</span>.</td><td>A</td></tr>
+    <tr><td>I<span class="sub">0</span></td><td>Diode saturation current — a tiny number setting how hard the diode “leaks back”.</td><td>A</td></tr>
+    <tr><td>V<span class="sub">t</span></td><td>Thermal voltage of the diode, n·kT/q — the voltage scale of the exponential.</td><td>V</td></tr>
+    <tr><td>R<span class="sub">s</span></td><td>Series resistance — wiring/contact losses in line with the current.</td><td>Ω</td></tr>
+    <tr><td>R<span class="sub">sh</span></td><td>Shunt resistance — a leakage path across the cell (here taken ≈ 10⁹ Ω, i.e. negligible).</td><td>Ω</td></tr>
+  </table>
+
+  <div class="callout analogy"><span class="lab">Analogy — a pump, a relief valve and leaks</span>
+  Picture water, not electrons. <b>I<span class="sub">ph</span></b> is a <em>pump</em> pushing a
+  fixed flow (the sunlight). The <b>diode</b> is a one-way <em>relief valve</em>: as you raise
+  the back-pressure (the voltage V), the valve cracks open and dumps more and more of the pumped
+  flow back internally — and because a diode is exponential, once you near V<span class="sub">oc</span>
+  it dumps <em>almost everything</em>, which is why the current collapses to zero there.
+  <b>R<span class="sub">s</span></b> is friction in the output pipe; <b>R<span class="sub">sh</span></b>
+  is a small permanent leak. The current you actually collect at the tap is the pump flow minus
+  what the valve dumps minus the leak — exactly the three terms of the equation.</div>
+
+  <h3>Why we can’t just “plug in V and read off I”</h3>
+  <p>Look closely: the unknown <span class="mvar">I</span> appears <em>on both sides</em> — once on
+  the left, and again inside the exponential as the <code>I·R<span class="sub">s</span></code>
+  drop. You cannot algebraically isolate I; the equation is <strong>implicit</strong>. This is the
+  whole reason a numerical method is needed. PowerPy uses <strong>Newton’s method</strong>: for
+  each voltage on the sweep, guess I, see how badly the equation fails to balance, and use the
+  slope to correct the guess — repeating until it balances.</p>
+
+  <div class="callout note"><span class="lab">In the code</span>
+  <code>single_diode_iv()</code> does this for the <em>whole voltage sweep at once</em> (a
+  <em>vectorised</em> Newton step over a numpy array of voltages). The residual <code>f</code> is
+  the equation’s imbalance; <code>df</code> is its slope dI; the update is <code>I ← I − f/df</code>.
+  For physical parameters it converges in a handful of steps — in fact, just <b>2 iterations</b>
+  for this cell.</div>
+
+  <h3>Where the four parameters come from — the closed-form fit</h3>
+  <p>A datasheet does not give you I<span class="sub">0</span>, V<span class="sub">t</span>,
+  R<span class="sub">s</span>. It gives the four <em>operating points</em>:
+  I<span class="sub">sc</span>, I<span class="sub">mp</span>, V<span class="sub">mp</span>,
+  V<span class="sub">oc</span>. PowerPy’s <code>fit_rseries()</code> inverts the model
+  algebraically (taking the shunt as open) to recover the hidden parameters from those four
+  numbers:</p>
+
+  <div class="keymath">
+    V<span class="sub">t</span> = V<span class="sub">mp</span>(I<span class="sub">sc</span>−I<span class="sub">mp</span>) / I<span class="sub">mp</span> &nbsp;&nbsp;·&nbsp;&nbsp;
+    I<span class="sub">0</span> = I<span class="sub">sc</span> / ( e<span class="sup">V<span class="sub">oc</span>/V<span class="sub">t</span></span> − 1 ) &nbsp;&nbsp;·&nbsp;&nbsp;
+    R<span class="sub">s</span> = (V<span class="sub">t</span>/I<span class="sub">mp</span>)·ln((I<span class="sub">sc</span>−I<span class="sub">mp</span>)/I<span class="sub">0</span>) − V<span class="sub">mp</span>/I<span class="sub">mp</span>
+    <span class="small">three hidden parameters, recovered in closed form from four datasheet points</span>
+  </div>
+
+  <div class="worked">
+    <span class="lab">Worked example — fitting the real 3G30LARS cell</span>
+    <p>The shipped cell file gives, at begin-of-life:
+    I<span class="sub">sc</span> = 1.2311 A, I<span class="sub">mp</span> = 1.18425 A,
+    V<span class="sub">mp</span> = 2.375 V, V<span class="sub">oc</span> = 2.679 V.</p>
+    <ol>
+      <li><b>Thermal voltage.</b> V<span class="sub">t</span> = 2.375·(1.2311 − 1.18425)/1.18425
+      = 2.375·0.04685/1.18425 = <b>0.09396 V</b>. (Reasonable — a triple-junction cell’s
+      effective V<span class="sub">t</span> is around 0.05–0.25 V.)</li>
+      <li><b>Saturation current.</b> The exponent V<span class="sub">oc</span>/V<span class="sub">t</span>
+      = 2.679/0.09396 = 28.51. So I<span class="sub">0</span> = 1.2311/(e²⁸·⁵¹ − 1)
+      = 1.2311/2.4×10¹² ≈ <b>5.1×10⁻¹³ A</b> — a tiny back-leakage, as expected for a good cell.</li>
+      <li><b>Series resistance.</b> R<span class="sub">s</span> =
+      (0.09396/1.18425)·ln((0.04685)/(5.1×10⁻¹³)) − 2.375/1.18425. The log term is ln(9.2×10¹⁰)
+      ≈ 25.2, so R<span class="sub">s</span> ≈ 0.0793·25.2 − 2.005 = 1.999 − 2.005 ≈ <b>0 Ω</b>
+      (the code clamps small negatives to 0).</li>
+      <li><b>Check.</b> Feeding these into <code>single_diode_iv()</code> and reading the curve
+      back gives I<span class="sub">sc</span> = 1.231 A and V<span class="sub">oc</span> = 2.679 V —
+      the very points we started from — and a peak power of 2.809 W at the MPP.
+      <span class="chk">✓ the fit reproduces the datasheet.</span></li>
+    </ol>
+  </div>
+
+  <div class="figure">
+    <img src="fig_fw_iv.png" alt="I-V and P-V curve of the 3G30LARS cell">
+    <figcaption><b>Figure 4.2.</b> The real I–V curve (navy) and power curve (orange, dashed)
+    produced by PowerPy’s analytic single-diode model for the 3G30LARS cell. The MPP sits at the
+    knee of the I–V curve, where V·I peaks at 2.81 W.</figcaption>
+  </div>
+
+  <div class="figure">
+    <img src="fig_fw_newton.png" alt="Newton convergence">
+    <figcaption><b>Figure 4.3.</b> Newton’s method in action (here on the closely-related thermal
+    solve of Part 7): the residual drops by orders of magnitude per step — the hallmark of
+    <em>quadratic convergence</em>. The diode I–V solve behaves the same way, finishing in ~2 steps.</figcaption>
+  </div>
+
+  <h3>From “a cell” to “this cell, now” — environment corrections</h3>
+  <p>The fit above is the BOL cell at its reference temperature. Real cells run hot or cold, and
+  age. <code>operating_points()</code> scales the four datasheet numbers <em>before</em> fitting,
+  multiplying by three gains:</p>
+  <ul class="tight">
+    <li><strong>Temperature.</strong> A factor 1 + (coeff/100)·ΔT, where ΔT is the cell’s
+    temperature above reference. Current rises slightly with heat (+0.043 %/°C here); voltage
+    falls (−0.0062 %/°C). This is why a hot cell makes <em>less</em> useful power.</li>
+    <li><strong>Radiation.</strong> A <em>remaining factor</em> ≤ 1 read off the degradation
+    curve at the accumulated dose — interpolated in log-fluence. More dose, lower factor.</li>
+    <li><strong>Losses.</strong> A pre-multiplied product of mission loss factors (coverglass,
+    assembly, etc.) on the current and voltage axes.</li>
+  </ul>
+  <p>The current axis (I<span class="sub">sc</span>, I<span class="sub">mp</span>) gets the current
+  gains; the voltage axis (V<span class="sub">oc</span>, V<span class="sub">mp</span>) gets the
+  voltage gains. Then <code>fit_rseries()</code> runs on the corrected points, and the I–V curve
+  reflects <em>this</em> cell at <em>this</em> age and temperature. That single curve is the
+  building block for the entire array.</p>
+
+  <h3>Why this cell makes ~2.7 V — triple-junction cells</h3>
+  <p>An ordinary silicon cell makes only ~0.6 V because one semiconductor can harvest only one band
+  of the solar spectrum. Space cells are <strong>triple-junction</strong>: three different
+  semiconductor layers stacked on top of each other, each tuned to a different colour band
+  (roughly: a top layer for blue/UV, a middle for green/yellow, a bottom for red/infrared). Because
+  the three junctions are <em>in series within the single cell</em>, their voltages add — giving the
+  ~2.68 V open-circuit you see for the 3G30LARS. This is also why these cells reach ~30 % efficiency
+  versus ~18 % for silicon: less of the spectrum is wasted.</p>
+
+  <div class="callout note"><span class="lab">The dark curve</span>
+  Turn off the light (I<span class="sub">ph</span> → 0) and the same equation describes the cell in
+  the <em>dark</em>: it becomes a plain diode. PowerPy keeps a dark-curve path because a failed,
+  reverse-biased cell behaves like a (leaky) diode rather than a generator — exactly the regime that
+  sets a hot-spot’s reverse power (Part 11).</div>
+
+  <div class="worked">
+    <span class="lab">Worked example — current at a chosen voltage</span>
+    <p>Once the curve exists, reading off the current at any voltage is just interpolation. For the
+    fitted BOL cell:</p>
+    <ol>
+      <li>At V = 1.0 V (well below the knee): I = <b>1.2311 A</b> — essentially the full
+      I<span class="sub">sc</span>; the diode is barely conducting, so almost all the photo-current
+      reaches the terminals.</li>
+      <li>At V = 2.0 V: I = <b>1.2302 A</b> — still nearly flat. P = V·I = 2.46 W.</li>
+      <li>At V = V<span class="sub">mp</span> = 2.375 V: I = 1.183 A, P = <b>2.81 W</b> — the peak.</li>
+      <li>At V = 2.6 V (past the MPP, near V<span class="sub">oc</span>): I has collapsed to
+      <b>0.70 A</b>, P = 1.82 W. <span class="chk">✓ the exponential “relief valve” is now dumping
+      most of the current internally — the curve’s steep right-hand cliff.</span></li>
+    </ol>
+    <p>This collapse near V<span class="sub">oc</span> is the whole reason arrays are operated at the
+    MPP, not at higher voltage: a little past the knee and the power falls off a cliff.</p>
+  </div>
+</section>
+
+<!-- ============================ PART 5 ============================ -->
+<section class="chapter">
+  <div class="part-no">05</div>
+  <div class="eyebrow">The physics</div>
+  <h2>Building the array — series &amp; parallel combination</h2>
+  <p class="lead">One cell’s curve is the atom. An array’s curve is built by joining many curves
+  with exactly two rules, applied over and over up the hierarchy.</p>
+
+  <h3>The two rules</h3>
+  <ul class="tight">
+    <li><strong>Series (a string of cells):</strong> they share <em>one current</em>; their
+    <em>voltages add</em>. Stack them and the curve gets taller (more volts) at the same current.</li>
+    <li><strong>Parallel (strings side by side):</strong> they share <em>one voltage</em>; their
+    <em>currents add</em>. The curve gets wider (more amps) at the same voltage.</li>
+  </ul>
+
+  <div class="callout analogy"><span class="lab">Analogy — people carrying water up a hill</span>
+  <b>Series</b> is a bucket brigade up a staircase: the same bucket (current) passes hand to hand,
+  and each person adds a step of height (voltage). <b>Parallel</b> is several brigades climbing
+  side by side to the same height: each adds its own bucket flow (current) at that same height.
+  Series adds height; parallel adds throughput.</div>
+
+  <p>Both rules live once, in <code>combine.py</code>. To add curves in series you flip each to
+  V(I), pick a shared current grid, and sum the voltages. To add in parallel you keep V, pick a
+  shared voltage grid, and sum the currents. The composite levels — string, section, panel, array
+  — are then just a few lines each, calling these two functions.</p>
+
+  <h3>The weakest-link rule</h3>
+  <p>A subtlety the code handles: when you put cells in series, the chain can only pass as much
+  current as its <em>weakest</em> cell — so the combined curve is limited by the smallest
+  I<span class="sub">sc</span> among the children. In parallel, the stack only reaches as high in
+  voltage as its weakest member — limited by the smallest V<span class="sub">oc</span>. (In the
+  code: <code>isc_min = min(...)</code> for series, <code>voc_min = min(...)</code> for parallel.)</p>
+
+  <div class="callout pitfall"><span class="lab">Why this matters for failures</span>
+  The weakest-link rule is the seed of the hot-spot problem. A shaded or failed cell has a tiny
+  I<span class="sub">sc</span>; in series it throttles the whole string, and the surplus current
+  from the healthy cells has to go somewhere — backwards, into the weak cell. Part 11 picks this
+  up.</div>
+
+  <div class="worked">
+    <span class="lab">Worked example — two cells in series, two in parallel</span>
+    <p>Take our cell (I<span class="sub">sc</span> = 1.23 A, V<span class="sub">oc</span> = 2.68 V,
+    P<span class="sub">max</span> = 2.81 W) as the unit.</p>
+    <ol>
+      <li><b>Two in series.</b> Same current, voltages add: the pair still tops out at
+      I<span class="sub">sc</span> = 1.23 A but now reaches V<span class="sub">oc</span> = 5.36 V.
+      Peak power doubles to ≈ 5.62 W. A string of 22 such cells would reach ≈ 59 V.</li>
+      <li><b>Two in parallel.</b> Same voltage, currents add: V<span class="sub">oc</span> stays
+      2.68 V but I<span class="sub">sc</span> doubles to 2.46 A. Peak power again ≈ 5.62 W — the same
+      total power, delivered as more amps at lower volts.</li>
+      <li><b>The mismatch case.</b> Put a strong cell (1.23 A) in series with a weak one (0.6 A).
+      The series pair can pass only <b>0.6 A</b> — the weakest link — even though one cell could
+      give twice that. The “lost” current is what gets forced into reverse bias in a real fault.
+      <span class="chk">✓ series → add volts; parallel → add amps; the weakest child caps the chain.</span></li>
+    </ol>
+  </div>
+
+  <h3>The composition tree</h3>
+  <p>PowerPy mirrors the wiring as a tree of nodes that all share one interface
+  (<code>SimNode</code>): a leaf <code>CellModel</code> produces a curve; a <code>String</code>
+  combines its cells in series; a <code>Section</code> combines strings in parallel; a
+  <code>Panel</code> and the <code>Array</code> continue up. Ask the top of the tree for its
+  curve and the request flows down to the leaves and the curves combine back up — the same shape
+  as the real hardware.</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 620 210" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" font-size="10.5">
+    <defs><marker id="a2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16324f"/></marker></defs>
+    <rect x="250" y="14" width="120" height="34" rx="6" fill="#16324f"/><text x="310" y="35" text-anchor="middle" fill="#fff" font-weight="700">Array</text>
+    <rect x="250" y="74" width="120" height="34" rx="6" fill="#33506b"/><text x="310" y="95" text-anchor="middle" fill="#fff" font-weight="700">Panel (∥ sections)</text>
+    <rect x="120" y="134" width="150" height="34" rx="6" fill="#c05621"/><text x="195" y="155" text-anchor="middle" fill="#fff" font-weight="700">Section (∥ strings)</text>
+    <rect x="350" y="134" width="150" height="34" rx="6" fill="#c05621"/><text x="425" y="155" text-anchor="middle" fill="#fff" font-weight="700">String (— cells in series)</text>
+    <rect x="350" y="186" width="150" height="22" rx="5" fill="#eef5f5" stroke="#1f6a6a"/><text x="425" y="201" text-anchor="middle" fill="#1f6a6a" font-weight="700">Cell (leaf · I–V curve)</text>
+    <line x1="310" y1="48" x2="310" y2="74" stroke="#16324f" stroke-width="2" marker-end="url(#a2)"/>
+    <line x1="310" y1="108" x2="195" y2="134" stroke="#16324f" stroke-width="2" marker-end="url(#a2)"/>
+    <line x1="310" y1="108" x2="425" y2="134" stroke="#16324f" stroke-width="2" marker-end="url(#a2)"/>
+    <line x1="425" y1="168" x2="425" y2="186" stroke="#16324f" stroke-width="2" marker-end="url(#a2)"/>
+  </svg>
+  <figcaption><b>Figure 5.1.</b> The composition tree. Each level applies one of the two rules;
+  the leaf is the single-diode cell of Part 4.</figcaption>
+  </div>
+</section>
+
+<!-- ============================ PART 6 ============================ -->
+<section class="chapter">
+  <div class="part-no">06</div>
+  <div class="eyebrow">The physics</div>
+  <h2>The space environment — sunlight, albedo, IR, orbit</h2>
+  <p class="lead">A cell’s curve and its temperature both depend on its surroundings. This part is
+  the heat-and-light bookkeeping that feeds the thermal solver in Part 7.</p>
+
+  <h3>The three heat inputs</h3>
+  <ul class="tight">
+    <li><strong>Direct sunlight</strong> — the dominant input, about 1361 W/m² at Earth’s
+    distance (the <em>solar constant</em>). It scales with <em>inverse-square</em> distance from
+    the Sun and with the cosine of the panel’s tilt to the Sun.</li>
+    <li><strong>Albedo</strong> — sunlight bounced off the planet below. A fraction (the albedo,
+    ≈ 0.3 for Earth) of the solar input, hitting the rear/underside.</li>
+    <li><strong>Planetary infrared (IR)</strong> — the warm planet glows in the infrared; the
+    panel absorbs some of that too.</li>
+  </ul>
+
+  <div class="callout analogy"><span class="lab">Analogy — sunbathing near a wall</span>
+  Stand in the sun by a pale wall on a warm day. The <em>Sun on your face</em> is the direct
+  flux. The <em>glare bouncing off the wall</em> is albedo. The <em>heat radiating from the warm
+  wall itself</em> is planetary IR. All three warm you; the thermal model adds up exactly these
+  three, scaled by how absorptive each face is.</div>
+
+  <h3>Orbit and eclipse</h3>
+  <p>Over an orbit these fluxes change: the panel tilts relative to the Sun, and for part of each
+  orbit the satellite passes into the planet’s shadow — an <strong>eclipse</strong> — where the
+  direct flux drops to zero and the panel rapidly cools. PowerPy carries a dependency-free
+  Keplerian <code>orbit</code> model that produces the orbital period, the Sun direction, the
+  <em>beta angle</em> (how tilted the orbit plane is to the Sun), and the eclipse fraction, and
+  turns these into a <em>flux timeline</em> — a list of (time, sun, albedo, IR, tilt) points. That
+  timeline is exactly what the transient solver (Part 10) marches through to watch the panel heat
+  and cool.</p>
+
+  <div class="callout note"><span class="lab">Two fidelities</span>
+  The built-in analytic circular-orbit model needs no external libraries and covers the common
+  case. A higher-fidelity path (via the optional <code>hapsira</code> orbit library) is sketched
+  in the code but intentionally left as a seam — the analytic baseline is what runs by default.</div>
+
+  <h3>The flux equations</h3>
+  <p>The direct solar flux reaching the panel is the solar constant scaled two ways:</p>
+  <div class="keymath">
+    p<span class="sub">sun</span> = S<span class="sub">0</span> · (1 AU / r)² · cos θ
+    <span class="small">inverse-square with distance r from the Sun, times the cosine of the panel’s tilt θ</span>
+  </div>
+  <table class="sym">
+    <tr><th>Symbol</th><th>Meaning</th><th>Unit</th></tr>
+    <tr><td>S<span class="sub">0</span></td><td>Solar constant at 1 AU ≈ 1361.</td><td>W/m²</td></tr>
+    <tr><td>r</td><td>Distance from the Sun (in AU here).</td><td>AU</td></tr>
+    <tr><td>θ</td><td>Angle between the panel normal and the Sun direction (the tilt).</td><td>°</td></tr>
+  </table>
+
+  <div class="worked">
+    <span class="lab">Worked example — how much sun, and how much tilt costs you</span>
+    <ol>
+      <li><b>Distance.</b> At Earth (1 AU) the flux is the full 1361 W/m². At Mars (1.524 AU) it
+      falls as 1/r²: 1361/1.524² = <b>586 W/m²</b> — already less than half. At Jupiter (5.2 AU):
+      just <b>50 W/m²</b>, which is why deep-space missions need huge arrays or nuclear power.</li>
+      <li><b>Tilt.</b> Facing the Sun squarely (θ = 0) gives cos 0 = 1.000 — full flux. At θ = 30°,
+      cos = 0.866 (a 13 % loss). At θ = 60°, cos = 0.500 — half the sunlight, just from the angle.
+      <span class="chk">✓ this cosine factor is the <code>tilt</code> multiplier on q<sub>F</sub> in the thermal balance (Part 7).</span></li>
+    </ol>
+  </div>
+
+  <h3>Eclipse and the beta angle</h3>
+  <p>How much of each orbit is sunlit depends on the <strong>beta angle</strong> β — the angle
+  between the orbit plane and the Sun line. At high β the satellite skims the edge of the shadow and
+  may be in <em>continuous sunlight</em>; at low β it plunges through the planet’s shadow each orbit
+  for a long eclipse. The orbit model computes the eclipse fraction from β and the orbit geometry,
+  and the flux timeline drops p<span class="sub">sun</span> to zero during eclipse — which is what
+  makes the transient solver (Part 10) show the panel cooling sharply, then re-heating at sunrise.</p>
+</section>
+
+<!-- ============================ PART 7 — DEEP DIVE 2 ============================ -->
+<section class="chapter">
+  <div class="part-no">07</div>
+  <div class="eyebrow">Deep dive ② · the thermal heart</div>
+  <h2>The 2-node thermal model &amp; the 2×2 vector</h2>
+  <p class="lead">This is the part you specifically asked about: <em>why the 2×2 vector?</em> The
+  short answer is that each cell has <strong>two unknown temperatures</strong> (front and rear),
+  and solving for both at once means inverting a <strong>2×2 matrix</strong> at every Newton step.
+  Here is the long answer, built slowly.</p>
+
+  <h3>Why temperature is a whole separate problem</h3>
+  <p>A solar cell in space has no air to carry heat away — it can only shed heat by
+  <em>radiating</em> it to cold space. It also <em>absorbs</em> heat from the Sun and the planet
+  (Part 6), and it generates or dissipates electrical power. Its temperature settles where all of
+  these balance. That settling temperature feeds straight back into the I–V model (Part 4), which
+  is why thermal and electrical can’t be fully separated (Part 9).</p>
+
+  <h3>Why two nodes?</h3>
+  <p>A mounted cell is a <em>sandwich</em>: a sunlit <strong>front face</strong> and a
+  <strong>rear face</strong>, with the substrate in between. The two faces are <em>not</em> at the
+  same temperature — the front sees the Sun, the rear sees the planet — but they are linked by
+  heat conducting through the thickness. So PowerPy models each cell with <strong>two
+  temperature nodes</strong>: T₁ (front) and T₂ (rear). Two unknowns per cell.</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 540 220" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" font-size="11">
+    <!-- sun arrows -->
+    <g stroke="#c05621" stroke-width="2">
+      <line x1="60" y1="20" x2="90" y2="55"/><line x1="100" y1="20" x2="130" y2="55"/><line x1="140" y1="20" x2="170" y2="55"/>
+    </g>
+    <text x="60" y="16" fill="#c05621" font-weight="700">sunlight  q_F</text>
+    <!-- front node -->
+    <rect x="70" y="60" width="320" height="26" fill="#fdf3ec" stroke="#c05621" stroke-width="2"/>
+    <text x="230" y="78" text-anchor="middle" fill="#c05621" font-weight="700">FRONT  node  T₁  (ε_F radiates to space)</text>
+    <!-- substrate -->
+    <rect x="70" y="86" width="320" height="40" fill="#eef2f6" stroke="#16324f" stroke-width="1.5"/>
+    <text x="230" y="111" text-anchor="middle" fill="#16324f">substrate — conducts T₁↔T₂ at rate C·A</text>
+    <!-- rear node -->
+    <rect x="70" y="126" width="320" height="26" fill="#eef5f5" stroke="#1f6a6a" stroke-width="2"/>
+    <text x="230" y="144" text-anchor="middle" fill="#1f6a6a" font-weight="700">REAR  node  T₂  (ε_R radiates; albedo + IR in)</text>
+    <!-- radiate arrows up -->
+    <g stroke="#16324f" stroke-width="2">
+      <line x1="420" y1="60" x2="450" y2="25" marker-end="url(#a3)"/>
+    </g>
+    <defs><marker id="a3" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#16324f"/></marker></defs>
+    <text x="430" y="20" fill="#16324f" font-size="10">radiate to space</text>
+    <!-- conduction arrow -->
+    <line x1="410" y1="73" x2="410" y2="139" stroke="#9a4715" stroke-width="2" marker-end="url(#a3)"/>
+    <line x1="410" y1="139" x2="410" y2="73" stroke="#9a4715" stroke-width="2" marker-end="url(#a3)"/>
+    <text x="455" y="110" fill="#9a4715" font-size="10" text-anchor="middle">conduction</text>
+    <text x="230" y="178" text-anchor="middle" fill="#5a6b7a" font-size="10">Two coupled nodes per cell → two balance equations → a 2×2 system.</text>
+  </svg>
+  <figcaption><b>Figure 7.1.</b> The 2-node cell: a front node and a rear node, each balancing
+  absorbed heat, radiated heat and electrical power, linked by conduction through the substrate.</figcaption>
+  </div>
+
+  <h3>The two balance equations</h3>
+  <p>For each node we write “net heat = 0” at steady state. These are <code>f1</code> and
+  <code>f2</code> in <code>solve_thermal()</code>:</p>
+
+  <div class="keymath" style="text-align:left;font-size:12pt;">
+    f₁ = q<span class="sub">F</span> − ε<span class="sub">F</span>·A·σ·(T₁⁴ − T<span class="sub">sp</span>⁴) − P<span class="sub">elec</span> + C·A·(T₂ − T₁) = 0<br>
+    f₂ = q<span class="sub">R</span> − ε<span class="sub">R</span>·A·σ·(T₂⁴ − T<span class="sub">sp</span>⁴) − C·A·(T₂ − T₁) = 0
+    <span class="small">front balance (top) and rear balance (bottom); each is heat-in minus heat-out</span>
+  </div>
+
+  <table class="sym">
+    <tr><th>Symbol</th><th>Meaning</th><th>Unit</th></tr>
+    <tr><td>T₁, T₂</td><td>Front and rear temperatures (the two unknowns), in kelvin inside the solver.</td><td>K</td></tr>
+    <tr><td>q<span class="sub">F</span>, q<span class="sub">R</span></td><td>Absorbed flux on front (α<sub>F</sub>·A·p<sub>sun</sub>·tilt) and rear (albedo + IR).</td><td>W</td></tr>
+    <tr><td>ε<span class="sub">F</span>, ε<span class="sub">R</span></td><td>Infrared emissivity of each face — how readily it radiates heat away.</td><td>—</td></tr>
+    <tr><td>σ</td><td>Stefan–Boltzmann constant, 5.67×10⁻⁸ — the radiation law’s constant.</td><td>W/m²K⁴</td></tr>
+    <tr><td>A</td><td>Cell area.</td><td>m²</td></tr>
+    <tr><td>T<span class="sub">sp</span></td><td>Deep-space background temperature, 2.7 K (essentially cold).</td><td>K</td></tr>
+    <tr><td>C·A</td><td>Front↔rear conduction (C = conductivity/thickness, the substrate’s <code>c_cond</code>).</td><td>W/K</td></tr>
+    <tr><td>P<span class="sub">elec</span></td><td>Electrical power leaving the cell (positive) or dissipated in it (negative = heat in).</td><td>W</td></tr>
+  </table>
+
+  <div class="callout note"><span class="lab">The key nonlinearity</span>
+  Radiated heat goes as <strong>T⁴</strong> (the Stefan–Boltzmann law: a hot body radiates as the
+  fourth power of its absolute temperature). That T⁴ is what makes these equations
+  <em>nonlinear</em> — you cannot rearrange them to “T = …”. Hence, again, Newton’s method.</div>
+
+  <h3>From two equations to a 2×2 matrix — what a Jacobian is</h3>
+  <p>Newton’s method for <em>one</em> unknown says: new guess = old guess − f / f′, where f′ is
+  the slope. With <em>two</em> unknowns (T₁, T₂) and <em>two</em> equations (f₁, f₂), the single
+  slope becomes a <strong>2×2 table of slopes</strong> — the <strong>Jacobian</strong> J. Each
+  entry is “how much does this equation change if I nudge this unknown”:</p>
+
+  <div class="keymath" style="text-align:left;">
+    J = &nbsp; ⎡ ∂f₁/∂T₁ &nbsp; ∂f₁/∂T₂ ⎤ &nbsp;=&nbsp; ⎡ a &nbsp; b ⎤<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ⎣ ∂f₂/∂T₁ &nbsp; ∂f₂/∂T₂ ⎦ &nbsp;&nbsp;&nbsp;&nbsp; ⎣ c &nbsp; d ⎦
+    <span class="small">the 2×2 “vector” you asked about: the matrix of how each balance reacts to each temperature</span>
+  </div>
+
+  <p>Differentiating the balance equations gives the four entries exactly as coded:</p>
+  <table class="sym">
+    <tr><th>Entry</th><th>Formula (from the code)</th><th>What it captures</th></tr>
+    <tr><td>a = ∂f₁/∂T₁</td><td>−4·ε<sub>F</sub>·A·σ·T₁³ − C·A</td><td>front radiation slope + conduction</td></tr>
+    <tr><td>b = ∂f₁/∂T₂</td><td>+C·A</td><td>heat flowing in from the rear</td></tr>
+    <tr><td>c = ∂f₂/∂T₁</td><td>+C·A</td><td>heat flowing in from the front</td></tr>
+    <tr><td>d = ∂f₂/∂T₂</td><td>−4·ε<sub>R</sub>·A·σ·T₂³ − C·A</td><td>rear radiation slope + conduction</td></tr>
+  </table>
+
+  <p>Each Newton step solves J·(ΔT₁, ΔT₂) = −(f₁, f₂) for the temperature corrections. Because the
+  matrix is only 2×2, PowerPy doesn’t call a general matrix solver — it uses the closed-form
+  inverse (Cramer’s rule). With the determinant <code>det = a·d − b·c</code>:</p>
+
+  <div class="keymath">
+    ΔT₁ = −(d·f₁ − b·f₂)/det &nbsp;&nbsp;·&nbsp;&nbsp; ΔT₂ = −(−c·f₁ + a·f₂)/det
+    <span class="small">the exact two lines from solve_thermal — a hand-inverted 2×2, no library call</span>
+  </div>
+
+  <div class="callout analogy"><span class="lab">Analogy — two tangled dials</span>
+  Imagine a machine with two dials (T₁, T₂) and two gauges (f₁, f₂) that must both read zero. The
+  dials are <em>tangled</em>: turning the front dial moves <em>both</em> gauges, because the faces
+  share heat. The Jacobian is the little 2×2 “turning the front dial by 1 moves gauge-1 by a and
+  gauge-2 by c; turning the rear dial moves them by b and d” cheat-sheet. Knowing that cheat-sheet,
+  you can compute exactly how far to turn <em>both</em> dials in one move to drive both gauges
+  toward zero — that’s one Newton step.</div>
+
+  <div class="worked">
+    <span class="lab">Worked example — one sunlit cell, cold start</span>
+    <p>Take a single cell radiating to space under full sun. Start the solver at a deliberately
+    wrong −120 °C and watch the energy-balance residual |f₁|+|f₂| at each Newton step
+    (Figure 7.2 plots exactly this run):</p>
+    <ol>
+      <li>Step 1: huge imbalance — the guess is far off, the T⁴ term is wildly wrong.</li>
+      <li>Steps 2–6: the residual falls fast as Newton uses the 2×2 slope to leap toward balance.</li>
+      <li>Steps 7–10: it drops to ~10⁻¹⁴ W — machine-zero — and the loop stops.
+      <span class="chk">✓ converged to a front temperature of 3.59 °C for this case.</span></li>
+    </ol>
+    <p>The takeaway: even from an absurd start, the 2×2 Newton step finds the balance in about ten
+    iterations, because each step uses the true local slopes.</p>
+  </div>
+
+  <div class="worked">
+    <span class="lab">Worked example — one Newton step, every number shown</span>
+    <p>Let’s do a <em>single</em> step by hand for one cell, so the 2×2 is concrete. Take area
+    A = 0.0016 m² (a 4 cm tile), front absorptivity α<sub>F</sub> = 0.91, emissivities
+    ε<sub>F</sub> = ε<sub>R</sub> = 0.83, conduction C·A = 1000·0.0016 = <b>1.600 W/K</b>, full sun
+    p<sub>sun</sub> = 1361 W/m² and a healthy cell extracting P<sub>elec</sub> = 1.1 W. Absorbed
+    front flux q<sub>F</sub> = α<sub>F</sub>·A·p<sub>sun</sub> = 0.91·0.0016·1361 = <b>1.982 W</b>.
+    Start both nodes at 28 °C = 301.15 K.</p>
+    <ol>
+      <li><b>Residuals (how unbalanced are we?).</b> Plugging into f₁ and f₂:
+      f₁ = <b>+0.2623 W</b>, f₂ = <b>−0.6194 W</b>. Not zero — the guess is wrong.</li>
+      <li><b>Jacobian entries.</b> a = −4·ε<sub>F</sub>·A·σ·T₁³ − C·A = −1.6082;
+      d = −1.6082 (same form); b = c = +C·A = +1.6000. So
+      J = ⎡−1.6082, 1.6000; 1.6000, −1.6082⎤.</li>
+      <li><b>Determinant.</b> det = a·d − b·c = (−1.6082)(−1.6082) − (1.6)(1.6)
+      = 2.5863 − 2.5600 = <b>0.02639</b>. (Small, because the two rows are nearly equal — the faces
+      are tightly conduction-linked.)</li>
+      <li><b>Corrections (Cramer’s rule).</b>
+      ΔT₁ = −(d·f₁ − b·f₂)/det = −((−1.6082)(0.2623) − (1.6)(−0.6194))/0.02639 = <b>−21.57 K</b>;
+      ΔT₂ = −21.84 K. Both faces are too hot, so Newton cools them.</li>
+      <li><b>Update &amp; check.</b> New T₁ = 301.15 − 21.57 = 279.58 K (6.4 °C). One more step
+      brings the residual to ~0.018 W, a third to ~0.0003 W, settling at a front temperature of
+      <b>3.59 °C</b>. <span class="chk">✓ three steps from a 28 °C start.</span></li>
+    </ol>
+    <p>That is the entire thermal solver for one cell: build f, build the four Jacobian numbers,
+    invert the 2×2 by hand, step, repeat. The array version does this for every cell at once.</p>
+  </div>
+
+  <h3>Why “vector” — solving the whole array at once</h3>
+  <p>An array has thousands of cells. Crucially, in the simplest case the cells are
+  <em>independent</em>: each one’s two equations involve only its own T₁ and T₂. So the giant
+  system is <strong>block-diagonal</strong> — a stack of independent 2×2 blocks, one per cell.
+  PowerPy never loops over cells in Python; it stores T₁ and T₂ as numpy <em>arrays</em> and
+  computes <code>a, b, c, d</code>, the determinant, and the updates as
+  <strong>array operations</strong> — every cell’s 2×2 solved simultaneously in one vectorised
+  pass. This is the “vectorised 2×2” in the docstrings: the 2×2 is the per-cell physics; the
+  vectorisation is doing all of them at once for speed.</p>
+
+  <div class="callout note"><span class="lab">Where c_cond comes from</span>
+  The conduction coefficient C is the substrate’s <code>c_cond = conductivity / thickness</code>
+  (W/m²K) — derived once in <code>Substrate.c_cond</code>. A thinner, more conductive board ties
+  the two faces together more tightly; an infinitely insulating board (C → 0) would let front and
+  rear settle completely independently.</div>
+</section>
+
+<!-- ============================ PART 8 — DEEP DIVE 3 ============================ -->
+<section class="chapter">
+  <div class="part-no">08</div>
+  <div class="eyebrow">Deep dive ③ · heat that spreads</div>
+  <h2>Lateral conduction &amp; the graph Laplacian</h2>
+  <p class="lead">So far each cell was thermally an island. In reality the panel’s metal facesheet
+  carries heat <em>sideways</em> from a hot cell to its cooler neighbours. Turning that on is what
+  the <code>g_lat</code> switch does — and it changes the mathematics from “many independent 2×2
+  blocks” to “one big coupled system”, organised by a structure called the <strong>graph
+  Laplacian</strong>.</p>
+
+  <h3>The concept — heat leaks to the neighbours</h3>
+  <p>Picture the panel as a grid of tiles. Each tile sits on a continuous metal skin. If one tile
+  runs hot (say a failed cell dissipating power), heat doesn’t just radiate away — it also flows
+  through the skin into the four tiles touching it (up, down, left, right). Those warm up a little;
+  their neighbours warm a little less; and so on. The hot-spot’s <em>peak</em> drops because the
+  heat is shared, but a <em>patch</em> of neighbours gets warmer.</p>
+
+  <div class="callout analogy"><span class="lab">Analogy — a rumour through a crowd</span>
+  A failed cell is a person who suddenly shouts (a burst of heat). With no lateral conduction,
+  only that person hears it — a sharp, isolated spike. With lateral conduction, they tell their
+  four neighbours, who tell theirs: the “news” spreads outward, getting quieter with distance. The
+  total noise is the same, but it’s smeared over a neighbourhood instead of concentrated in one
+  spot. <code>g_lat</code> sets how loudly each person passes it on.</div>
+
+  <h3>How strong is the sideways flow? — the geometry</h3>
+  <p><code>lateral_conductance()</code> turns panel geometry into a single number
+  <strong>g<span class="sub">lat</span></strong> (W/K) for the heat shared between two adjacent
+  tiles:</p>
+  <div class="keymath">
+    g<span class="sub">lat</span> = k<span class="sub">facesheet</span> · (edge_width · thickness) / pitch
+    <span class="small">conductivity × cross-section of the heat path ÷ distance between tile centres</span>
+  </div>
+  <p>This is just the standard “conduction = conductivity × area ÷ length” applied to the thin
+  strip of facesheet bridging two tiles. A thicker, more conductive facesheet → larger
+  g<span class="sub">lat</span> → more spreading. (For a typical aluminium facesheet this comes
+  out around 0.045 W/K.) When g<span class="sub">lat</span> = 0 the cells are islands again, so
+  the lateral model is a strict <em>superset</em> of the independent model.</p>
+
+  <h3>Now the cells are coupled — enter the graph</h3>
+  <p>Once heat flows between neighbours, a tile’s balance equation contains its neighbours’
+  temperatures. The neat block-diagonal structure of Part 7 is gone; everything is tied together.
+  To organise “who is next to whom”, PowerPy builds the panel’s <strong>adjacency</strong>: from
+  the grid layout, <code>neighbours()</code> lists every touching pair (each tile linked to the
+  one on its right and the one below — that covers all 4-neighbour bonds without duplication).</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, sans-serif" font-size="11">
+    <!-- 3x3 grid of nodes -->
+    <g>
+      <!-- edges -->
+      <g stroke="#c05621" stroke-width="2">
+        <line x1="80" y1="40" x2="180" y2="40"/><line x1="180" y1="40" x2="280" y2="40"/>
+        <line x1="80" y1="110" x2="180" y2="110"/><line x1="180" y1="110" x2="280" y2="110"/>
+        <line x1="80" y1="180" x2="180" y2="180"/><line x1="180" y1="180" x2="280" y2="180"/>
+        <line x1="80" y1="40" x2="80" y2="110"/><line x1="80" y1="110" x2="80" y2="180"/>
+        <line x1="180" y1="40" x2="180" y2="110"/><line x1="180" y1="110" x2="180" y2="180"/>
+        <line x1="280" y1="40" x2="280" y2="110"/><line x1="280" y1="110" x2="280" y2="180"/>
+      </g>
+      <!-- nodes -->
+      <g fill="#16324f">
+        <circle cx="80" cy="40" r="13"/><circle cx="180" cy="40" r="13"/><circle cx="280" cy="40" r="13"/>
+        <circle cx="80" cy="110" r="13"/><circle cx="180" cy="110" r="16" fill="#9a4715"/><circle cx="280" cy="110" r="13"/>
+        <circle cx="80" cy="180" r="13"/><circle cx="180" cy="180" r="13"/><circle cx="280" cy="180" r="13"/>
+      </g>
+      <text x="180" y="114" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">hot</text>
+    </g>
+    <text x="180" y="200" text-anchor="middle" fill="#5a6b7a" font-size="10">tiles = nodes, shared edges = heat bonds</text>
+    <!-- Laplacian explanation -->
+    <text x="338" y="44" fill="#16324f" font-weight="700" font-size="11">The graph Laplacian  L = D − A</text>
+    <text x="338" y="68" fill="#1a2733" font-size="10">D = degree (neighbours per tile)</text>
+    <text x="338" y="86" fill="#1a2733" font-size="10">A = adjacency (touching = 1)</text>
+    <text x="338" y="112" fill="#9a4715" font-size="10">(L·T)ᵢ = Σ (Tᵢ − T_neighbour)</text>
+    <text x="338" y="132" fill="#5a6b7a" font-size="9.5">= net heat a tile loses sideways</text>
+    <text x="338" y="148" fill="#5a6b7a" font-size="9.5">  to its neighbours.</text>
+    <text x="338" y="172" fill="#1a2733" font-size="10">Lateral flux = g_lat · (L · T)</text>
+  </svg>
+  <figcaption><b>Figure 8.1.</b> The panel as a graph. The Laplacian L = D − A converts the list
+  of “who touches whom” into the net sideways heat each tile exchanges with its neighbours.</figcaption>
+  </div>
+
+  <h3>What the graph Laplacian <em>does</em></h3>
+  <p>The <strong>graph Laplacian</strong> L is a matrix built from the adjacency: L = D − A, where
+  A marks which tiles touch and D counts each tile’s neighbours on the diagonal. Its magic is what
+  it does when multiplied by the temperature vector T: the i-th entry of L·T equals the sum over
+  neighbours of (Tᵢ − T<sub>neighbour</sub>) — precisely “how much hotter am I than the tiles
+  around me”. Multiply by g<span class="sub">lat</span> and you have each tile’s net sideways heat
+  loss. So the whole neighbour-by-neighbour bookkeeping collapses into a single matrix–vector
+  product <code>g_lat · L·T</code> — no Python loop over pairs.</p>
+
+  <div class="worked">
+    <span class="lab">Worked example — the Laplacian on three tiles in a row</span>
+    <p>Take the simplest panel: three tiles in a line, 0–1–2 (so 0 touches 1, and 1 touches 2).</p>
+    <ol>
+      <li><b>Adjacency A</b> (1 where tiles touch): row 0 = [0,1,0], row 1 = [1,0,1], row 2 = [0,1,0].</li>
+      <li><b>Degrees D</b> (neighbours each): tile 0 has 1, tile 1 has 2, tile 2 has 1 → diagonal [1,2,1].</li>
+      <li><b>Laplacian L = D − A</b> = ⎡1,−1,0; −1,2,−1; 0,−1,1⎤.</li>
+      <li><b>Apply it to a temperature vector.</b> Suppose tile 0 is hot: T = [100, 50, 50] °C.
+      Then L·T = [1·100−1·50, −100+2·50−50, −50+50] = <b>[+50, −50, 0]</b>.</li>
+      <li><b>Read the meaning.</b> Tile 0’s entry is +50 → it is hotter than its neighbour, so it
+      <em>loses</em> heat sideways. Tile 1’s entry is −50 → it <em>gains</em>. Tile 2’s entry is 0
+      → it’s in balance with its neighbour. Multiply the whole thing by g<sub>lat</sub> and you have
+      the exact sideways watts each tile exchanges. <span class="chk">✓ one matrix multiply replaces a
+      pair-by-pair loop.</span></li>
+    </ol>
+  </div>
+
+  <div class="callout note"><span class="lab">In the code</span>
+  <code>solve_thermal()</code> builds the adjacency and Laplacian <em>once</em> (it never changes),
+  as a <em>sparse</em> matrix (mostly zeros — a tile touches only ~4 of thousands). Each Newton
+  step it assembles a (2N × 2N) Jacobian = a constant part (conduction + g<sub>lat</sub>·L) plus
+  the only changing piece, the radiative diagonal −4εAσT³, and solves it with a sparse linear
+  solver. Same Newton idea as Part 7, just one big coupled system instead of N tiny ones.</p></div>
+
+  <h3>The payoff — and the worst-case it reveals</h3>
+  <div class="figure">
+    <img src="fig_fw_lateral.png" alt="Lateral conduction heat maps">
+    <figcaption><b>Figure 8.2.</b> One failed cell at the centre of a 9×9 panel, solved by the real
+    PowerPy solver. <b>Left:</b> with g<sub>lat</sub> = 0 the failed cell hits a ferocious 255 °C
+    while neighbours stay cold. <b>Right:</b> with g<sub>lat</sub> = 0.06 W/K the heat spreads — the
+    peak collapses to 47 °C but a warm patch appears. Same heat, very different peak.</figcaption>
+  </div>
+
+  <p>Lateral conduction is not just realism for its own sake — it changes <em>which failures are
+  dangerous</em>. Because neighbouring hot cells reinforce one another, the worst case is no longer
+  a single failed cell but a <strong>cluster</strong> of adjacent failures whose heat piles up
+  faster than it can spread away. That insight drives the worst-case search in Part 12.</p>
+
+  <div class="callout pitfall"><span class="lab">A subtlety</span>
+  Whether spreading <em>helps</em> depends on the question. For a lone failure it dramatically
+  lowers the peak (good). But it also means a tight group of failures can create a broad, stubborn
+  hot region that a single-cell analysis would completely miss — which is exactly why PowerPy
+  models it.</div>
+</section>
+
+<!-- ============================ PART 9 ============================ -->
+<section class="chapter">
+  <div class="part-no">09</div>
+  <div class="eyebrow">The physics</div>
+  <h2>Electro-thermal coupling — the chicken-and-egg loop</h2>
+  <p class="lead">The electrical model needs the temperature; the thermal model needs the
+  electrical power. Neither can go first. This part is how PowerPy breaks the circular dependency.</p>
+
+  <h3>The circularity</h3>
+  <p>From Part 4, a cell’s I–V curve — and therefore the power it makes or dissipates — depends on
+  its temperature. From Part 7, a cell’s temperature depends on the electrical power leaving it
+  (P<span class="sub">elec</span> appears in the front balance). So:</p>
+  <ul class="tight">
+    <li>To find the power, I need the temperature.</li>
+    <li>To find the temperature, I need the power.</li>
+  </ul>
+
+  <div class="callout analogy"><span class="lab">Analogy — adjusting two shower taps</span>
+  It’s like finding the comfortable setting of a shower with separate, interacting hot and cold
+  taps. You can’t compute the perfect setting in one shot; you nudge one, feel the result, nudge
+  the other, and converge. Crucially, you make <em>small</em> nudges — yank a tap and you
+  overshoot into scalding then freezing forever. PowerPy makes small, damped nudges too.</div>
+
+  <h3>The damped fixed-point loop</h3>
+  <p><code>couple()</code> hunts for the self-consistent (temperature, power) pair by iterating:</p>
+  <ol class="tight">
+    <li>Guess a temperature field T.</li>
+    <li>Ask <code>power_fn(T)</code> for the per-cell electrical power at that T (in production this
+    builds the circuit, runs it, reads back V·I per cell).</li>
+    <li>Run the thermal solve (Part 7) with that power to get a new temperature T<sub>new</sub>.</li>
+    <li>Step only <em>part way</em> toward it: T ← T + ω·(T<sub>new</sub> − T), with ω ≈ 0.5.</li>
+    <li>Repeat until the step is tiny (converged).</li>
+  </ol>
+
+  <div class="callout note"><span class="lab">Why the ω (under-relaxation)</span>
+  ω is the <strong>damping factor</strong> in (0, 1]. Taking the full step (ω = 1) can oscillate or
+  diverge when the two physics push hard against each other; halving each step (ω = 0.5) trades a
+  few extra iterations for reliable convergence. It is the mathematical version of “small nudges.”</div>
+
+  <p>The loop is written so the electrical solve is <em>injected</em> as <code>power_fn</code>.
+  That keeps the coupling logic independent of <em>how</em> the power is obtained — a synthetic
+  function for tests, or the real ngspice read-back in production (Part 14). The loop itself is
+  pure, standalone, and tested.</p>
+
+  <div class="worked">
+    <span class="lab">Worked example — why damping converges and full steps oscillate</span>
+    <p>Imagine the true self-consistent temperature is 70 °C, and suppose (for illustration) that
+    each thermal solve “overshoots”: if you feed it the power at temperature T, it returns a new
+    temperature that lands on the far side of 70 °C by about the same distance.</p>
+    <ol>
+      <li><b>Full step (ω = 1).</b> Start at 60 → solve returns 80 → returns 60 → returns 80…
+      it <em>oscillates</em> forever around 70 and never settles.</li>
+      <li><b>Damped step (ω = 0.5).</b> Start at 60; the solve suggests 80, but you move only
+      halfway: 60 + 0.5·(80−60) = 70 region. Next round suggests ~72, you move half: ~71. Then ~70.5,
+      ~70.2… each move is smaller and the sequence <em>closes in</em> on 70.</li>
+      <li><b>Stop.</b> When a whole round moves the temperature by less than the tolerance (1e-3 °C),
+      the loop declares convergence and does one final clean thermal solve at that power.
+      <span class="chk">✓ damping trades a few extra rounds for guaranteed settling.</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================ PART 10 ============================ -->
+<section class="chapter">
+  <div class="part-no">10</div>
+  <div class="eyebrow">The physics</div>
+  <h2>Transient thermal — watching a hot-spot climb in time</h2>
+  <p class="lead">The steady solver finds where temperature <em>ends up</em>. The transient solver
+  shows the <em>journey</em>: how fast a hot-spot climbs after a failure, or how the panel cools
+  entering eclipse.</p>
+
+  <h3>Adding thermal mass</h3>
+  <p>Temperature doesn’t jump instantly because materials store heat. Add a <strong>heat
+  capacity</strong> C (J/K) to each node and the steady balance becomes a differential equation:</p>
+  <div class="keymath">
+    C · dT/dt = (heat in) − (heat out) = f(T, t)
+    <span class="small">at steady state dT/dt → 0, recovering f = 0 — the Part 7 problem</span>
+  </div>
+  <p>So the transient model <em>contains</em> the steady model as its long-time limit. That is a
+  built-in sanity check: let time run long enough and the transient answer must equal the steady
+  answer (the code has a parity test pinning exactly this).</p>
+
+  <div class="callout analogy"><span class="lab">Analogy — a bathtub filling</span>
+  Heat capacity is the <em>size of the bathtub</em>. Heat-in is the tap, heat-out is the drain.
+  The water level (temperature) rises until inflow equals outflow. A bigger tub (more mass) fills
+  more slowly — which is why a chunky aluminium-backed cell heats up gradually rather than
+  snapping to its final temperature.</div>
+
+  <h3>Why backward (implicit) Euler</h3>
+  <p>To march forward in time you must turn dT/dt into steps of size dt. The naive “forward”
+  way (estimate the rate now, step) is <em>unstable</em> for this kind of stiff radiative system —
+  small time-steps blow up. PowerPy uses <strong>backward (implicit) Euler</strong>, which is
+  <em>unconditionally stable</em>: you can take large steps without blow-up. The price is that each
+  step must <em>solve</em> a nonlinear equation (the new temperature appears on both sides) — and
+  that is, once again, a <strong>2×2 Newton solve per cell</strong>, with the same Jacobian as
+  Part 7 plus a <code>C/dt</code> term on the diagonal.</p>
+
+  <div class="figure">
+    <img src="fig_fw_transient.png" alt="Transient hot-spot climb">
+    <figcaption><b>Figure 10.1.</b> A real transient run: a healthy cell sits near 60 °C, then
+    fails (goes reverse-biased) and its front temperature climbs over a few minutes toward the
+    same 255 °C steady value seen in Figure 8.2 (left). The curve <em>shape</em> — how fast it gets
+    dangerous — is what only the transient solver can tell you.</figcaption>
+  </div>
+
+  <div class="worked">
+    <span class="lab">Worked example — how slowly does a cell heat up?</span>
+    <p>The “speed” of the transient is the <strong>thermal time constant</strong> τ = C / G, where
+    C is the node’s heat capacity and G is its effective heat-loss conductance (W/K). It is the time
+    to cover ~63 % of the gap to the final temperature.</p>
+    <ol>
+      <li><b>Heat capacity.</b> An aluminium-backed cell, ρ ≈ 2700 kg/m³, cₚ ≈ 900 J/kgK, 0.8 mm
+      thick, area 0.0016 m²: C = ρ·cₚ·thickness·A = 2700·900·0.0008·0.0016 ≈ <b>3.1 J/K</b>.</li>
+      <li><b>Loss conductance.</b> Near 300 K the radiative loss slope is ~4εAσT³ ≈
+      4·0.83·0.0016·5.67×10⁻⁸·300³ ≈ <b>0.008 W/K</b> per face.</li>
+      <li><b>Time constant.</b> τ ≈ C/G ≈ 3.1/0.016 ≈ <b>190 s</b> — a few minutes. That matches
+      Figure 10.1, where the failed cell takes minutes (not seconds) to climb to its steady peak.
+      <span class="chk">✓ thermal mass sets the pace; radiation sets the destination.</span></li>
+    </ol>
+  </div>
+
+  <p>This is why the “2×2” keeps reappearing: it is the per-cell, two-node physics, and it shows up
+  in the steady solve, inside each lateral Newton step, and inside each transient time-step.</p>
+</section>
+
+<!-- ============================ PART 11 ============================ -->
+<section class="chapter">
+  <div class="part-no">11</div>
+  <div class="eyebrow">What it does with the physics</div>
+  <h2>Bypass diodes &amp; hot-spots — the failure physics</h2>
+  <p class="lead">Now we use the machinery. This part explains why a failed cell gets hot, and how a
+  bypass diode <em>clamps</em> that heat — turning “how close must the diodes be?” into a number.</p>
+
+  <h3>Why a failed cell becomes a heater</h3>
+  <p>Recall the weakest-link rule (Part 5): cells in series share one current. If one cell fails or
+  is shaded, it can no longer pass the string’s current. But the other healthy cells in the string
+  are still illuminated and still want to push current. With nowhere else to go, that current is
+  forced <em>backwards</em> through the failed cell, driving it into <strong>reverse bias</strong>
+  — a large negative voltage. Power is voltage × current, and a reverse-biased cell <em>absorbs</em>
+  this power as heat: P = V·I with V negative means heat <em>into</em> the cell. That is the
+  hot-spot, and it feeds the thermal solver as a negative P<span class="sub">elec</span>.</p>
+
+  <h3>The bypass diode as a relief valve</h3>
+  <p>A <strong>bypass diode</strong> is wired across a group of series cells. While they generate,
+  it is reverse-biased and off. The moment a cell in the group blocks the current, the rest of the
+  string drives the group into reverse and the diode <em>turns on</em>, carrying the current at its
+  small forward drop and <strong>clamping</strong> the voltage. That caps how negative the failed
+  cell’s voltage can swing — and therefore caps its reverse power, and therefore its temperature.</p>
+
+  <div class="keymath">
+    |V<span class="sub">failed</span>| ≤ V<span class="sub">forward</span> + (cells_per_diode − 1) · V<span class="sub">cell</span>
+    <span class="small">the clamp: a failed cell can’t be pushed more negative than the diode drop plus its group-mates’ forward drops</span>
+  </div>
+
+  <p>With <em>no</em> diode (or one diode spanning a whole long string), the failed cell sees nearly
+  the entire live stack — perhaps −(N−1)·V<span class="sub">cell</span> ≈ −20 V — and dissipates a
+  large reverse power. The fewer cells a single diode protects, the smaller that worst-case reverse
+  voltage, and the cooler the hot-spot. <code>spacing_scan()</code> tabulates this trade directly.</p>
+
+  <div class="figure">
+    <img src="fig_fw_diode.png" alt="Bypass diode spacing scan">
+    <figcaption><b>Figure 11.1.</b> Reverse power dissipated in a failed cell versus how many cells
+    each bypass diode protects, from PowerPy’s <code>spacing_scan()</code> on a 22-cell string. With
+    no protection the failed cell dumps ~60 W; protect fewer cells per diode and the worst-case
+    power drops sharply. This is the quantitative answer to “what diode spacing is safe?”</figcaption>
+  </div>
+
+  <div class="callout analogy"><span class="lab">Analogy — pressure-relief on a pipe</span>
+  The healthy cells are a pump that keeps pushing flow. A blockage (failed cell) makes pressure
+  spike right at the blockage. A bypass diode is a <em>relief valve</em> just upstream: it opens and
+  routes the flow around the blockage, capping the pressure (voltage) the blocked section ever sees.
+  More relief valves, spaced closer, mean any single blockage sees less pressure — and runs cooler.</div>
+
+  <div class="worked">
+    <span class="lab">Worked example — the clamp in numbers</span>
+    <p>String of 22 cells, V<span class="sub">cell</span> ≈ 2.4 V, fault current I ≈ 1.18 A, silicon
+    bypass diode V<span class="sub">forward</span> = 0.7 V.</p>
+    <ol>
+      <li><b>Unprotected.</b> The failed cell faces the other 21 live cells:
+      |V| = 21·2.4 = <b>50.4 V</b>. Reverse power = 50.4·1.18 = <b>59.5 W</b> dumped into one cell —
+      catastrophic (this is the orange bar in Figure 11.1).</li>
+      <li><b>One diode per 4 cells.</b> The clamp caps it at
+      |V| = V<span class="sub">forward</span> + (4−1)·V<span class="sub">cell</span> = 0.7 + 3·2.4
+      = <b>7.9 V</b>. Reverse power = 7.9·1.18 = <b>9.3 W</b>.</li>
+      <li><b>The win.</b> Tighter spacing cut the worst-case heat from 59.5 W to 9.3 W — a factor of
+      ~6 — which is the difference between melting the panel and surviving.
+      <span class="chk">✓ “how close must the diodes be?” is now a number you can design to.</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============================ PART 12 ============================ -->
+<section class="chapter">
+  <div class="part-no">12</div>
+  <div class="eyebrow">What it does with the physics</div>
+  <h2>Failure analysis — Monte-Carlo &amp; worst-case search</h2>
+  <p class="lead">A panel has many cells; failures can land anywhere, in any combination. PowerPy
+  offers three complementary ways to ask “how bad can it get?”, all built on the lateral thermal
+  solver of Part 8.</p>
+
+  <h3>The common engine</h3>
+  <p>Every study works the same way underneath: take a <em>pattern</em> (a set of failed cell
+  indices), build a per-tile power map where healthy cells extract ~1.1 W and failed cells dissipate
+  a reverse power (~−9.6 W), solve the panel thermally with lateral conduction, and record the
+  <strong>peak temperature</strong> and how many tiles exceed the melt limit. The studies differ
+  only in <em>which patterns</em> they try.</p>
+
+  <h4>① Position sweep</h4>
+  <p>Fail each single cell in turn — “which one lonely failure is worst?” Cheap, and a good first
+  map of the panel’s sensitive spots.</p>
+
+  <h4>② Worst-case greedy search</h4>
+  <p>Because lateral conduction makes adjacent failures reinforce each other (Part 8), the truly
+  dangerous case is a <em>cluster</em>. <code>worst_case_search()</code> hunts for it greedily:
+  start with no failures; at each step, try adding each remaining cell and keep whichever single
+  addition pushes the peak temperature highest; repeat up to a budget of failures. It deliberately
+  builds the nastiest cluster — the one random sampling usually misses.</p>
+
+  <div class="callout analogy"><span class="lab">Analogy — building the worst possible bonfire</span>
+  You have a budget of logs (failures) and want the hottest fire. Greedy search places one log,
+  then asks “where does the <em>next</em> log make the fire hottest?” — always next to the existing
+  flames, never scattered. Step by step it assembles the worst cluster, because heat from adjacent
+  failures stacks up.</div>
+
+  <h4>③ Auto-stopping Monte-Carlo</h4>
+  <p>For a realistic <em>average</em> picture, <code>auto_monte_carlo()</code> draws random failure
+  patterns (each cell fails with some probability) and tracks the mean peak temperature. It is
+  <em>self-stopping</em>: after each batch it computes the <strong>standard error</strong> of the
+  mean and quits once the estimate is tight enough — rather than running a fixed, arbitrary number
+  of trials.</p>
+
+  <div class="callout note"><span class="lab">Why standard error, not a fixed count</span>
+  The uncertainty in an average shrinks like 1/√N — so the first hundred samples buy you a lot, and
+  the ten-thousandth buys almost nothing. Stopping when the standard error falls below a target
+  (e.g. 2 °C) spends exactly as much computation as the required confidence needs, no more. The runs
+  are independent, so they parallelise across threads (numpy releases the GIL during the solve).</div>
+
+  <div class="worked">
+    <span class="lab">Worked example — when does the sweep stop?</span>
+    <p>The standard error of the mean is SE = s/√N, where s is the spread (standard deviation) of
+    the peak temperatures and N is the number of runs.</p>
+    <ol>
+      <li>Suppose the peaks have spread s ≈ 15 °C. After N = 200 runs:
+      SE = 15/√200 = 15/14.1 = <b>1.06 °C</b>. If the target is 2 °C, we have <em>already</em>
+      stopped — 200 runs was enough.</li>
+      <li>Want the estimate twice as tight (SE = 0.53 °C)? Because SE ∝ 1/√N, halving it needs
+      <b>four times</b> the runs — 800. Tightening confidence gets expensive fast.</li>
+      <li>This is why a fixed “run 10 000 trials” is wasteful: you might hit the target at 200, or
+      need 800, depending on the spread. <span class="chk">✓ the auto-stop measures, then decides.</span></li>
+    </ol>
+  </div>
+
+  <div class="callout note"><span class="lab">Position vs. worst-case vs. Monte-Carlo — which to use</span>
+  Use the <em>position sweep</em> to map sensitive spots, the <em>worst-case search</em> to certify
+  the absolute worst cluster against the melt limit (the safety question), and <em>Monte-Carlo</em>
+  to estimate the typical/expected behaviour and the probability of exceeding the limit (the
+  reliability question). They answer different questions and are meant to be used together.</div>
+</section>
+
+<!-- ============================ PART 13 ============================ -->
+<section class="chapter">
+  <div class="part-no">13</div>
+  <div class="eyebrow">What it does with the physics</div>
+  <h2>Reporting &amp; outputs — figures, PDF, HTML, CLI</h2>
+  <p class="lead">A number nobody reads helps no one. The right edge of Figure 1.1 turns results into
+  documents an engineer can review and sign.</p>
+
+  <h3>From results to figures to PDF</h3>
+  <p>The render layer is a small pipeline: results → matplotlib figures → Jinja2 LaTeX templates →
+  <code>pdflatex</code> (two passes) → a formatted PDF in the house style. The figure builders are
+  <em>pure</em> — they take data and return a PNG path, with no live plotting state — so they are
+  easy to test and reuse. Templates use LaTeX-safe delimiters so the same engine emits the
+  electrical report, the thermal report, and the Monte-Carlo report, each pulling its sections from
+  the workbook’s structure sheet.</p>
+
+  <h3>Three report flavours</h3>
+  <ul class="tight">
+    <li><strong>Electrical report</strong> — I–V/P–V curves, section grids, the array’s operating
+    points (the build outputs you can see in <code>build_report/</code>).</li>
+    <li><strong>Thermal report</strong> — per-phase equilibrium temperatures, the panel heat-map,
+    and the bypass-diode hot-spot margin (<code>build_thermal/</code>).</li>
+    <li><strong>Monte-Carlo report</strong> — the peak-temperature histogram, the worst-case
+    cluster, and the over-limit probability (<code>build_montecarlo/</code>).</li>
+  </ul>
+
+  <h3>How results are represented</h3>
+  <p>Between the solvers and the reports sits a small results layer. A single solve returns typed
+  result objects (per-level curves and operating points; for the panel, grid-shaped temperature
+  arrays with convergence diagnostics). For studies that produce <em>many</em> runs, a tidy
+  <em>long-format</em> table (one row per run-cell) can be built and saved to CSV, Parquet or HDF5,
+  with per-run aggregates (total power, max temperature, hot-spot count). Keeping results as plain
+  arrays/tables — not live plotting objects — is what makes them easy to test, diff and re-read.</p>
+
+  <h3>HTML + JSON for reproducibility</h3>
+  <p>Alongside the PDF, the reporting layer can emit an HTML heat-map and a JSON data file — one row
+  per tile with its position, name, front/rear temperature and over-limit flag, plus a summary
+  (peak, margin, grid, verdict, convergence). The JSON is the reproducible source of truth a later
+  run, or a different tool, can re-read.</p>
+
+  <h3>The command line</h3>
+  <p>For everyday use there is a small CLI (<code>powerpy</code>, also runnable as
+  <span class="kbd">python run.py</span> with no install):</p>
+  <ul class="tight">
+    <li><span class="kbd">run</span> — solve one panel layout (optionally with failures and lateral
+    conduction); print the peak temperature with a PASS/FAIL verdict; optionally write HTML/JSON.</li>
+    <li><span class="kbd">worst</span> — run the greedy worst-case search to a failure budget.</li>
+    <li><span class="kbd">sweep</span> — run the auto-stopping Monte-Carlo.</li>
+  </ul>
+  <p>All three share common options for substrate, fluxes, limits and worker threads.</p>
+</section>
+
+<!-- ============================ PART 14 ============================ -->
+<section class="chapter">
+  <div class="part-no">14</div>
+  <div class="eyebrow">What it does with the physics</div>
+  <h2>The ngspice story — vendored SPICE &amp; the analytic fallback</h2>
+  <p class="lead">PowerPy can, in principle, run a <em>real</em> circuit simulator for the
+  electrical solve. Understanding when it does — and why it usually doesn’t need to — explains a
+  lot about the framework’s structure.</p>
+
+  <h3>Two electrical engines</h3>
+  <ul class="tight">
+    <li><strong>Analytic (default).</strong> The single-diode model of Part 4 produces every I–V
+    curve directly from the four datasheet points. It needs nothing but numpy, runs everywhere, and
+    is what all 92 tests exercise. For the report pipeline this is entirely sufficient.</li>
+    <li><strong>ngspice (optional).</strong> For a true SPICE circuit solve, PowerPy carries a
+    <em>vendored</em> copy of the ngspice bindings in-tree (because the office forbids
+    <code>pip install</code>). The model builds a netlist — one two-port sub-circuit per cell — runs
+    it, and reads back each cell’s V and I to form P<span class="sub">elec</span> for the coupling
+    loop of Part 9.</li>
+  </ul>
+
+  <div class="callout note"><span class="lab">Current state (honest status)</span>
+  The analytic path is production-ready. The live ngspice path is wired and unit-tested with a mock
+  runner, but is <em>not</em> currently runnable end-to-end: the vendored ngspice package is
+  incomplete (it is missing its <code>psp</code> support sub-package and the native ngspice DLL). The
+  cell model that builds the per-cell sub-circuit is otherwise repaired and importable, and produces
+  a valid two-port sub-circuit. So closing the live-SPICE loop is gated on supplying those two
+  binary artifacts — not on the Python code.</div>
+
+  <div class="callout analogy"><span class="lab">Analogy — a calculator with a “show full working” mode</span>
+  The analytic model is a fast calculator that gives the right answer directly. ngspice is a
+  “show every intermediate step” mode that simulates the actual circuit. For the questions PowerPy
+  asks, the fast calculator is enough; the detailed simulator is there for when you want to validate
+  the calculator against full circuit physics — once its engine is fully installed.</div>
+
+  <h3>Why the design tolerates this gracefully</h3>
+  <p>Because the electrical solve is injected (Part 9) and the cell model falls back to analytic
+  whenever ngspice is unavailable, the missing binaries never break the framework — they only
+  disable an optional validation path. That is a deliberate robustness choice: the tool that <em>must
+  always run</em> depends only on pure Python.</p>
+</section>
+
+<!-- ============================ APPENDIX A ============================ -->
+<section class="chapter">
+  <div class="part-no">A</div>
+  <div class="eyebrow">Appendix · the numerics behind the deep dives</div>
+  <h2>Numerical methods primer — Newton from one unknown to many</h2>
+  <p class="lead">The single-diode solve (Part 4), the 2-node thermal solve (Part 7), the lateral
+  solve (Part 8) and every transient step (Part 10) are all the <em>same</em> idea — Newton’s
+  method — at different sizes. This appendix builds that idea from one unknown up to many, so the
+  recurring “2×2” stops looking like a coincidence.</p>
+
+  <h3>Rung 1 — one unknown, one equation</h3>
+  <p>Suppose you must solve f(x) = 0 but cannot rearrange it (exactly our diode and thermal cases).
+  Newton’s recipe: stand at a guess x, look at how wrong you are (f(x)), and look at the
+  <em>slope</em> f′(x) — the local steepness. The slope tells you which way and how far to step:</p>
+  <div class="keymath">
+    x<span class="sub">new</span> = x − f(x) / f′(x)
+    <span class="small">one unknown: divide the error by the slope</span>
+  </div>
+  <p>Geometrically you slide down the tangent line to where it crosses zero, and repeat. Near the
+  answer the error <em>squares</em> each step (0.1 → 0.01 → 0.0001…) — <strong>quadratic
+  convergence</strong> — which is why a handful of steps suffices.</p>
+
+  <div class="callout analogy"><span class="lab">Analogy — finding the bottom of a valley in fog</span>
+  You can’t see the valley floor (the solution), but you can feel the slope under your feet. Newton
+  says: from the steepness, estimate where the ground levels out, walk straight there, re-check the
+  slope, repeat. Each look-and-leap gets you dramatically closer.</div>
+
+  <h3>Rung 2 — two unknowns, two equations</h3>
+  <p>Now you have two knobs (x, y) and two gauges that must both read zero: f₁(x,y) = 0 and
+  f₂(x,y) = 0. The catch is that the knobs are <em>coupled</em> — turning x moves <em>both</em>
+  gauges. A single slope can’t capture that; you need <strong>four</strong> slopes — how each gauge
+  responds to each knob. Arrange them in a 2×2 table, the <strong>Jacobian</strong>:</p>
+  <div class="keymath" style="text-align:left;">
+    J = ⎡ ∂f₁/∂x &nbsp; ∂f₁/∂y ⎤ ,&nbsp;&nbsp; and the step solves &nbsp; J · ⎡Δx⎤ = −⎡f₁⎤<br>
+    &nbsp;&nbsp;&nbsp;&nbsp; ⎣ ∂f₂/∂x &nbsp; ∂f₂/∂y ⎦ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ⎣Δy⎦ &nbsp;&nbsp; ⎣f₂⎦
+    <span class="small">two coupled unknowns ⇒ a 2×2 system to solve for the two corrections</span>
+  </div>
+  <p>Instead of “divide by the slope”, you now “multiply by the inverse of the slope-matrix.” For a
+  2×2 that inverse is a one-liner using the determinant det = ad − bc, which is exactly the Cramer’s
+  rule PowerPy hard-codes (Part 7). <strong>This is precisely why the framework keeps using a 2×2
+  vector: each cell has two coupled temperature unknowns, so each Newton step is a 2×2 solve.</strong></p>
+
+  <h3>Rung 3 — many unknowns: block-diagonal vs. coupled</h3>
+  <p>An array has N cells, hence 2N unknowns and a 2N×2N Jacobian. Two situations:</p>
+  <ul class="tight">
+    <li><strong>Cells independent (g<sub>lat</sub> = 0).</strong> A cell’s two equations only touch
+    its own two temperatures, so the giant Jacobian is <em>block-diagonal</em> — N separate 2×2
+    blocks with nothing connecting them. You never form the big matrix; you solve all N tiny 2×2s in
+    one vectorised array operation (Part 7).</li>
+    <li><strong>Cells coupled (g<sub>lat</sub> &gt; 0).</strong> Lateral conduction links neighbours,
+    so off-diagonal terms appear. Now it really is one 2N×2N system — but a <em>sparse</em> one
+    (each tile touches ~4 of thousands), assembled with the graph Laplacian and solved with a sparse
+    linear solver (Part 8).</li>
+  </ul>
+
+  <div class="callout note"><span class="lab">The unifying picture</span>
+  Diode I–V: 1 unknown per voltage point → scalar Newton. One cell’s temperature: 2 unknowns →
+  2×2 Newton. A coupled panel: 2N unknowns → sparse Newton. Same algorithm, three sizes. Learn it
+  once and the whole solver stack reads the same way.</div>
+
+  <h3>Why Newton and not just “try values until it works”</h3>
+  <p>You could sweep guesses blindly, but that is hopeless in many dimensions and slow even in one.
+  Newton uses <em>gradient information</em> — the slope/Jacobian — to head straight for the root, so
+  it converges in single-digit iterations instead of thousands of blind trials. The cost is needing
+  the derivatives; for these physics they are simple closed forms (the −4εAσT³ radiative slope, the
+  ±C·A conduction terms), so Newton is both fast and exact.</p>
+</section>
+
+<!-- ============================ APPENDIX B ============================ -->
+<section class="chapter">
+  <div class="part-no">B</div>
+  <div class="eyebrow">Appendix · seeing it all work together</div>
+  <h2>A full analysis, end to end</h2>
+  <p class="lead">To tie the parts together, here is the path a single question takes through
+  PowerPy: <em>“On a 9×9 panel, what is the worst hot-spot if up to five cells fail, and does it
+  stay below the melt limit?”</em> Every step below maps to a part of this handbook.</p>
+
+  <h3>Step by step</h3>
+  <ol class="tight">
+    <li><strong>Describe the array (Part 3).</strong> A layout file gives the 9×9 grid, the cell
+    type, the substrate (which fixes c_cond and the optical α/ε), and the tile pitch. The loaders
+    validate it into typed objects.</li>
+    <li><strong>Set the environment (Part 6).</strong> Choose the operating phase — full sun
+    (1361 W/m²), the relevant temperature and radiation dose, plus the loss factors.</li>
+    <li><strong>Establish the healthy baseline (Parts 4–5).</strong> Each cell’s I–V curve is fit
+    from the datasheet points corrected to this environment; cells combine up the string/section
+    tree to the panel curve. Healthy cells extract ≈ 1.1 W each.</li>
+    <li><strong>Model a failure (Part 11).</strong> A failed cell is driven into reverse bias; its
+    bypass-diode clamp sets how negative its voltage can go, giving a reverse power ≈ −9.6 W that
+    enters the thermal solver as heat.</li>
+    <li><strong>Solve the panel thermally with spreading (Parts 7–8).</strong> For any failure
+    pattern, build the per-tile power map and run the lateral 2-node solver. With g<sub>lat</sub>&gt;0
+    a lone failure peaks near 47 °C (Figure 8.2), not the 255 °C an isolated model would predict.</li>
+    <li><strong>Search for the worst cluster (Part 12).</strong> <code>worst_case_search()</code>
+    greedily adds the failure that raises the peak most, five times over — assembling the adjacent
+    cluster whose heat reinforces fastest. It returns the failed-cell set, the peak temperature, and
+    the trajectory of the peak after each added failure.</li>
+    <li><strong>Judge and report (Part 13).</strong> Compare the peak against the melt limit for a
+    PASS/FAIL verdict; render the heat-map figure, the trajectory, and the numbers into a PDF, plus
+    an HTML/JSON heat-map for the record. The CLI command <span class="kbd">powerpy worst</span>
+    runs exactly this.</li>
+  </ol>
+
+  <div class="callout analogy"><span class="lab">Analogy — a flight test on paper</span>
+  Steps 1–2 are <em>describing the aircraft and the weather</em>; steps 3–5 are <em>the physics of
+  the flight</em>; step 6 is <em>deliberately flying the worst manoeuvre</em>; step 7 is <em>the
+  test report</em>. PowerPy lets you fly the worst case hundreds of times, on paper, before bending
+  any metal.</div>
+
+  <h3>What you can trust, today</h3>
+  <p>The full path above — describe → fit → combine → fail → lateral thermal → worst-case → report —
+  runs end to end with the analytic engine and is covered by the test suite. The only optional piece
+  not live is the real-ngspice electrical validation (Part 14), which the framework treats as a
+  bonus, not a dependency. In other words: the question this appendix poses is one PowerPy answers
+  out of the box.</p>
+</section>
+
+<!-- ============================ APPENDIX C ============================ -->
+<section class="chapter">
+  <div class="part-no">C</div>
+  <div class="eyebrow">Appendix · concept-to-code map</div>
+  <h2>Reading the source — where each idea lives</h2>
+  <p class="lead">This handbook explains the physics; if you want to read the code, here is the map.
+  Each concept points at the module that implements it, so you can jump from a part of the theory to
+  the lines that realise it.</p>
+
+  <h4>Data in</h4>
+  <table class="sym">
+    <tr><th>Concept (part)</th><th>Module</th><th>Key names</th></tr>
+    <tr><td>Typed data model (3)</td><td>schemas/</td><td>ReportMetadata, CellParameters, …</td></tr>
+    <tr><td>Excel → objects (3)</td><td>loader/</td><td>load_report_data()</td></tr>
+    <tr><td>Panel tile grid (8)</td><td>config/layout.py</td><td>PanelLayout, neighbours(), prop_arrays()</td></tr>
+    <tr><td>Substrate &amp; c_cond (7)</td><td>config/substrate.py</td><td>Substrate.c_cond</td></tr>
+  </table>
+
+  <h4>Physics</h4>
+  <table class="sym">
+    <tr><th>Concept (part)</th><th>Module</th><th>Key names</th></tr>
+    <tr><td>Single-diode I–V (4)</td><td>simulation/cell_level.py</td><td>fit_rseries(), single_diode_iv(), DiodeParams</td></tr>
+    <tr><td>Series/parallel (5)</td><td>simulation/combine.py</td><td>combine_series(), combine_parallel()</td></tr>
+    <tr><td>Composition tree (5)</td><td>simulation/*_level.py</td><td>SimNode, CellModel, String, Section, Array</td></tr>
+    <tr><td>Fluxes &amp; orbit (6)</td><td>model/environment.py, model/orbit.py</td><td>flux timeline, beta, eclipse</td></tr>
+    <tr><td>2-node thermal &amp; 2×2 (7)</td><td>solve/thermal.py</td><td>solve_thermal(), solve_panel()</td></tr>
+    <tr><td>Lateral conduction (8)</td><td>solve/thermal.py</td><td>lateral_conductance(), graph Laplacian</td></tr>
+    <tr><td>Electro-thermal loop (9)</td><td>solve/coupling.py</td><td>couple(), omega damping</td></tr>
+    <tr><td>Transient (10)</td><td>solve/transient.py</td><td>solve_transient(), implicit Euler</td></tr>
+    <tr><td>Bypass diodes (11)</td><td>model/diode.py</td><td>clamped_reverse_voltage(), spacing_scan()</td></tr>
+  </table>
+
+  <h4>What it does · output</h4>
+  <table class="sym">
+    <tr><th>Concept (part)</th><th>Module</th><th>Key names</th></tr>
+    <tr><td>Failure studies (12)</td><td>analysis/study.py, analysis/montecarlo.py</td><td>worst_case_search(), auto_monte_carlo()</td></tr>
+    <tr><td>Figures &amp; PDF (13)</td><td>render/</td><td>figures.py, templating.py, compile.py</td></tr>
+    <tr><td>HTML/JSON + store (13)</td><td>reporting/</td><td>report.py, store.py</td></tr>
+    <tr><td>CLI (13)</td><td>app.py, run.py</td><td>run · worst · sweep</td></tr>
+    <tr><td>Vendored SPICE (14)</td><td>ngspice/, cell.py</td><td>buildModel(), analytic fallback</td></tr>
+  </table>
+
+  <div class="callout note"><span class="lab">A reading order</span>
+  To learn the codebase from this handbook, follow the parts in order and open the matching module
+  beside each: start at <code>simulation/cell_level.py</code> (Part 4), then
+  <code>simulation/combine.py</code> (Part 5), then <code>solve/thermal.py</code> (Parts 7–8) — those
+  three files contain the mathematical heart explained in the deep dives.</div>
+</section>
+
+<!-- ============================ APPENDIX D ============================ -->
+<section class="chapter">
+  <div class="part-no">D</div>
+  <div class="eyebrow">Appendix · knowing the model’s edges</div>
+  <h2>Assumptions, limitations &amp; validity</h2>
+  <p class="lead">A model is only trustworthy if you know where it stops being true. This appendix
+  lists what PowerPy assumes, why those assumptions are reasonable for a space solar array, and the
+  situations where you should be careful.</p>
+
+  <h3>Electrical model</h3>
+  <ul class="tight">
+    <li><strong>Single-diode, shunt-open.</strong> The fit takes R<span class="sub">sh</span> as
+    effectively infinite (≈10⁹ Ω). Valid for healthy space cells whose leakage is genuinely tiny;
+    a cell with a real shunt defect (a manufacturing flaw, micro-crack) would need the two-diode or
+    explicit-shunt model. The framework keeps a shunt term in the equation precisely so this can be
+    re-enabled.</li>
+    <li><strong>Operating points drive everything.</strong> The whole curve is reconstructed from
+    four datasheet numbers plus coefficient/degradation curves. This is exact at those four points
+    and physically-shaped between them, but it is a <em>model</em> of the curve, not a measurement of
+    every point. The optional ngspice path exists to cross-check it.</li>
+    <li><strong>Linear temperature &amp; log-fluence degradation.</strong> Temperature coefficients
+    are applied linearly about the reference temperature; radiation factors are interpolated in
+    log-fluence. Both match how vendors publish the data, but extrapolating far outside the supplied
+    range is unreliable.</li>
+  </ul>
+
+  <h3>Thermal model</h3>
+  <ul class="tight">
+    <li><strong>Two nodes per cell.</strong> Front and rear are each treated as a single uniform
+    temperature. This captures the dominant front/rear split but not <em>within</em>-cell gradients
+    (e.g. a temperature ramp across a single large tile). For hot-spot peak prediction the lumped
+    node is the standard engineering simplification.</li>
+    <li><strong>Radiation to deep space, gray bodies.</strong> Each face radiates as a gray body
+    (constant emissivity) to a 2.7 K background. There is no atmosphere, so <em>no convection</em> —
+    correct for orbit, wrong for a ground test in air.</li>
+    <li><strong>Lateral conduction is first-order.</strong> Sideways heat is a single conductance
+    g<span class="sub">lat</span> between 4-neighbour tiles, derived from facesheet geometry. It
+    captures in-plane spreading well; it does not resolve the honeycomb core’s 3-D detail or
+    radiative coupling between tiles.</li>
+    <li><strong>Steady vs transient.</strong> The steady solver assumes conditions hold long enough
+    to settle. Near rapid events (failure onset, eclipse entry) use the transient solver — the steady
+    answer is the destination, not the path.</li>
+  </ul>
+
+  <h3>Failure model</h3>
+  <ul class="tight">
+    <li><strong>Failures as fixed reverse power.</strong> A failed cell is represented by a clamped
+    reverse power into the thermal solver. This is the right driver for the hot-spot temperature, but
+    it abstracts the detailed reverse I–V characteristic of a specific failure mechanism.</li>
+    <li><strong>Greedy worst-case is a heuristic.</strong> The greedy cluster search is fast and
+    finds <em>a</em> very damaging cluster, but it is not a mathematical proof of the global worst
+    case. For a small panel it is typically the true worst; for very large panels treat it as a
+    strong lower bound on the danger.</li>
+  </ul>
+
+  <h3>Numerics</h3>
+  <ul class="tight">
+    <li><strong>Newton needs a sane start.</strong> Convergence is fast and robust for physical
+    parameters, but a wildly nonphysical input (negative areas, zero conductivity) can stall it; the
+    solvers warn (or, in strict mode, raise) if a solve does not converge.</li>
+    <li><strong>Determinant guard.</strong> The 2×2 inverse guards against a near-zero determinant
+    by flooring it — a safety net for degenerate inputs, not a licence to feed nonsense.</li>
+  </ul>
+
+  <div class="callout note"><span class="lab">The honest summary</span>
+  PowerPy is a <em>system-level</em> tool: it predicts array performance, panel temperatures and
+  hot-spot survival to engineering accuracy, fast enough to sweep thousands of failure cases. It is
+  not a device-physics simulator or a 3-D finite-element thermal model, and it does not pretend to
+  be. Its assumptions are the standard, defensible ones for early- and mid-phase solar-array design —
+  and each one is isolated in the code so it can be refined when a project needs more fidelity.</div>
+</section>
+
+<!-- ============================ APPENDIX E ============================ -->
+<section class="chapter">
+  <div class="part-no">E</div>
+  <div class="eyebrow">Appendix · the subtle questions answered</div>
+  <h2>Conceptual FAQ — the “but why” questions</h2>
+  <p class="lead">These are the questions that tend to nag after a first read. Each is answered in
+  full here, drawing the threads of the handbook together.</p>
+
+  <h4>Why two thermal nodes — why not one, or ten?</h4>
+  <p>One node would force the sunlit front and the planet-facing rear to share a single temperature,
+  which is physically wrong — they see very different environments and are only loosely linked by
+  conduction through the board. Ten nodes (a fine 3-D mesh) would be more accurate <em>within</em> a
+  cell but enormously slower, and would need material data the early design doesn’t have. Two nodes
+  capture the dominant effect (the front/rear split) at the cost of a trivial 2×2 solve — the
+  classic engineering sweet spot of <em>enough fidelity, minimum cost</em>. That balance is exactly
+  why the “2×2” is everywhere in the code.</p>
+
+  <h4>Why is the front usually hotter than the rear?</h4>
+  <p>The front absorbs the full solar flux (hundreds of watts per m²) while the rear only sees the
+  weaker albedo and planetary IR. Both faces radiate to cold space, but the front has far more heat
+  to shed, so it settles hotter — and conduction through the substrate drags the rear part-way up
+  toward it. In the worked example of Part 7 the front converged to 3.59 °C and the rear to 3.32 °C:
+  close, because the board conducts well, but the front leads.</p>
+
+  <h4>If lateral conduction lowers the peak, isn’t more of it always better?</h4>
+  <p>For a <em>single</em> failure, yes — spreading the heat is purely protective (255 °C → 47 °C in
+  Figure 8.2). But spreading also <em>shares</em> heat, so a tight cluster of failures can build a
+  broad, stubborn warm region, and in a healthy array strong lateral conduction can warm cells that
+  would otherwise run cool. It is a redistribution, not a removal, of heat — which is why PowerPy
+  models it explicitly rather than assuming it always helps.</p>
+
+  <h4>Why an analytic model when a real SPICE simulator is right there?</h4>
+  <p>Because the analytic single-diode model answers the questions PowerPy asks — array curves,
+  power, hot-spot drivers — directly, fast, and with zero external dependencies, which matters in an
+  environment that forbids installs. SPICE is a validation luxury, not a necessity: it lets you
+  cross-check the analytic curves against full circuit physics. Designing the framework so the
+  must-run path is pure Python, and SPICE is optional, is what keeps it robust (Part 14).</p>
+
+  <h4>Why does the radiated heat go as T⁴, and why does that matter so much?</h4>
+  <p>It is the Stefan–Boltzmann law: a body radiates power proportional to the fourth power of its
+  absolute temperature. The practical consequence is twofold. First, it makes the balance equations
+  <em>nonlinear</em>, which is the entire reason Newton’s method appears. Second, it is a powerful
+  <em>self-limiting</em> effect: a cell that gets hotter radiates dramatically more, so temperatures
+  don’t run away without bound — they find a (possibly dangerous, but finite) balance.</p>
+
+  <h4>Why vectorise — isn’t a loop over cells simpler to read?</h4>
+  <p>A Python loop over thousands of cells, each doing a tiny 2×2 solve, would be readable but slow —
+  and the Monte-Carlo and worst-case studies run the panel solver thousands of times. Expressing the
+  per-cell arithmetic as numpy array operations lets the same maths run on all cells at once in
+  compiled code, turning minutes into milliseconds. The physics per cell is unchanged; only the
+  <em>execution</em> is batched (Part 7).</p>
+
+  <h4>What actually fails when a cell “fails”?</h4>
+  <p>In PowerPy’s abstraction, a failed cell simply stops generating and is driven into reverse bias
+  by its still-healthy series neighbours, turning into a resistive heater. Real-world causes —
+  micro-cracks, interconnect breaks, coverglass damage, shadowing — differ in detail, but they share
+  this electrical signature, which is what sets the hot-spot. The model targets the consequence
+  (reverse power → temperature) rather than the specific cause.</p>
+
+  <h4>What decides how many cells go in series versus in parallel?</h4>
+  <p>The spacecraft bus runs at a fixed voltage (often ~28, ~50 or ~100 V). Cells are put in series
+  until the string reaches that bus voltage — that sets the <em>series count</em> (e.g. ~22 of our
+  2.4 V cells for a ~50 V bus). Then strings are placed in parallel until the array delivers the
+  required <em>current</em> (and hence power). So series count is dictated by voltage and parallel
+  count by current — and both flow from the power budget of Part 1. PowerPy reads this topology from
+  the layout and builds the tree of Part 5 to match.</p>
+
+  <h4>Why is the maximum-power point where it is — at the knee?</h4>
+  <p>Power is V·I. Near V = 0 the current is high but the voltage is almost nothing, so the product
+  is small. Near V<span class="sub">oc</span> the voltage is high but the current has collapsed, so
+  the product is small again. Somewhere between — right at the <em>knee</em> of the I–V curve — the
+  rising voltage and the still-healthy current multiply to a maximum. That sweet spot is the MPP, and
+  it is where array regulators are designed to hold the operating point, because a few hundred
+  millivolts either side throws away power (the V = 2.6 V case in Part 4 lost a third of the peak).</p>
+
+  <h4>How do I know any of these numbers are right?</h4>
+  <p>Three ways the framework earns trust: the analytic curve <em>reproduces the datasheet points</em>
+  it was fitted from (Part 4 check); the transient solver <em>reduces to the steady solver</em> as
+  time → ∞ (a parity test); and the independent thermal path <em>matches the legacy per-cell solver</em>
+  exactly (a single sunlit cell → 65.26 °C in the regression test). A 92-test suite pins these and
+  the rest. The figures in this handbook were generated by those same solvers.</p>
+</section>
+
+<!-- ============================ PART 15 — GLOSSARY ============================ -->
+<section class="chapter">
+  <div class="part-no">15</div>
+  <div class="eyebrow">Reference</div>
+  <h2>Glossary</h2>
+  <p class="lead">Every term and acronym used in this handbook, alphabetised, one line each — the
+  single place to revise the vocabulary.</p>
+
+  <h3>Master symbol reference</h3>
+  <table class="sym">
+    <tr><th>Symbol</th><th>Quantity</th><th>Unit</th></tr>
+    <tr><td>I, V</td><td>Terminal current, voltage of a cell/array.</td><td>A, V</td></tr>
+    <tr><td>I<span class="sub">sc</span>, V<span class="sub">oc</span></td><td>Short-circuit current, open-circuit voltage.</td><td>A, V</td></tr>
+    <tr><td>I<span class="sub">mp</span>, V<span class="sub">mp</span></td><td>Current, voltage at the maximum-power point.</td><td>A, V</td></tr>
+    <tr><td>I<span class="sub">ph</span>, I<span class="sub">0</span></td><td>Photo-current, diode saturation current.</td><td>A</td></tr>
+    <tr><td>V<span class="sub">t</span></td><td>Diode thermal voltage (n·kT/q).</td><td>V</td></tr>
+    <tr><td>R<span class="sub">s</span>, R<span class="sub">sh</span></td><td>Series, shunt resistance.</td><td>Ω</td></tr>
+    <tr><td>T₁, T₂</td><td>Front, rear node temperature.</td><td>K / °C</td></tr>
+    <tr><td>α, ε</td><td>Solar absorptivity, infrared emissivity (per face).</td><td>—</td></tr>
+    <tr><td>σ</td><td>Stefan–Boltzmann constant (5.67×10⁻⁸).</td><td>W/m²K⁴</td></tr>
+    <tr><td>A</td><td>Cell / tile area.</td><td>m²</td></tr>
+    <tr><td>C·A (c_cond·A)</td><td>Front↔rear conduction.</td><td>W/K</td></tr>
+    <tr><td>g<span class="sub">lat</span></td><td>Lateral conductance between adjacent tiles.</td><td>W/K</td></tr>
+    <tr><td>C</td><td>Node heat capacity (transient).</td><td>J/K</td></tr>
+    <tr><td>τ</td><td>Thermal time constant (C/G).</td><td>s</td></tr>
+    <tr><td>P<span class="sub">elec</span></td><td>Electrical power out (+) or dissipated in cell (−).</td><td>W</td></tr>
+    <tr><td>q<span class="sub">F</span>, q<span class="sub">R</span></td><td>Absorbed flux on front, rear.</td><td>W</td></tr>
+    <tr><td>p<span class="sub">sun</span>, S<span class="sub">0</span></td><td>Solar flux at the panel, solar constant (1361).</td><td>W/m²</td></tr>
+    <tr><td>ω</td><td>Under-relaxation (damping) factor.</td><td>—</td></tr>
+    <tr><td>β, θ</td><td>Orbit beta angle, panel tilt angle.</td><td>°</td></tr>
+    <tr><td>L = D − A</td><td>Graph Laplacian (degree − adjacency).</td><td>—</td></tr>
+  </table>
+
+  <div class="callout note"><span class="lab">Sign convention</span>
+  Heat <em>into</em> a node and power <em>generated</em> are bookkept consistently so that a healthy
+  cell has P<span class="sub">elec</span> &gt; 0 (energy leaves as electricity) and a failed,
+  reverse-biased cell has P<span class="sub">elec</span> &lt; 0 (energy stays as heat). A positive
+  (L·T)ᵢ means tile i is hotter than its neighbours and loses heat sideways.</div>
+
+  <h3>Terms A–Z</h3>
+
+  <div class="glossary-entry"><b>Adjacency</b> — the list/matrix of which panel tiles physically touch; the input to the graph Laplacian.</div>
+  <div class="glossary-entry"><b>Albedo</b> — sunlight reflected off the planet onto the panel’s rear; a heat input.</div>
+  <div class="glossary-entry"><b>Array</b> — the complete set of solar panels on the spacecraft; the top of the wiring hierarchy.</div>
+  <div class="glossary-entry"><b>Backward (implicit) Euler</b> — a time-stepping scheme that is unconditionally stable; each step solves a nonlinear equation. Used in the transient solver.</div>
+  <div class="glossary-entry"><b>Beta angle</b> — the tilt of the orbit plane relative to the Sun; sets how much of each orbit is sunlit.</div>
+  <div class="glossary-entry"><b>BOL / EOL</b> — begin-of-life / end-of-life: the fresh vs degraded states of the array.</div>
+  <div class="glossary-entry"><b>Bypass diode</b> — a diode across a group of series cells that turns on under reverse bias to clamp a failed cell’s voltage and limit its heat.</div>
+  <div class="glossary-entry"><b>c_cond</b> — front↔rear conduction coefficient = substrate conductivity / thickness (W/m²K).</div>
+  <div class="glossary-entry"><b>Eclipse</b> — the part of an orbit spent in the planet’s shadow; direct sunlight drops to zero and the panel cools.</div>
+  <div class="glossary-entry"><b>Fluence / dose</b> — accumulated particle radiation, as equivalent 1 MeV electrons per cm²; drives degradation.</div>
+  <div class="glossary-entry"><b>g_lat</b> — lateral conductance (W/K) between two adjacent tiles; the strength of sideways heat spreading.</div>
+  <div class="glossary-entry"><b>Graph Laplacian (L = D − A)</b> — matrix encoding tile adjacency so that L·T gives each tile’s net heat exchange with its neighbours.</div>
+  <div class="glossary-entry"><b>Heat capacity (C)</b> — energy stored per degree (J/K); gives the transient model its “thermal inertia”.</div>
+  <div class="glossary-entry"><b>Hot-spot</b> — a locally overheated cell, typically a failed/shaded cell driven into reverse bias.</div>
+  <div class="glossary-entry"><b>I–V curve</b> — a cell/array’s current as a function of terminal voltage; the central electrical object.</div>
+  <div class="glossary-entry"><b>Isc / Voc / Imp / Vmp</b> — short-circuit current / open-circuit voltage / current &amp; voltage at the maximum-power point.</div>
+  <div class="glossary-entry"><b>Jacobian</b> — the matrix of partial derivatives (slopes) of several equations w.r.t. several unknowns; here 2×2 per cell.</div>
+  <div class="glossary-entry"><b>Lateral conduction</b> — heat flowing sideways through the panel facesheet between neighbouring cells.</div>
+  <div class="glossary-entry"><b>Maximum-power point (MPP)</b> — the (Vmp, Imp) point where V·I is largest; the array’s operating target.</div>
+  <div class="glossary-entry"><b>Monte-Carlo</b> — estimating outcomes by random sampling of failure patterns; here with auto-stopping on standard error.</div>
+  <div class="glossary-entry"><b>Newton’s method</b> — iterative root-finding using local slopes; converges quadratically near the solution.</div>
+  <div class="glossary-entry"><b>ngspice</b> — an open-source SPICE circuit simulator, vendored in-tree for the optional real-circuit electrical path.</div>
+  <div class="glossary-entry"><b>Panel</b> — one physical board carrying sections of cells on a substrate.</div>
+  <div class="glossary-entry"><b>Photo-current (Iph)</b> — the light-driven current source in the single-diode model; ≈ Isc.</div>
+  <div class="glossary-entry"><b>Planetary IR</b> — infrared the warm planet radiates onto the panel; a heat input.</div>
+  <div class="glossary-entry"><b>Remaining factor</b> — a ≤1 multiplier from a degradation curve giving how much of a quantity survives a given dose.</div>
+  <div class="glossary-entry"><b>Reverse bias</b> — a negative voltage across a cell forced by the string current; makes a failed cell absorb power as heat.</div>
+  <div class="glossary-entry"><b>Rs / Rsh</b> — series resistance (in-line losses) / shunt resistance (leakage path) in the single-diode model.</div>
+  <div class="glossary-entry"><b>Section</b> — strings wired in parallel.</div>
+  <div class="glossary-entry"><b>Single-diode model</b> — a current source + one diode + two resistors representing a solar cell.</div>
+  <div class="glossary-entry"><b>Standard error</b> — the uncertainty of an estimated mean; shrinks like 1/√N and triggers Monte-Carlo stopping.</div>
+  <div class="glossary-entry"><b>Steady-state</b> — the settled condition where heat-in equals heat-out and temperature no longer changes.</div>
+  <div class="glossary-entry"><b>Stefan–Boltzmann law</b> — radiated power ∝ εAσT⁴; the source of the model’s key nonlinearity.</div>
+  <div class="glossary-entry"><b>String</b> — cells wired in series.</div>
+  <div class="glossary-entry"><b>Substrate / facesheet</b> — the board cells mount on / its thin conductive skin that carries lateral heat.</div>
+  <div class="glossary-entry"><b>Thermal voltage (Vt)</b> — the diode’s exponential voltage scale, n·kT/q.</div>
+  <div class="glossary-entry"><b>Transient</b> — the time-evolving thermal solution (vs steady-state).</div>
+  <div class="glossary-entry"><b>Two-node model</b> — representing each cell by a front and a rear temperature, coupled by conduction — the source of the 2×2 system.</div>
+  <div class="glossary-entry"><b>Under-relaxation (ω)</b> — taking only a fraction of each update step to keep an iterative loop stable.</div>
+  <div class="glossary-entry"><b>Vectorisation</b> — performing the same operation on whole arrays at once (here, all cells’ 2×2 solves simultaneously).</div>
+
+  <hr class="soft">
+  <p style="text-align:center;color:#8a98a5;font-family:'Segoe UI',sans-serif;font-size:9.5pt;">
+  PowerPy — The Framework Explained · concept &amp; theory handbook · figures generated from the live solvers
+  </p>
+</section>
+
+</body>
+</html>

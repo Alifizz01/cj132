@@ -4,6 +4,13 @@ A string is N cells in series.  They share one current; their voltages
 add.  A real string also carries a blocking diode (a small fixed
 voltage drop on the string output) and a small series resistance.
 Both are modelled as a post-shift on the combined I-V curve.
+
+A real string ALSO carries its own shunt (bypass) diode across the string.
+In normal forward operation it is reverse-biased and does nothing; if the
+string is driven into reverse (a failed/shaded string), it turns on and
+**clamps** the string voltage at roughly ``-shunt_diode_v_forward`` instead of
+letting it swing arbitrarily negative.  We model that as a clamp on the
+negative-voltage tail of the combined curve.
 """
 from __future__ import annotations
 
@@ -25,6 +32,7 @@ class StringModel(SimNode):
                  block_diode_v_drop: float = 0.6,
                  n_block_diodes: int = 1,
                  series_resistance_ohm: float = 0.0,
+                 shunt_diode_v_forward: float | None = None,
                  name: str = "string") -> None:
         if not cells:
             raise ValueError("StringModel: a string needs at least one cell")
@@ -32,6 +40,10 @@ class StringModel(SimNode):
         self.block_diode_v_drop = float(block_diode_v_drop)
         self.n_block_diodes = int(n_block_diodes)
         self.series_resistance_ohm = float(series_resistance_ohm)
+        # forward drop of the string's own shunt/bypass diode; None = no shunt
+        # diode (the negative tail is simply dropped, the legacy behaviour).
+        self.shunt_diode_v_forward = (None if shunt_diode_v_forward is None
+                                      else float(shunt_diode_v_forward))
         self.name = name
 
     # ----- factories -----
@@ -57,6 +69,12 @@ class StringModel(SimNode):
         v_drop = (self.block_diode_v_drop * self.n_block_diodes
                   + i * self.series_resistance_ohm)
         v_out = v - v_drop
-        # clip non-physical negative voltage region
-        mask = v_out >= 0
-        return v_out[mask], i[mask]
+        if self.shunt_diode_v_forward is None:
+            # legacy behaviour: discard the non-physical negative-voltage region
+            mask = v_out >= 0
+            return v_out[mask], i[mask]
+        # string shunt/bypass diode: instead of dropping the negative tail, CLAMP
+        # it -- the diode turns on in reverse and holds the string at no more
+        # negative than its forward drop.
+        v_out = np.clip(v_out, -self.shunt_diode_v_forward, None)
+        return v_out, i

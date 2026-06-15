@@ -63,6 +63,7 @@ class ShuntDiodeParameters:
     n: float = 1.0      # ideality / number of diodes [-]
     rs: float = 0.0     # series resistance [Ohm]
     t_ref: float = 25.0  # reference temperature [°C]
+    v_forward: float = 0.7  # forward conduction drop [V] (used as the clamp level)
 
 
 @dataclass(frozen=True)
@@ -94,8 +95,14 @@ class CellParameters:
     # electrical (loaded from JSON)
     electrical: CellElectrical
 
-    # shunt diode (loaded from diode_reference_file JSON)
+    # CELL-level shunt diode (loaded from the cell_shunt_diode_reference_file JSON)
     diode: ShuntDiodeParameters | None = None
+
+    # STRING-level shunt/bypass diode -- a real string carries its own shunt
+    # diode (across the string) in addition to the per-cell one. Loaded from
+    # ``string_shunt_diode_reference_file`` when the workbook provides it.
+    string_diode: ShuntDiodeParameters | None = None
+    string_diode_reference_file: Path | None = None
 
     def __post_init__(self):
         for name in ("cell_length_mm", "cell_width_mm", "cell_thickness_um",

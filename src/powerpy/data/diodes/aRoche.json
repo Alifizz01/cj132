@@ -1,0 +1,10 @@
+{
+    "_comment": "String-level shunt/bypass diode. RECONSTRUCTED placeholder (the authoritative aRoche.json lives in the BIMU152 03_PowerPy_02 repo). Replace diode_i0/diode_n/diode_rs/diode_v_forward with the real values when available.",
+    "diode_name": "aRoche String Shuntdiode",
+    "diode_reference": "placeholder - pending authoritative file",
+    "diode_i0": 2.0e-9,
+    "diode_n": 1.06,
+    "diode_rs": 0.02,
+    "diode_v_forward": 0.7,
+    "diode_t_ref": 25
+}

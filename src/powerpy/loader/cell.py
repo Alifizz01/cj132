@@ -16,8 +16,14 @@ def load_cell_parameters(params_file: Path, data_dir: Path) -> CellParameters:
     cell_ref = values["cell_reference_file"]
     electrical = load_cell_electrical_from_json(cell_ref)
 
-    diode_ref = values["diode_reference_file"]
+    # CELL-level shunt diode: accept the new key name and the legacy one.
+    diode_ref = values.get("cell_shunt_diode_reference_file") or values["diode_reference_file"]
     diode = load_shunt_diode_from_json(diode_ref)
+
+    # STRING-level shunt diode: optional -- only when the workbook provides it.
+    string_diode_ref = values.get("string_shunt_diode_reference_file")
+    string_diode = (load_shunt_diode_from_json(string_diode_ref)
+                    if string_diode_ref else None)
 
     return CellParameters(
         name=values["cell_name"],
@@ -38,6 +44,8 @@ def load_cell_parameters(params_file: Path, data_dir: Path) -> CellParameters:
         diode_reference_file=diode_ref,
         electrical=electrical,
         diode=diode,
+        string_diode=string_diode,
+        string_diode_reference_file=string_diode_ref,
     )
 
 
@@ -107,4 +115,5 @@ def load_shunt_diode_from_json(json_path: Path) -> ShuntDiodeParameters:
         n=float(pick("n", "diode_n", default=1.0)),
         rs=float(pick("rs", "diode_rs", default=0.0)),
         t_ref=float(pick("t_ref", "diode_t_ref", default=25.0)),
+        v_forward=float(pick("v_forward", "diode_v_forward", default=0.7)),
     )

@@ -69,6 +69,11 @@ def build_from_report(
     prototype = CellModel(report.cell, iv_engine=iv_engine)
     layout = report.array_layout
 
+    # the string's own shunt/bypass diode (if the cell carries one): its forward
+    # drop is the clamp level applied to the string's reverse-voltage tail.
+    string_shunt_vf = (report.cell.string_diode.v_forward
+                       if getattr(report.cell, "string_diode", None) else None)
+
     # group physical sections by their panel instance
     panels: dict[str, list[SectionModel]] = {}
     for phys in layout.physical_sections:
@@ -78,6 +83,7 @@ def build_from_report(
             block_diode_v_drop=block_diode_v_drop,
             n_block_diodes=n_block_diodes,
             series_resistance_ohm=string_series_resistance_ohm,
+            shunt_diode_v_forward=string_shunt_vf,
             name=f"{phys.instance_id}.string")
         # per-section harness resistance (distance from the yoke); falls back to
         # the framework-wide knob when a section carries none.

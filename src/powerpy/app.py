@@ -117,13 +117,18 @@ def _find_params(explicit: str | None = None) -> Path:
 
 
 def build_electrical_report(params, out_pdf, *, data_dir=None,
-                            engine: str = "analytic", workdir=None):
+                            engine: str = "analytic", workdir=None,
+                            grid_file=None):
     """Build the whole-array electrical report PDF from a params workbook.
 
     Uses the analytic single-diode engine by default (``engine="analytic"``) so it
     needs neither ngspice nor a legacy cell file. Returns
     ``(pdf_path_or_None, phases, report_metadata)``. ``pdf_path`` is None only if
     pdflatex is unavailable (the LaTeX workspace is still written).
+
+    ``grid_file`` overrides the cell's ``grid_reference_file``: when given, the
+    array is derived from that grid layout (grid-as-single-source) regardless of
+    the workbook, without changing the default report.
     """
     # heavy imports are local so `powerpy run/worst/sweep` don't pay for them
     import dataclasses
@@ -152,7 +157,7 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     def _build_array():
         """Derive the array from a grid (grid-as-single-source) when the cell
         references one; otherwise fall back to the ArrayLayout sections."""
-        grid_ref = getattr(report.cell, "grid_reference_file", None)
+        grid_ref = grid_file or getattr(report.cell, "grid_reference_file", None)
         if grid_ref:
             layout = load_layout(grid_ref)
             return build_array_from_grid(

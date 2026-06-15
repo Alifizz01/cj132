@@ -1,0 +1,99 @@
+{
+  "name": "grid_3x2x12 (3 blocks x 2 parallel x 12 series = 72 cells)",
+  "pitch_mm": 40.0,
+  "palette": {
+    "B1S1": {
+      "is_cell": true,
+      "string": "B1S1",
+      "block": "B1",
+      "cell_type": "3G30LARS_GEO",
+      "alpha_front": 0.91,
+      "alpha_rear": 0.93,
+      "epsilon_front": 0.9,
+      "epsilon_rear": 0.89
+    },
+    "B2S1": {
+      "is_cell": true,
+      "string": "B2S1",
+      "block": "B2",
+      "cell_type": "3G30LARS_GEO",
+      "alpha_front": 0.91,
+      "alpha_rear": 0.93,
+      "epsilon_front": 0.9,
+      "epsilon_rear": 0.89
+    },
+    "B3S1": {
+      "is_cell": true,
+      "string": "B3S1",
+      "block": "B3",
+      "cell_type": "3G30LARS_GEO",
+      "alpha_front": 0.91,
+      "alpha_rear": 0.93,
+      "epsilon_front": 0.9,
+      "epsilon_rear": 0.89
+    },
+    "B1S2": {
+      "is_cell": true,
+      "string": "B1S2",
+      "block": "B1",
+      "cell_type": "3G30LARS_GEO",
+      "alpha_front": 0.91,
+      "alpha_rear": 0.93,
+      "epsilon_front": 0.9,
+      "epsilon_rear": 0.89
+    },
+    "B2S2": {
+      "is_cell": true,
+      "string": "B2S2",
+      "block": "B2",
+      "cell_type": "3G30LARS_GEO",
+      "alpha_front": 0.91,
+      "alpha_rear": 0.93,
+      "epsilon_front": 0.9,
+      "epsilon_rear": 0.89
+    },
+    "B3S2": {
+      "is_cell": true,
+      "string": "B3S2",
+      "block": "B3",
+      "cell_type": "3G30LARS_GEO",
+      "alpha_front": 0.91,
+      "alpha_rear": 0.93,
+      "epsilon_front": 0.9,
+      "epsilon_rear": 0.89
+    }
+  },
+  "layout": [
+    "B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B1S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B2S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1 B3S1",
+    "B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B1S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B2S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2 B3S2"
+  ],
+  "circuit": {
+    "B1": {
+      "resistance_ohm": 0.0
+    },
+    "B1S1": {
+      "string_shunt_diode": true
+    },
+    "B1S2": {
+      "string_shunt_diode": true
+    },
+    "B2": {
+      "resistance_ohm": 0.0
+    },
+    "B2S1": {
+      "string_shunt_diode": true
+    },
+    "B2S2": {
+      "string_shunt_diode": true
+    },
+    "B3": {
+      "resistance_ohm": 0.0
+    },
+    "B3S1": {
+      "string_shunt_diode": true
+    },
+    "B3S2": {
+      "string_shunt_diode": true
+    }
+  }
+}

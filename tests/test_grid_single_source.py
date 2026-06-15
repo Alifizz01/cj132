@@ -85,6 +85,13 @@ def test_cellparameters_has_optional_grid_reference():
     assert ref is None or ref.name.endswith(".json")
 
 
+def test_cellparameters_has_optional_substrate_reference():
+    report = load_report_data(_PARAMS, _DATA_DIR)
+    assert hasattr(report.cell, "substrate_reference_file")
+    ref = report.cell.substrate_reference_file
+    assert ref is None or ref.name.endswith(".json")
+
+
 def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
     import json
     import dataclasses

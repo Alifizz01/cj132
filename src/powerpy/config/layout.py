@@ -127,8 +127,14 @@ class PanelLayout:
             if not t.is_cell:
                 continue
             sid = t.string or t.key
+            blk = t.block or "block_default"
             strings.setdefault(sid, []).append(idx)
-            string_block[sid] = t.block or "block_default"
+            if sid in string_block and string_block[sid] != blk:
+                raise ValueError(
+                    "string %r spans conflicting blocks %r and %r -- a series "
+                    "string must belong to exactly one parallel block"
+                    % (sid, string_block[sid], blk))
+            string_block[sid] = blk
         return strings, string_block
 
 

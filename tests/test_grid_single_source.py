@@ -48,6 +48,20 @@ def test_cell_strings_groups_by_string_and_block():
     assert string_block == {"s1": "bA", "s2": "bA"}
 
 
+def test_cell_strings_rejects_string_spanning_two_blocks():
+    import pytest
+    d = {
+        "palette": {
+            "1": {"is_cell": True, "string": "s1", "block": "bA"},
+            "2": {"is_cell": True, "string": "s1", "block": "bB"},  # same string, other block
+        },
+        "layout": ["1 2"],
+    }
+    lay = from_dict(d)
+    with pytest.raises(ValueError):
+        lay.cell_strings()
+
+
 def test_build_array_from_grid_structure_and_curve():
     report = load_report_data(_PARAMS, _DATA_DIR)
     lay = from_dict(_demo_dict())

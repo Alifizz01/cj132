@@ -37,12 +37,16 @@ lines.append("# Each entry: (sheet_name, [row, row, ...]); row[0] is the header 
 lines.append("SHEETS = [")
 for name in wb.sheetnames:
     ws = wb[name]
+    rows = [list(r) for r in ws.iter_rows(values_only=True)
+            if r is not None and not all(c is None for c in r)]
+    header = rows[0] if rows else []
+    lines.append("")
+    lines.append("    # --- %s (%d data rows) ---" % (name, max(len(rows) - 1, 0)))
+    lines.append("    # columns: %s" % " | ".join(str(h) for h in header))
     lines.append("    (%r, [" % name)
-    for row in ws.iter_rows(values_only=True):
-        # trim wholly-empty trailing rows
-        if row is None or all(c is None for c in row):
-            continue
-        lines.append("        %r," % (list(row),))
+    for i, row in enumerate(rows):
+        tag = "  # header" if i == 0 else ""
+        lines.append("        %r,%s" % (row, tag))
     lines.append("    ]),")
 lines.append("]")
 lines.append("")

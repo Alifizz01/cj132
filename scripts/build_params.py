@@ -19,8 +19,11 @@ import openpyxl
 
 # Each entry: (sheet_name, [row, row, ...]); row[0] is the header row.
 SHEETS = [
+
+    # --- cell_params (17 data rows) ---
+    # columns: param | name | value | unit | type | source
     ('cell_params', [
-        ['param', 'name', 'value', 'unit', 'type', 'source'],
+        ['param', 'name', 'value', 'unit', 'type', 'source'],  # header
         ['cell_name', 'Cell Name', '3G30LARS GEO', '-', 'string', 'datasheet'],
         ['cell_reference_file', 'Cell Reference File', 'cells/3G30LARS_GEO.json', '-', 'path', '-'],
         ['cell_shunt_diode_reference_file', "Cell Shunt Diode's reference File", 'diodes/external.json', '-', 'path', '-'],
@@ -39,8 +42,11 @@ SHEETS = [
         ['cell_mass', 'Cell Mass', 6100, 'mg', 'float', 'datasheet'],
         ['string_shunt_diode_reference_file', "String Shunt Diode's reference File", 'diodes/aRoche.json', None, 'path', None],
     ]),
+
+    # --- sections (24 data rows) ---
+    # columns: section_ref | section_id | wing_id | panel_id | n_strings_parallel | resistance | n_scas_series_per_string | include
     ('sections', [
-        ['section_ref', 'section_id', 'wing_id', 'panel_id', 'n_strings_parallel', 'resistance', 'n_scas_series_per_string', 'include'],
+        ['section_ref', 'section_id', 'wing_id', 'panel_id', 'n_strings_parallel', 'resistance', 'n_scas_series_per_string', 'include'],  # header
         ['section_a_w1p1', 'A', 1, 1, 4, 0.20481105, 54, True],
         ['section_b_w1p1', 'B', 1, 1, 3, 0.25220475, 54, True],
         ['section_c_w1p1', 'C', 1, 1, 3, 0.200742075, 54, True],
@@ -66,8 +72,11 @@ SHEETS = [
         ['section_c_w2p3', 'C', 2, 3, 3, 0.645903475, 54, True],
         ['section_d_w2p3', 'D', 2, 3, 3, 0.76834915, 54, True],
     ]),
+
+    # --- losses (21 data rows) ---
+    # columns: name | phase | value | level | unit | description | source | include
     ('losses', [
-        ['name', 'phase', 'value', 'level', 'unit', 'description', 'source', 'include'],
+        ['name', 'phase', 'value', 'level', 'unit', 'description', 'source', 'include'],  # header
         ['Coverglass loss', 'BOL_ATC', 0.988, 'cell', '-', 'Cover glass transmission', 'AZUR datasheet', True],
         ['Coverglass loss', 'BOL_BC', 0.988, 'cell', '-', 'Cover glass transmission', 'AZUR datasheet', True],
         ['Coverglass loss', 'End_of_LEOP', 0.988, 'cell', '-', 'Cover glass transmission', 'AZUR datasheet', True],
@@ -90,8 +99,11 @@ SHEETS = [
         ['SADM misalignment', 'End_of_ORP', 1, 'array', '-', 'Solar array drive mechanism misalignment', 'ECSS-ECSSI', True],
         ['SADM misalignment', 'End_of_Life', 1, 'array', '-', 'Solar array drive mechanism misalignment', 'ECSS-ECSSI', True],
     ]),
+
+    # --- radiation_fluxes (12 data rows) ---
+    # columns: name | launch_config | phase | param | value | unit | description | source | include
     ('radiation_fluxes', [
-        ['name', 'launch_config', 'phase', 'param', 'value', 'unit', 'description', 'source', 'include'],
+        ['name', 'launch_config', 'phase', 'param', 'value', 'unit', 'description', 'source', 'include'],  # header
         ['fluence', 'single', 'End_of_LEOP', 'isc', 1910000000000, 'e/cm2', '1 MeV equivalent electron fluence', 'Table 4', True],
         ['fluence', 'single', 'End_of_LEOP', 'voc', 2450000000000, 'e/cm2', '1 MeV equivalent electron fluence', 'Table 4', True],
         ['fluence', 'single', 'End_of_ORP', 'isc', 11000000000000, 'e/cm2', '1 MeV equivalent electron fluence', 'Table 4', True],
@@ -105,8 +117,11 @@ SHEETS = [
         ['fluence', 'dual', 'End_of_Life', 'isc', 2460000000000000, 'e/cm2', '1 MeV equivalent electron fluence', 'Table 4', True],
         ['fluence', 'dual', 'End_of_Life', 'voc', 5110000000000000, 'e/cm2', '1 MeV equivalent electron fluence', 'Table 4', True],
     ]),
+
+    # --- document (9 data rows) ---
+    # columns: param | name | value | type | notes
     ('document', [
-        ['param', 'name', 'value', 'type', 'notes'],
+        ['param', 'name', 'value', 'type', 'notes'],  # header
         ['doc_number', 'Document Number', 'G2G-ADSO-AN-10003', 'string', None],
         ['doc_title', 'Document Title', 'Solar Array Analysis - Mission XYZ', 'string', None],
         ['issued_date', 'Issued Date', '2026-05-16', 'date', None],
@@ -117,8 +132,11 @@ SHEETS = [
         ['approved_by', 'Approved By', None, 'string', None],
         ['logo_file', 'Logo File', 'assets/airbus_logo.png', 'path', None],
     ]),
+
+    # --- structure (7 data rows) ---
+    # columns: include | id | title | description | type | ref | audience
     ('structure', [
-        ['include', 'id', 'title', 'description', 'type', 'ref', 'audience'],
+        ['include', 'id', 'title', 'description', 'type', 'ref', 'audience'],  # header
         [True, 'cell_params', 'Cell Parameters', None, 'cell_params', None, 'both'],
         [True, 'cell_regressors', 'Cell Radiation Regressors', None, 'figure', 'cell_regressors', 'both'],
         [True, 'sections_table', 'Sections and Harness', None, 'sections_table', None, 'both'],
@@ -127,8 +145,11 @@ SHEETS = [
         [True, 'fig_iv_section', 'Per-Section IV Curves by Wing and Position', None, 'figure', 'iv_sections', 'both'],
         [True, 'fig_iv_panel', 'Whole-Array IV/PV Curve', None, 'figure', 'iv_panel', 'both'],
     ]),
+
+    # --- mission_orbit (15 data rows) ---
+    # columns: param | name | value | unit | type | source
     ('mission_orbit', [
-        ['param', 'name', 'value', 'unit', 'type', 'source'],
+        ['param', 'name', 'value', 'unit', 'type', 'source'],  # header
         ['orbit_type', 'Orbit Type', 'GEO', '-', 'string', None],
         ['altitude_km', 'Altitude', 35786, 'km', 'float', None],
         ['inclination_deg', 'Inclination', 0, 'deg', 'float', None],
@@ -145,8 +166,11 @@ SHEETS = [
         ['max_string_current', 'Max String Current', 2.5, 'A', 'float', None],
         ['max_beta_angle_deg', 'Max Beta Angle', 23.5, 'deg', 'float', None],
     ]),
+
+    # --- mission_param (24 data rows) ---
+    # columns: name | launch_config | phase | value | unit | source | description | include
     ('mission_param', [
-        ['name', 'launch_config', 'phase', 'value', 'unit', 'source', 'description', 'include'],
+        ['name', 'launch_config', 'phase', 'value', 'unit', 'source', 'description', 'include'],  # header
         ['bus_voltage', 'single', 'End_of_ORP', 105.5, 'V', 'Table 7', None, True],
         ['bus_voltage', 'single', 'End_of_Life', 101.5, 'V', 'Table 7', None, True],
         ['bus_voltage', 'dual', 'End_of_ORP', 101.5, 'V', 'Table 7', None, True],
@@ -172,13 +196,19 @@ SHEETS = [
         ['pva_temperature', 'dual', 'End_of_ORP', 49.5, 'degC', 'Table 7', None, True],
         ['pva_temperature', 'dual', 'End_of_Life', 51.1, 'degC', 'Table 7', None, True],
     ]),
+
+    # --- analysis (2 data rows) ---
+    # columns: launch | phase | season | temperature | string_loss | sun_angle | v_operating
     ('analysis', [
-        ['launch', 'phase', 'season', 'temperature', 'string_loss', 'sun_angle', 'v_operating'],
+        ['launch', 'phase', 'season', 'temperature', 'string_loss', 'sun_angle', 'v_operating'],  # header
         ['single', 'End_of_Life', '1322/1367', 51.1, 1, 0, 101.5],
         ['dual', 'End_of_Life', '1322/1367', 51.1, 1, 0, 101.5],
     ]),
+
+    # --- requirement (13 data rows) ---
+    # columns: param | type | value
     ('requirement', [
-        ['param', 'type', 'value'],
+        ['param', 'type', 'value'],  # header
         ['voltage_operating', 'float', 101.5],
         ['voltage_unit', 'string', 'V'],
         ['max_section_current', 'float', 5.4],

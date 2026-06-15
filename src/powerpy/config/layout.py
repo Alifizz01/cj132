@@ -151,7 +151,7 @@ def _parse_layout_rows(rows) -> np.ndarray:
     return np.array(grid, dtype="<U8")
 
 
-def from_dict(d: Dict, substrate=None) -> PanelLayout:
+def from_dict(d: Dict) -> PanelLayout:
     """Build a PanelLayout from a parsed dict (the JSON/YAML schema)."""
     valid = {f.name for f in dataclasses.fields(TileType)} - {"key"}
     palette: Dict[str, TileType] = {}

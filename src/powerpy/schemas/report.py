@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 from powerpy.schemas.document import DocumentMetadata
 from powerpy.schemas.cell import CellParameters
-from powerpy.schemas.mission import MissionParameters
+from powerpy.schemas.mission import MissionParameters, MissionOrbit
 from powerpy.schemas.layout import ArrayLayout
 from powerpy.schemas.losses import LossCollection
 from powerpy.schemas.fluxes import RadiationFluxCollection
@@ -22,3 +22,4 @@ class ReportMetadata:
     # structure is optional -- a workbook without the sheet falls back to a
     # sane default.
     structure: ReportStructure = field(default_factory=ReportStructure.default)
+    mission_orbit: MissionOrbit | None = None

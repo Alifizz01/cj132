@@ -6,7 +6,7 @@ from powerpy.loader.document import load_document_metadata
 from powerpy.loader.fluxes import load_radiation_fluxes
 from powerpy.loader.layout import load_array_layout
 from powerpy.loader.losses import load_losses
-from powerpy.loader.mission import load_mission_parameters
+from powerpy.loader.mission import load_mission_parameters, load_mission_orbit
 from powerpy.loader.structure import load_report_structure
 from powerpy.schemas.report import ReportMetadata
 
@@ -32,6 +32,7 @@ def load_report_data(params_file: Path, data_dir: Path) -> ReportMetadata:
         document=load_document_metadata(params_file, data_dir),
         cell=load_cell_parameters(params_file, data_dir),
         mission=load_mission_parameters(params_file),
+        mission_orbit=load_mission_orbit(params_file, data_dir),
         array_layout=load_array_layout(params_file),
         losses=load_losses(params_file),
         radiation_fluxes=load_radiation_fluxes(params_file),

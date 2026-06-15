@@ -64,3 +64,22 @@ def test_mission_orbit_defaults_when_missing():
 def test_mission_orbit_altitude_required():
     with pytest.raises(KeyError):
         _ = MissionOrbit(params={}).altitude_km
+
+
+from pathlib import Path
+from powerpy.loader.report import load_report_data
+
+ROOT = Path(__file__).resolve().parents[1]
+PARAMS = ROOT / "params.xlsx"
+DATA = ROOT / "src" / "powerpy" / "data"
+
+needs_params = pytest.mark.skipif(
+    not PARAMS.exists(), reason="params.xlsx not present")
+
+
+@needs_params
+def test_report_loads_mission_orbit():
+    md = load_report_data(PARAMS, DATA)
+    assert md.mission_orbit is not None
+    assert md.mission_orbit.altitude_km == 35786.0          # GEO
+    assert md.mission_orbit.sun_intensity_eol_min == 1322.0

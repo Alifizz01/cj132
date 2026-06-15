@@ -25,6 +25,8 @@ def load_cell_parameters(params_file: Path, data_dir: Path) -> CellParameters:
     string_diode = (load_shunt_diode_from_json(string_diode_ref)
                     if string_diode_ref else None)
 
+    circuit_ref = values.get("circuit_reference_file")
+
     return CellParameters(
         name=values["cell_name"],
         manufacturer=values["manufacturer"],
@@ -46,6 +48,7 @@ def load_cell_parameters(params_file: Path, data_dir: Path) -> CellParameters:
         diode=diode,
         string_diode=string_diode,
         string_diode_reference_file=string_diode_ref,
+        circuit_reference_file=circuit_ref,
     )
 
 

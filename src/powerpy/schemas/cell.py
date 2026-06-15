@@ -104,6 +104,10 @@ class CellParameters:
     string_diode: ShuntDiodeParameters | None = None
     string_diode_reference_file: Path | None = None
 
+    # optional free-form circuit JSON; when set, drives the electrical solve
+    # instead of the ArrayLayout sections.
+    circuit_reference_file: Path | None = None
+
     def __post_init__(self):
         for name in ("cell_length_mm", "cell_width_mm", "cell_thickness_um",
                      "substrate_thickness_um", "cell_area_cm2", "cell_mass_mg"):

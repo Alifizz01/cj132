@@ -101,3 +101,14 @@ def test_build_array_from_circuit_structure_and_curve():
     p = v * i
     assert np.all(np.isfinite(v)) and np.all(np.isfinite(i))
     assert float(p.max()) > 0.0
+
+
+from powerpy.schemas.cell import CellParameters
+
+
+def test_cellparameters_has_optional_circuit_reference():
+    report = load_report_data(_PARAMS, _DATA_DIR)
+    assert hasattr(report.cell, "circuit_reference_file")
+    # the workbook may or may not reference a circuit yet; either None or a Path
+    ref = report.cell.circuit_reference_file
+    assert ref is None or ref.name.endswith(".json")

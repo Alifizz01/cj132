@@ -1,7 +1,7 @@
 # Grid-as-single-source layout — design
 
 **Date:** 2026-06-15
-**Status:** Draft — design approved in direction; data-model specifics have open decisions (see §10). Pending spec review.
+**Status:** Approved — all data-model decisions resolved (see §10). Pending implementation plan (to be written/executed after the free-form-circuit branch is untangled from the concurrent power-budget work).
 **Author:** PowerPy
 **Supersedes the layout strategy of:** `2026-06-15-freeform-circuit-electrical-layout-design.md` (the free-form circuit becomes an *optional override*, not the primary source — see §9).
 
@@ -28,7 +28,8 @@ identity**, and *derive* both perspectives from it:
 - **Thermal view** = tile positions + 4-neighbour adjacency (exactly what `PanelLayout` already
   produces).
 - **Electrical view** = group cell tiles by their `string` tag → cells in series; group strings by
-  their `section` tag → strings in parallel; group sections by panel → the array.
+  their `block` tag → strings in parallel (a `block` is the parallel section); group blocks by
+  panel → the array.
 
 Because there is only one artifact, correlation is **structural, not a promise**: the two views
 cannot drift, and the cell at grid index *k* is the *same* object thermally and electrically. This
@@ -48,14 +49,14 @@ bridge/mapping code** — same cells on both sides.
 ## 4. What the grid already has, and what it needs
 
 `PanelLayout.TileType` already carries: `is_cell`, optical/thermal props, `string` (electrical
-group id), `block` (series-block id), `generates_power`. The grid is ~80% of a single source. To
-derive a full electrical circuit it needs three small additions:
+series-string id), `block` (group id), `generates_power`. The grid is ~80% of a single source. To
+derive a full electrical circuit it needs three small additions (decisions resolved per §10):
 
-| Need | Why | Proposed form (see §10 for open choice) |
+| Need | Why | Resolved form |
 |---|---|---|
-| **Series order within a string** | blocking-diode placement and the reverse-bias chain need cell order | optional `series_index` on the cell tile; **fallback: row-major scan order** of that string's tiles |
-| **Parallel grouping (section)** | strings combine in parallel within a section | a `section` tag per cell tile (reuse/rename `block`, or add `section`) |
-| **Per-string / per-section electrical params** | harness R, blocking/shunt diodes, section harness R | a small side-table keyed by the SAME `string`/`section` ids the tiles use (a workbook sheet or a block in the layout JSON) |
+| **Series order within a string** | blocking-diode placement and the reverse-bias chain need cell order | **infer from row-major scan order** of that string's tiles; optional `series_index` on a tile overrides |
+| **Parallel grouping** | strings combine in parallel within a section | **reuse the existing `block` field** as the parallel-section id (the section = all strings sharing a `block`) |
+| **Per-string / per-block electrical params** | harness R, blocking/shunt diodes, section harness R | a `circuit` block **inside the layout JSON**, keyed by the same `string`/`block` ids the tiles use (keeps the grid file self-contained) |
 
 Everything else needed for the electrical solve (series/parallel combine, environment factors,
 cell + string shunt diodes) already exists and is reused unchanged.
@@ -67,11 +68,11 @@ A new builder (mirroring `build_array_from_circuit`) constructs the existing
 
 1. Take the prototype `CellModel(report.cell, iv_engine=...)`.
 2. Collect cell tiles (`is_cell`/`generates_power`), grouped by `string` id; order each group by
-   `series_index` (or row-major position). Each group → a `StringModel` of `len(group)` cells in
-   series, with per-string params from the side-table (harness R, blocking diode, string shunt
-   diode forward drop).
-3. Group strings by `section` id → `SectionModel` (parallel), with per-section harness R.
-4. Group sections by panel → `PanelModel`; all panels → `ArrayModel`.
+   row-major position (or `series_index` when given). Each group → a `StringModel` of `len(group)`
+   cells in series, with per-string params from the layout JSON's `circuit` block (harness R,
+   blocking diode, string shunt diode forward drop).
+3. Group strings by `block` id → `SectionModel` (parallel), with per-block harness R.
+4. Group blocks by panel → `PanelModel`; all panels → `ArrayModel`.
 
 The result is an `ArrayModel` identical in type to today's, so the report, environment pipeline,
 and curve-combination are untouched.
@@ -120,17 +121,19 @@ The free-form circuit JSON (`schemas/circuit.py`, `loader/circuit.py`,
 
 Resolution order in `build_electrical_report`: **circuit override → grid-derived → ArrayLayout**.
 
-## 10. Open decisions (to confirm before the implementation plan)
+## 10. Resolved decisions
 
-1. **Series order:** explicit `series_index` per tile, or infer from row-major scan order of a
-   string's tiles? (Recommend: infer by position, with optional explicit override.)
-2. **Multi-panel arrays:** one grid file per physical panel (referenced by the workbook), or a
-   `panel` tag per tile in a single grid? (Recommend: one grid per panel — matches hardware.)
-3. **Where per-string/section electrical params live:** a new workbook sheet (e.g. `circuit_params`
-   keyed by string/section id), or a block inside the layout JSON? (Recommend: a block in the
-   layout JSON, so the grid file is self-contained.)
-4. **`block` vs `section`:** reuse the existing `block` field as the parallel-section id, or add a
-   distinct `section` field and keep `block` for series sub-blocks (bypass-diode groups)?
+1. **Series order:** infer from row-major scan order of a string's tiles; an optional
+   `series_index` on a tile overrides when an explicit order is needed.
+2. **Multi-panel arrays:** one grid file per physical panel, referenced by the workbook (matches
+   hardware; no `panel` tag needed within a grid).
+3. **Per-string/block electrical params:** a `circuit` block inside the layout JSON, keyed by the
+   `string`/`block` ids, so each grid file is self-contained.
+4. **Parallel grouping field:** reuse the existing **`block`** field as the parallel-section id (a
+   section = all strings sharing a `block`). No new `section` field is added.
+
+Implication for the data model: a cell tile is identified electrically by (`string`, `block`),
+with series order from position. `string` = the series string; `block` = the parallel section.
 
 ## 11. Scope
 
@@ -144,7 +147,7 @@ raw geometry without tags.
 
 ## 12. Validation & correlation checks
 
-- Every `is_cell` tile must resolve to a `string`, and every `string` to a `section`; loader raises
+- Every `is_cell` tile must resolve to a `string`, and every `string` to a `block`; loader raises
   with the offending tile/string id otherwise.
 - A derived-array sanity check: total series cells and parallel paths match the grid's cell counts.
 - Because there is one artifact, no cross-layout consistency check is needed — the class of "the

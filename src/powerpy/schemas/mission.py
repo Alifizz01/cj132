@@ -89,8 +89,10 @@ class MissionOrbit:
     accessors for the values the power budget and thermal solve need.  Optical
     environment params absent from the workbook fall back to documented LEO/Earth
     defaults.
+
+    The ``params`` dict is held by reference (not copied or deep-frozen); callers must not mutate it.
     """
-    params: dict
+    params: dict[str, object]
 
     def get(self, key: str, default=None):
         return self.params.get(key, default)

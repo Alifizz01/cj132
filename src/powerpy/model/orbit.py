@@ -62,6 +62,20 @@ def orbital_period(altitude_km: float, *, body_radius_km: float = R_EARTH_M / 1e
     return float(2.0 * np.pi * np.sqrt(a ** 3 / mu))
 
 
+def view_factor_to_planet(altitude_km: float,
+                          body_radius_km: float = R_EARTH_M / 1e3) -> float:
+    """Geometric nadir view factor of a flat plate to the planet sphere.
+
+    ``F = (R / (R + h))**2`` -- the fraction of a downward-facing plate's
+    hemisphere filled by the planet disc.  This is the upper bound (face
+    looking straight at the planet); it falls with altitude, so GEO sees a
+    much smaller albedo/IR load than LEO.
+    """
+    if altitude_km < 0:
+        raise ValueError("altitude_km must be >= 0")
+    return float((body_radius_km / (body_radius_km + altitude_km)) ** 2)
+
+
 def sun_direction_eci(day_of_year: float) -> np.ndarray:
     """Unit vector from Earth to Sun in ECI for a given day of year (approx)."""
     lam = np.radians((day_of_year - VERNAL_EQUINOX_DOY) * 360.0 / DAYS_PER_YEAR)

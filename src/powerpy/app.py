@@ -46,7 +46,7 @@ def _solve_kwargs(args):
 
 
 def _cmd_run(args) -> int:
-    layout = load_layout(args.layout)
+    layout = load_layout(args.layout, substrate=args.substrate)
     failed = [int(i) for i in (args.fail or [])]
     pe = make_pe(layout, failed, healthy_w=args.healthy_w, reverse_w=args.reverse_w)
     res = solve_panel(layout, p_elec=pe, **_solve_kwargs(args))
@@ -68,7 +68,7 @@ def _cmd_run(args) -> int:
 
 
 def _cmd_worst(args) -> int:
-    layout = load_layout(args.layout)
+    layout = load_layout(args.layout, substrate=args.substrate)
     out = worst_case_search(layout, max_failures=args.max_failures, t_limit_c=args.t_limit,
                             solve_kwargs=_solve_kwargs(args), healthy_w=args.healthy_w,
                             reverse_w=args.reverse_w, workers=args.workers)
@@ -130,9 +130,11 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .loader.report import load_report_data
     from .loader.analysis import load_analysis_scope
     from .loader.requirement import load_requirement
+    from .loader.circuit import load_circuit
     from .simulation.pipeline import (
-        AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
+        AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run)
     from .simulation.array_level import build_from_report
+    from .simulation.circuit_build import build_array_from_circuit
     from .render import Report
 
     params = Path(params)
@@ -142,59 +144,69 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
 
     report = load_report_data(params, data_dir)
     scope = load_analysis_scope(params)
-    requirement = load_requirement(params, data_dir)   # mission targets (or None)
+    requirement = load_requirement(params, data_dir)
+
+    # string shunt-diode forward drop (if the cell carries one)
+    string_shunt_vf = (report.cell.string_diode.v_forward
+                       if getattr(report.cell, "string_diode", None) else None)
+
+    def _build_array():
+        """Build the array from the free-form circuit if referenced, else the
+        ArrayLayout sections."""
+        ref = getattr(report.cell, "circuit_reference_file", None)
+        if ref:
+            circuit = load_circuit(ref)
+            return build_array_from_circuit(
+                report.cell, circuit, iv_engine=engine, string_shunt_vf=string_shunt_vf)
+        return build_from_report(report, iv_engine=engine)
+
+    def _case_result(label, phase, launch, *, temperature_c=None, season=1.0,
+                     sun_angle_deg=0.0, string_loss=1.0, v_operating=None, array=None):
+        env = environment_for_phase(
+            report, phase=phase, launch_config=launch,
+            temperature_c=temperature_c, season=season, angle_alpha_deg=sun_angle_deg)
+        if string_loss != 1.0:
+            env = dataclasses.replace(env, current_loss=env.current_loss * string_loss)
+        res = run(array, env)
+        v_bus = v_operating
+        if v_bus is None and requirement is not None:
+            v_bus = requirement.voltage_operating_v
+        bus = None
+        if v_bus is not None:
+            i_bus = array.current_at_voltage(v_bus)
+            bus = CompliancePoint(bus_voltage_v=v_bus, current_a=float(i_bus),
+                                  power_w=float(v_bus * i_bus))
+        case = AnalysisCase(label=label, phase=phase, launch_config=launch,
+                            temperature_c=temperature_c, season=season)
+        return CaseResult(case=case, environment=env, results=res, bus=bus)
+
+    array = _build_array()
 
     if scope:
-        # SCOPE-DRIVEN: investigate exactly the configs the `analysis` sheet lists,
-        # in its order, each at its own operating conditions.
-        array = build_from_report(report, iv_engine=engine)
-        case_results = []
-        for cfg in scope:
-            env = environment_for_phase(
-                report, phase=cfg.phase, launch_config=cfg.launch,
-                temperature_c=cfg.temperature_c, season=cfg.season,
-                angle_alpha_deg=cfg.sun_angle_deg)
-            if cfg.string_loss != 1.0:        # extra string-level current loss
-                env = dataclasses.replace(
-                    env, current_loss=env.current_loss * cfg.string_loss)
-            res = run(array, env)
-            # bus voltage: the analysis row's v_operating, else the requirement's
-            v_bus = cfg.v_operating
-            if v_bus is None and requirement is not None:
-                v_bus = requirement.voltage_operating_v
-            bus = None
-            if v_bus is not None:
-                i_bus = array.current_at_voltage(v_bus)
-                bus = CompliancePoint(bus_voltage_v=v_bus,
-                                      current_a=float(i_bus),
-                                      power_w=float(v_bus * i_bus))
-            case = AnalysisCase(label=cfg.label, phase=cfg.phase,
-                                launch_config=cfg.launch,
-                                temperature_c=cfg.temperature_c, season=cfg.season)
-            case_results.append(CaseResult(case=case, environment=env,
-                                          results=res, bus=bus))
+        case_results = [
+            _case_result(cfg.label, cfg.phase, cfg.launch,
+                         temperature_c=cfg.temperature_c, season=cfg.season,
+                         sun_angle_deg=cfg.sun_angle_deg, string_loss=cfg.string_loss,
+                         v_operating=cfg.v_operating, array=array)
+            for cfg in scope]
         labels = [c.label for c in scope]
-        # requirement line on the P-V plot: the binding minimum power for the
-        # scoped phases (EOL phases -> eol_power_min, else eor_power_min).
-        requirement_w = None
-        if requirement is not None:
-            requirement_w = min(requirement.power_min_for_phase(c.phase) for c in scope)
-        rpt = Report.from_results(report, case_results, array=array,
-                                  requirement_w=requirement_w, iv_engine=engine)
-        rpt.render(workdir)
-        return rpt.compile_pdf(out_pdf), labels, report
+        requirement_w = (min(requirement.power_min_for_phase(c.phase) for c in scope)
+                         if requirement is not None else None)
+    else:
+        present = {f.phase for f in report.losses}
+        if not present:
+            raise SystemExit("ERROR: no phases found and no `analysis` sheet in the workbook.")
+        phases = [p for p in _PHASE_ORDER if p in present]
+        phases += sorted(p for p in present if p not in _PHASE_ORDER)
+        case_results = [_case_result(ph, ph, "single", array=array) for ph in phases]
+        labels = phases
+        requirement_w = (min(requirement.power_min_for_phase(ph) for ph in phases)
+                         if requirement is not None else None)
 
-    # FALLBACK (no analysis sheet): one case per phase found in the loss table.
-    present = {f.phase for f in report.losses}
-    if not present:
-        raise SystemExit("ERROR: no phases found and no `analysis` sheet in the workbook.")
-    phases = [p for p in _PHASE_ORDER if p in present]
-    phases += sorted(p for p in present if p not in _PHASE_ORDER)
-    cases = [AnalysisCase(label=ph, phase=ph) for ph in phases]
-    case_results = evaluate(report, cases, build_kwargs={"iv_engine": engine})
-    rpt = Report.from_results(report, case_results, build_array=True, iv_engine=engine)
+    rpt = Report.from_results(report, case_results, array=array,
+                              requirement_w=requirement_w, iv_engine=engine)
     rpt.render(workdir)
-    return rpt.compile_pdf(out_pdf), phases, report
+    return rpt.compile_pdf(out_pdf), labels, report
 
 
 def _cmd_report(args) -> int:
@@ -215,7 +227,7 @@ def _cmd_report(args) -> int:
 
 
 def _cmd_sweep(args) -> int:
-    layout = load_layout(args.layout)
+    layout = load_layout(args.layout, substrate=args.substrate)
     a = auto_monte_carlo(layout, t_limit_c=args.t_limit, solve_kwargs=_solve_kwargs(args),
                          p_fail=args.p_fail, target_se=args.target_se, batch=args.batch,
                          max_runs=args.max_runs, seed=args.seed, healthy_w=args.healthy_w,

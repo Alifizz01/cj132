@@ -112,3 +112,37 @@ def test_cellparameters_has_optional_circuit_reference():
     # the workbook may or may not reference a circuit yet; either None or a Path
     ref = report.cell.circuit_reference_file
     assert ref is None or ref.name.endswith(".json")
+
+
+from powerpy.app import build_electrical_report
+
+
+def test_build_electrical_report_uses_circuit(tmp_path, monkeypatch):
+    import dataclasses
+    import powerpy.simulation.circuit_build as cb
+    import powerpy.loader.report as report_mod
+
+    captured = {}
+    real_build = cb.build_array_from_circuit
+
+    def spy(cell_params, circuit, **kw):
+        arr = real_build(cell_params, circuit, **kw)
+        captured["sections"] = [len(s.strings) for s in arr.iter_sections()]
+        return arr
+
+    # patch at the SOURCE module (local imports resolve the attribute at call time)
+    monkeypatch.setattr(cb, "build_array_from_circuit", spy)
+
+    real_load = report_mod.load_report_data
+
+    def patched_load(params, data_dir):
+        rep = real_load(params, data_dir)
+        cell = dataclasses.replace(rep.cell, circuit_reference_file=_SAMPLE.resolve())
+        return dataclasses.replace(rep, cell=cell)
+
+    monkeypatch.setattr(report_mod, "load_report_data", patched_load)
+
+    pdf, labels, rep = build_electrical_report(
+        _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
+    assert captured.get("sections") == [2, 1]   # circuit path was used
+    assert labels                                # at least one scoped case

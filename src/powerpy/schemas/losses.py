@@ -2,15 +2,15 @@
 import math
 from dataclasses import dataclass
 
-from powerpy.schemas._common import Phase, Level
+from powerpy.schemas._common import norm
 
 
 @dataclass(frozen=True)
 class LossFactor:
     name: str
-    phase: Phase
+    phase: str
     value: float
-    level: Level
+    level: str
     description: str = ""
     source: str = ""
 
@@ -19,11 +19,11 @@ class LossFactor:
 class LossCollection:
     items: tuple[LossFactor, ...]
 
-    def by_phase(self, phase: Phase) -> "LossCollection":
-        return LossCollection(tuple(l for l in self.items if l.phase == phase))
+    def by_phase(self, phase: str) -> "LossCollection":
+        return LossCollection(tuple(l for l in self.items if norm(l.phase) == norm(phase)))
 
-    def by_level(self, level: Level) -> "LossCollection":
-        return LossCollection(tuple(l for l in self.items if l.level == level))
+    def by_level(self, level: str) -> "LossCollection":
+        return LossCollection(tuple(l for l in self.items if norm(l.level) == norm(level)))
 
     def by_name(self, name: str) -> "LossCollection":
         return LossCollection(tuple(l for l in self.items if l.name == name))

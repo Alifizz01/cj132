@@ -16,16 +16,15 @@ Common parameter names:
 """
 from dataclasses import dataclass
 
-from powerpy.schemas._common import Phase
-from powerpy.schemas.fluxes import LaunchConfig
+from powerpy.schemas._common import norm
 
 
 @dataclass(frozen=True)
 class MissionOperatingPoint:
     """A single mission parameter value at a specific phase/launch_config."""
     name: str
-    launch_config: LaunchConfig
-    phase: Phase
+    launch_config: str
+    phase: str
     value: float
     unit: str
     source: str = ""
@@ -37,44 +36,38 @@ class MissionParameters:
     """Collection of mission operating points, queryable by phase and launch_config."""
     items: tuple[MissionOperatingPoint, ...]
 
-    def by_phase(self, phase: Phase) -> "MissionParameters":
+    def by_phase(self, phase: str) -> "MissionParameters":
         return MissionParameters(
-            tuple(p for p in self.items if p.phase == phase)
+            tuple(p for p in self.items if norm(p.phase) == norm(phase))
         )
 
-    def by_launch_config(self, lc: LaunchConfig) -> "MissionParameters":
+    def by_launch_config(self, lc: str) -> "MissionParameters":
         return MissionParameters(
-            tuple(p for p in self.items if p.launch_config == lc)
+            tuple(p for p in self.items if norm(p.launch_config) == norm(lc))
         )
 
     def by_name(self, name: str) -> "MissionParameters":
         return MissionParameters(
-            tuple(p for p in self.items if p.name == name)
+            tuple(p for p in self.items if norm(p.name) == norm(name))
         )
 
-    def lookup(
-        self,
-        *,
-        name: str,
-        launch_config: LaunchConfig,
-        phase: Phase,
-    ) -> float:
-        """Get the single operating point value matching all three keys."""
+    def lookup(self, *, name: str, launch_config: str, phase: str) -> float:
+        """Get the single operating point value matching all three keys (case-insensitive)."""
         matches = [
             p for p in self.items
-            if p.name == name
-            and p.launch_config == launch_config
-            and p.phase == phase
+            if norm(p.name) == norm(name)
+            and norm(p.launch_config) == norm(launch_config)
+            and norm(p.phase) == norm(phase)
         ]
         if not matches:
             raise KeyError(
                 f"No mission parameter found for "
-                f"name={name}, launch_config={launch_config.value}, phase={phase.value}"
+                f"name={name}, launch_config={launch_config}, phase={phase}"
             )
         if len(matches) > 1:
             raise ValueError(
                 f"Multiple mission parameters found for "
-                f"name={name}, launch_config={launch_config.value}, phase={phase.value}"
+                f"name={name}, launch_config={launch_config}, phase={phase}"
             )
         return matches[0].value
 

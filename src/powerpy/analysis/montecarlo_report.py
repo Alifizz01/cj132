@@ -117,7 +117,7 @@ def run_mc_study(md: ReportMetadata, *,
     inputs = {
         "panel_rows": n_rows, "panel_cols": n_cols,
         "n_cells": len(study.cell_indices(layout)),
-        "phase": phase.value, "launch_config": launch_config.value,
+        "phase": phase, "launch_config": launch_config,
         "p_fail": p_fail, "healthy_w": round(healthy_w, 3),
         "reverse_w": round(reverse_w, 3), "t_limit_c": t_limit_c,
         "target_se": target_se, "max_runs": max_runs,

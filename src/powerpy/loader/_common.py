@@ -18,7 +18,6 @@ Two conventions are supported:
 from __future__ import annotations
 
 from datetime import date, datetime
-from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Hashable, TypeVar
 
@@ -144,21 +143,16 @@ def filter_included(df: pd.DataFrame, sheet_name: str = "") -> pd.DataFrame:
     return out
 
 
-def parse_enum(
-    raw: Any,
-    enum_class: type[Enum],
-    sheet: str,
-    excel_row: int,
-    field: str,
-) -> Enum:
-    """Convert a cell value to an enum member. Fails loudly with valid options listed."""
-    try:
-        return enum_class(str(raw).strip())
-    except ValueError:
-        valid = [e.value for e in enum_class]
-        raise ValueError(
-            f"{sheet}:row {excel_row}: unknown {field} '{raw}'. Valid: {valid}"
-        )
+def require_str(row: pd.Series, col: str, sheet: str, excel_row: int) -> str:
+    """Require a non-empty string label (phase, launch_config, type, ...).
+
+    These vocabularies are project-defined, so the value is taken as-is
+    (stripped) -- no fixed enum to validate against, only non-emptiness.
+    """
+    val = row[col] if col in (row.index if hasattr(row, "index") else row) else None
+    if val is None or pd.isna(val) or str(val).strip() == "":
+        raise ValueError(f"{sheet}:row {excel_row}: '{col}' is empty")
+    return str(val).strip()
 
 
 def require_float(
@@ -254,16 +248,6 @@ def clean_optional(row, col: str) -> str:
     if pd.isna(val):
         return ""
     return str(val).strip()
-
-
-def optional_int(row: pd.Series, col: str) -> int | None:
-    """Return the column's value as an int, or None if missing/empty."""
-    if col not in row.index:
-        return None
-    val = row[col]
-    if pd.isna(val):
-        return None
-    return int(val)
 
 
 # -------------------------------------------------------------------

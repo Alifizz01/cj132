@@ -6,15 +6,12 @@ import pandas as pd
 from powerpy.loader._common import (
     clean_optional,
     filter_included,
-    parse_enum,
     require_float,
+    require_str,
     validate_required_columns,
     validate_unique,
 )
-from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import (
-    FluxParam,
-    LaunchConfig,
     RadiationFlux,
     RadiationFluxCollection,
 )
@@ -42,18 +39,9 @@ def load_radiation_fluxes(params_file: Path) -> RadiationFluxCollection:
 
         items.append(RadiationFlux(
             name=str(row["name"]).strip(),
-            launch_config=parse_enum(
-                row["launch_config"], LaunchConfig,
-                "radiation_fluxes", excel_row, "launch_config",
-            ),
-            phase=parse_enum(
-                row["phase"], Phase,
-                "radiation_fluxes", excel_row, "phase",
-            ),
-            param=parse_enum(
-                row["param"], FluxParam,
-                "radiation_fluxes", excel_row, "param",
-            ),
+            launch_config=require_str(row, "launch_config", "radiation_fluxes", excel_row),
+            phase=require_str(row, "phase", "radiation_fluxes", excel_row),
+            param=require_str(row, "param", "radiation_fluxes", excel_row),
             value=value,
             unit=clean_optional(row, "unit") or "e/cm2",
             source=clean_optional(row, "source"),

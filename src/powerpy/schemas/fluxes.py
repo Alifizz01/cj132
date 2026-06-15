@@ -1,17 +1,21 @@
-"""Radiation fluxes (1 MeV equivalent electron fluence) by launch config / phase / param."""
+"""Radiation fluxes (1 MeV equivalent electron fluence) by launch config / phase / param.
+
+Launch config and flux param are plain strings (project-defined); matching is
+case-insensitive via :func:`norm`.
+"""
 from dataclasses import dataclass
-from enum import Enum
 
-from powerpy.schemas._common import Phase
+from powerpy.schemas._common import norm
 
 
-class LaunchConfig(str, Enum):
+class LaunchConfig:
+    """Convenience constants for launch configuration (plain str)."""
     SINGLE = "single"
     DUAL = "dual"
 
 
-class FluxParam(str, Enum):
-    """Which cell parameter the fluence applies to."""
+class FluxParam:
+    """Convenience constants for which cell parameter the fluence applies to."""
     ISC = "isc"
     VOC = "voc"
 
@@ -19,9 +23,9 @@ class FluxParam(str, Enum):
 @dataclass(frozen=True)
 class RadiationFlux:
     name: str
-    launch_config: LaunchConfig
-    phase: Phase
-    param: FluxParam
+    launch_config: str
+    phase: str
+    param: str
     value: float        # e/cm² (1 MeV equivalent electron fluence)
     unit: str = "e/cm2"
     source: str = ""
@@ -31,44 +35,38 @@ class RadiationFlux:
 class RadiationFluxCollection:
     items: tuple[RadiationFlux, ...]
 
-    def by_phase(self, phase: Phase) -> "RadiationFluxCollection":
+    def by_phase(self, phase: str) -> "RadiationFluxCollection":
         return RadiationFluxCollection(
-            tuple(f for f in self.items if f.phase == phase)
+            tuple(f for f in self.items if norm(f.phase) == norm(phase))
         )
 
-    def by_launch_config(self, lc: LaunchConfig) -> "RadiationFluxCollection":
+    def by_launch_config(self, lc: str) -> "RadiationFluxCollection":
         return RadiationFluxCollection(
-            tuple(f for f in self.items if f.launch_config == lc)
+            tuple(f for f in self.items if norm(f.launch_config) == norm(lc))
         )
 
-    def by_param(self, p: FluxParam) -> "RadiationFluxCollection":
+    def by_param(self, p: str) -> "RadiationFluxCollection":
         return RadiationFluxCollection(
-            tuple(f for f in self.items if f.param == p)
+            tuple(f for f in self.items if norm(f.param) == norm(p))
         )
 
-    def lookup(
-        self,
-        *,
-        launch_config: LaunchConfig,
-        phase: Phase,
-        param: FluxParam,
-    ) -> float:
-        """Get the single flux value matching all three keys."""
+    def lookup(self, *, launch_config: str, phase: str, param: str) -> float:
+        """Get the single flux value matching all three keys (case-insensitive)."""
         matches = [
             f for f in self.items
-            if f.launch_config == launch_config
-            and f.phase == phase
-            and f.param == param
+            if norm(f.launch_config) == norm(launch_config)
+            and norm(f.phase) == norm(phase)
+            and norm(f.param) == norm(param)
         ]
         if not matches:
             raise KeyError(
                 f"No radiation flux found for "
-                f"launch_config={launch_config.value}, phase={phase.value}, param={param.value}"
+                f"launch_config={launch_config}, phase={phase}, param={param}"
             )
         if len(matches) > 1:
             raise ValueError(
                 f"Multiple radiation fluxes found for "
-                f"launch_config={launch_config.value}, phase={phase.value}, param={param.value}"
+                f"launch_config={launch_config}, phase={phase}, param={param}"
             )
         return matches[0].value
 

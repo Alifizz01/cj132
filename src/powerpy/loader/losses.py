@@ -6,12 +6,11 @@ import pandas as pd
 from powerpy.loader._common import (
     clean_optional,
     filter_included,
-    parse_enum,
     require_float_in_range,
+    require_str,
     validate_required_columns,
     validate_unique,
 )
-from powerpy.schemas._common import Phase, Level
 from powerpy.schemas.losses import LossFactor, LossCollection
 
 
@@ -30,11 +29,11 @@ def load_losses(params_file: Path) -> LossCollection:
         excel_row = idx + 2
         items.append(LossFactor(
             name=str(row["name"]).strip(),
-            phase=parse_enum(row["phase"], Phase, "losses", excel_row, "phase"),
+            phase=require_str(row, "phase", "losses", excel_row),
             value=require_float_in_range(
                 row, "value", "losses", excel_row, lo=0, hi=1
             ),
-            level=parse_enum(row["level"], Level, "losses", excel_row, "level"),
+            level=require_str(row, "level", "losses", excel_row),
             description=clean_optional(row, "description"),
             source=clean_optional(row, "source"),
         ))

@@ -46,17 +46,6 @@ class Topology:
 
 
 @dataclass(frozen=True)
-class PanelOverride:
-    """Override or extension for a specific panel — usually empty."""
-    panel_instance_id: str
-    override_section_id: str
-    action: str  # "modify" | "remove" | "add"
-    n_strings_parallel: int | None
-    n_sca_series_per_string: int | None
-    notes: str = ""
-
-
-@dataclass(frozen=True)
 class PhysicalSection:
     """A concrete instance: a section type placed on a specific panel/wing,
     with its own harness resistance (varies with distance from the yoke)."""

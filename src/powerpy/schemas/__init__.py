@@ -7,7 +7,6 @@ from powerpy.schemas.layout import (
     SectionType,
     PhysicalSection,
     Topology,
-    PanelOverride,
     ArrayLayout,
 )
 from powerpy.schemas.losses import LossFactor, LossCollection
@@ -23,7 +22,6 @@ from powerpy.schemas.structure import (
     ReportSection,
     ReportStructure,
 )
-from powerpy.schemas.narrative import NarrativeBook, NarrativeParagraph
 from powerpy.schemas.report import ReportMetadata
 
 __all__ = [
@@ -36,7 +34,6 @@ __all__ = [
     "SectionType",
     "PhysicalSection",
     "Topology",
-    "PanelOverride",
     "ArrayLayout",
     "LossFactor",
     "LossCollection",
@@ -48,7 +45,5 @@ __all__ = [
     "ContentType",
     "ReportSection",
     "ReportStructure",
-    "NarrativeBook",
-    "NarrativeParagraph",
     "ReportMetadata",
 ]

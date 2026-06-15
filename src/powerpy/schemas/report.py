@@ -8,7 +8,6 @@ from powerpy.schemas.layout import ArrayLayout
 from powerpy.schemas.losses import LossCollection
 from powerpy.schemas.fluxes import RadiationFluxCollection
 from powerpy.schemas.structure import ReportStructure
-from powerpy.schemas.narrative import NarrativeBook
 
 
 @dataclass(frozen=True)
@@ -20,7 +19,6 @@ class ReportMetadata:
     array_layout: ArrayLayout
     losses: LossCollection
     radiation_fluxes: RadiationFluxCollection
-    # structure & narrative are optional -- workbooks without the
-    # sheets fall back to sane defaults.
+    # structure is optional -- a workbook without the sheet falls back to a
+    # sane default.
     structure: ReportStructure = field(default_factory=ReportStructure.default)
-    narrative: NarrativeBook = field(default_factory=NarrativeBook.empty)

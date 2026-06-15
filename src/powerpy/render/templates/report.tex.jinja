@@ -55,27 +55,25 @@
 % Each structure row dispatches to the partial matching its type.
 % =====================================================================
 <<% for section in structure %>>
-% --- row << section.row_index >> -- id=<< section.id | tex >> type=<< section.type.value | tex >>
+% --- row << section.row_index >> -- id=<< section.id | tex >> type=<< section.type | tex >>
 \clearpage
-<<% if section.type.value == "section" %>>
-<<% include "sections/prose.tex.jinja" %>>
-<<% elif section.type.value == "figure" %>>
+<<% if section.type == "figure" %>>
 <<% include "sections/figure.tex.jinja" %>>
-<<% elif section.type.value == "cell_params" %>>
+<<% elif section.type == "cell_params" %>>
 <<% include "sections/cell.tex.jinja" %>>
-<<% elif section.type.value == "sections_table" %>>
+<<% elif section.type == "sections_table" %>>
 <<% include "sections/sections.tex.jinja" %>>
-<<% elif section.type.value == "loss_table" %>>
+<<% elif section.type == "loss_table" %>>
 <<% include "sections/losses.tex.jinja" %>>
-<<% elif section.type.value == "results_table" %>>
+<<% elif section.type == "results_table" %>>
 <<% include "sections/results.tex.jinja" %>>
-<<% elif section.type.value == "equations" %>>
+<<% elif section.type == "equations" %>>
 <<% include "sections/equations.tex.jinja" %>>
-<<% elif section.type.value == "symbols" %>>
+<<% elif section.type == "symbols" %>>
 <<% include "sections/symbols.tex.jinja" %>>
 <<% else %>>
 \section{<< section.title | tex >>}
-\textit{(no template for content type ``<< section.type.value | tex >>'')}
+\textit{(no template for content type ``<< section.type | tex >>'')}
 <<% endif %>>
 <<% endfor %>>
 

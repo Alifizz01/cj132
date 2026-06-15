@@ -12,8 +12,8 @@
 \endfoot
   \endlastfoot
 <<% for l in losses %>>
-  << l.name | tex >> & << l.phase.value | tex >>
-                     & << l.level.value | tex >>
+  << l.name | tex >> & << l.phase | tex >>
+                     & << l.level | tex >>
                      & << l.value | num(".4f") >>\\ \hline
 <<% endfor %>>
 \end{xltabular}

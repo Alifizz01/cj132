@@ -17,13 +17,11 @@ import pandas as pd
 from powerpy.loader._common import (
     clean_optional,
     filter_included,
-    parse_enum,
     require_float,
+    require_str,
     validate_required_columns,
     validate_unique,
 )
-from powerpy.schemas._common import Phase
-from powerpy.schemas.fluxes import LaunchConfig
 from powerpy.schemas.mission import MissionOperatingPoint, MissionParameters
 
 
@@ -46,14 +44,8 @@ def load_mission_parameters(params_file: Path) -> MissionParameters:
 
         items.append(MissionOperatingPoint(
             name=str(row["name"]).strip(),
-            launch_config=parse_enum(
-                row["launch_config"], LaunchConfig,
-                "mission_param", excel_row, "launch_config",
-            ),
-            phase=parse_enum(
-                row["phase"], Phase,
-                "mission_param", excel_row, "phase",
-            ),
+            launch_config=require_str(row, "launch_config", "mission_param", excel_row),
+            phase=require_str(row, "phase", "mission_param", excel_row),
             value=value,
             unit=clean_optional(row, "unit"),
             source=clean_optional(row, "source"),

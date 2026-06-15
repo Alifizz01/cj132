@@ -8,8 +8,8 @@
   \begin{tabularx}{\linewidth}{|L|r|l|}
     \hline
     \reporthead{\textbf{Quantity} & \textbf{Value} & \textbf{Unit}}\\ \hline
-    Phase                 & << c.case.phase.value | tex >> & \\ \hline
-    Launch configuration  & << c.case.launch_config.value | tex >> & \\ \hline
+    Phase                 & << c.case.phase | tex >> & \\ \hline
+    Launch configuration  & << c.case.launch_config | tex >> & \\ \hline
     Temperature           & << c.environment.temperature_c | num(".2f") >> & \si{\celsius}\\ \hline
     Season factor         & << c.environment.season | num(".4f") >> & \\ \hline
     Dose I                & << c.environment.dose_i | num(".3f") >> & \(\times 10^{14}\)\\ \hline

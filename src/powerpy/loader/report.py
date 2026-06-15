@@ -7,7 +7,6 @@ from powerpy.loader.fluxes import load_radiation_fluxes
 from powerpy.loader.layout import load_array_layout
 from powerpy.loader.losses import load_losses
 from powerpy.loader.mission import load_mission_parameters
-from powerpy.loader.narrative import load_narrative
 from powerpy.loader.structure import load_report_structure
 from powerpy.schemas.report import ReportMetadata
 
@@ -37,5 +36,4 @@ def load_report_data(params_file: Path, data_dir: Path) -> ReportMetadata:
         losses=load_losses(params_file),
         radiation_fluxes=load_radiation_fluxes(params_file),
         structure=load_report_structure(params_file),
-        narrative=load_narrative(params_file),
     )

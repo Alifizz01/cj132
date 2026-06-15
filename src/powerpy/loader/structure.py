@@ -18,14 +18,13 @@ import pandas as pd
 
 from powerpy.loader._common import (
     clean_optional,
-    parse_enum,
+    require_str,
     to_bool,
     validate_required_columns,
     validate_unique,
 )
 from powerpy.schemas.structure import (
     Audience,
-    ContentType,
     ReportSection,
     ReportStructure,
 )
@@ -54,13 +53,11 @@ def load_report_structure(
     items: list[ReportSection] = []
     for idx, row in df.iterrows():
         excel_row = int(idx) + 2
-        ctype = parse_enum(row["type"], ContentType,
-                           sheet_name, excel_row, "type")
+        ctype = require_str(row, "type", sheet_name, excel_row)
 
-        # audience is optional -- default BOTH if column missing/blank
+        # audience is optional -- default 'both' if column missing/blank
         if "audience" in df.columns and not pd.isna(row.get("audience")):
-            audience = parse_enum(row["audience"], Audience,
-                                  sheet_name, excel_row, "audience")
+            audience = str(row["audience"]).strip()
         else:
             audience = Audience.BOTH
 

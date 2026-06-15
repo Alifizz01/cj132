@@ -1,51 +1,51 @@
 """Report structure -- which sections appear, in what order, of what type.
 
-The workbook's ``structure`` sheet IS the table of contents of the
-rendered report.  Every row is one section; the row's ``type`` column
-tells the renderer what kind of content to inject (a paragraph, a
-figure, a table, an equation list, ...).
+The workbook's ``structure`` sheet IS the table of contents of the rendered
+report.  Every row is one section; the row's ``type`` column tells the renderer
+what kind of content to inject (a figure, a table, an equation list, ...).
 
 Sheet columns (long-format)::
 
     include | id | title | description | type | ref
 
 * **include**       TRUE / FALSE -- drop the row if FALSE
-* **id**            slug; also the lookup key into the ``narrative``
-                    sheet for prose-type rows
+* **id**            slug
 * **title**         the section heading rendered into the report
 * **description**   a short blurb rendered under the heading (or used
                     as a figure caption suffix)
-* **type**          one of ``section | figure | equations | symbols |
-                    results_table | loss_table | cell_params``
+* **type**          one of ``figure | cell_params | sections_table |
+                    loss_table | results_table | equations | symbols``
 * **ref**           for ``figure`` rows, the figure key the renderer
-                    should embed (e.g. ``iv_string``); empty otherwise
+                    should embed (e.g. ``iv_panel``); empty otherwise
 
-An optional **audience** column may be added later for customer/
-engineer filtering (defaults to ``BOTH`` if absent).
+An optional **audience** column may be added for customer/engineer filtering
+(defaults to ``both`` if absent).
+
+``type`` and ``audience`` are plain strings, not enums; the constants below are
+just the framework's known render-dispatch keys.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+
+from powerpy.schemas._common import norm
 
 
-# ---------------------------------------------------------------- enums
-class ContentType(str, Enum):
-    """The kind of content a structure row represents."""
-
-    SECTION       = "section"        # prose, pulled from narrative.id
+# ------------------------------------------------ render-dispatch vocabularies
+class ContentType:
+    """Known content types (plain str). A row whose type is not one of these
+    renders a polite placeholder rather than crashing."""
     FIGURE        = "figure"         # embed a generated figure
     EQUATIONS     = "equations"      # render the equations sheet
     SYMBOLS       = "symbols"        # render the nomenclature sheet
     RESULTS_TABLE = "results_table"  # per-section / per-case results
     LOSS_TABLE    = "loss_table"     # render the losses sheet
-    CELL_PARAMS   = "cell_params"    # render the effective cell parameters
+    CELL_PARAMS   = "cell_params"    # render the cell parameters
     SECTIONS_TABLE = "sections_table"  # render the per-section layout/harness
 
 
-class Audience(str, Enum):
-    """Who a section is for.  ``BOTH`` always passes the filter."""
-
+class Audience:
+    """Who a section is for (plain str). ``both`` always passes the filter."""
     CUSTOMER = "customer"
     ENGINEER = "engineer"
     BOTH     = "both"
@@ -60,9 +60,9 @@ class ReportSection:
     id: str
     title: str
     description: str
-    type: ContentType
+    type: str
     ref: str = ""
-    audience: Audience = Audience.BOTH
+    audience: str = Audience.BOTH
     # row index from the workbook -- preserves the user's authored order
     row_index: int = 0
 
@@ -83,22 +83,21 @@ class ReportStructure:
         return ReportStructure(
             tuple(s for s in self.sections if s.include))
 
-    def for_audience(self, audience: Audience | str | None) -> "ReportStructure":
-        """Keep rows whose audience matches (``BOTH`` always passes)."""
+    def for_audience(self, audience: str | None) -> "ReportStructure":
+        """Keep rows whose audience matches (``both`` always passes)."""
         if audience is None:
             return self
-        if isinstance(audience, str):
-            audience = Audience(audience)
+        want = norm(audience)
         return ReportStructure(tuple(
             s for s in self.sections
-            if s.audience == audience or s.audience == Audience.BOTH
+            if norm(s.audience) == want or norm(s.audience) == Audience.BOTH
         ))
 
-    def by_type(self, *types: ContentType) -> "ReportStructure":
+    def by_type(self, *types: str) -> "ReportStructure":
         """Keep only rows of the given content types."""
-        wanted = set(types)
+        wanted = {norm(t) for t in types}
         return ReportStructure(
-            tuple(s for s in self.sections if s.type in wanted))
+            tuple(s for s in self.sections if norm(s.type) in wanted))
 
     # ---------- ergonomics ----------
     def find(self, id: str) -> ReportSection | None:
@@ -114,10 +113,10 @@ class ReportStructure:
         return tuple(s.id for s in self.sections)
 
     def figure_refs(self) -> tuple[str, ...]:
-        """All ``ref`` values from rows of type FIGURE -- the figures
+        """All ``ref`` values from rows of type ``figure`` -- the figures
         the render layer is asked to produce."""
         return tuple(s.ref for s in self.sections
-                     if s.type == ContentType.FIGURE and s.ref)
+                     if norm(s.type) == ContentType.FIGURE and s.ref)
 
     def __iter__(self):
         return iter(self.sections)
@@ -131,20 +130,12 @@ class ReportStructure:
     # ---------- defaults ----------
     @classmethod
     def default(cls) -> "ReportStructure":
-        """Fallback used when the workbook has no ``structure`` sheet.
-
-        Matches the canonical short layout: cell params, layout,
-        losses, results, compliance.
-        """
+        """Fallback used when the workbook has no ``structure`` sheet:
+        cell params, loss budget, results."""
         rows = [
-            ("cell_params",  "Effective Cell Parameters", "",
-             ContentType.CELL_PARAMS,   ""),
-            ("string_def",   "String and Section Definitions", "",
-             ContentType.SECTION,       ""),
-            ("loss_factor",  "Loss Factor Budget", "",
-             ContentType.LOSS_TABLE,    ""),
-            ("results",      "Results", "",
-             ContentType.RESULTS_TABLE, ""),
+            ("cell_params", "Cell Parameters", "", ContentType.CELL_PARAMS, ""),
+            ("loss_budget", "Loss Factor Budget", "", ContentType.LOSS_TABLE, ""),
+            ("results", "Results", "", ContentType.RESULTS_TABLE, ""),
         ]
         return cls(tuple(
             ReportSection(include=True, id=id_, title=title,

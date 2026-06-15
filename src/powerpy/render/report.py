@@ -25,10 +25,7 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from powerpy.schemas import (
-    Audience,
-    ContentType,
     ReportMetadata,
-    ReportSection,
     ReportStructure,
 )
 # NOTE: the simulation engine (and its legacy cell/electric chain) is imported
@@ -174,7 +171,7 @@ class Report:
     def render(self, workdir: str | Path,
                *, template: str = "report.tex.jinja",
                main_tex: str = "report.tex",
-               audience: Audience | str | None = None) -> "Report":
+               audience: str | None = None) -> "Report":
         """Render the .tex workspace.  Returns self for chaining."""
         workdir = Path(workdir).resolve()
         figs_dir = workdir / "figures"
@@ -188,8 +185,7 @@ class Report:
         structure: ReportStructure = (self.metadata.structure
                                       .included()
                                       .for_audience(audience))
-        audience_label = (audience.value if isinstance(audience, Audience)
-                          else audience or "full")
+        audience_label = audience or "full"
 
         # build only the figures the structure actually asks for
         builders = _figure_builders(self.array, self.cases,
@@ -222,7 +218,6 @@ class Report:
             requirement_w=self.requirement_w,
             structure=structure,
             audience=audience_label,
-            narrative=self.metadata.narrative,
             figures=figures,
             # placeholders -- equations / symbols loaders not built yet
             equations=[],

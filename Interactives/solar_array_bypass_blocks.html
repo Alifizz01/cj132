@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar Array Circuit — Power Subsystem</title>
+<style>
+  /* ============================================================
+     THEME — EGSE / spacecraft power-subsystem bench console
+     ============================================================ */
+  :root{
+    --bg:#0E1726;            /* blue-graphite base */
+    --panel:#131F33;         /* instrument module surface */
+    --bezel:#22304A;         /* inset border */
+    --txt:#D7E2F2;           /* primary text */
+    --muted:#7E8DA6;         /* captions / leaders */
+    --rail-pos:#E5484D;      /* (+) rail instrument red */
+    --rail-neg:#3E7BFA;      /* (-) rail instrument blue */
+    --cyan:#56C4DE;          /* graticule + flow + lit diode */
+    --hl-fill:#16433A;       /* healthy fill */
+    --hl-stroke:#2FB57E;     /* healthy stroke */
+    --hl-bright:#41D996;     /* healthy peak */
+    --sh-fill:#3A2E18;       /* shaded fill */
+    --sh-stroke:#E0A23C;     /* shaded stroke */
+    --fa-fill:#1A2334;       /* failed/open fill */
+    --fa-stroke:#5A6478;     /* failed stroke */
+    --hot-fill:#3A1A1E;      /* hot-spot fill */
+    --hot-stroke:#E5484D;    /* hot-spot stroke */
+    --font-display:"Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    --font-mono:ui-monospace,"SFMono-Regular","Cascadia Mono","Consolas","Courier New",monospace;
+    --font-ui:"Segoe UI","Optima",Candara,"Gill Sans",sans-serif;
+  }
+
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);}
+  body{
+    font-family:var(--font-ui);
+    font-size:13px;
+    /* oscilloscope graticule: major every 64px, minor every 16px, both axes */
+    background-color:var(--bg);
+    background-image:
+      repeating-linear-gradient(0deg,  rgba(86,196,222,0.07) 0 1px, transparent 1px 64px),
+      repeating-linear-gradient(90deg, rgba(86,196,222,0.07) 0 1px, transparent 1px 64px),
+      repeating-linear-gradient(0deg,  rgba(86,196,222,0.035) 0 1px, transparent 1px 16px),
+      repeating-linear-gradient(90deg, rgba(86,196,222,0.035) 0 1px, transparent 1px 16px);
+    min-height:100vh;
+  }
+
+  .wrap{max-width:980px;margin:0 auto;padding:18px 18px 40px;}
+
+  /* ---- panel / bezel module look ---- */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--bezel);
+    border-radius:6px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.04), 0 6px 18px rgba(0,0,0,0.35);
+    padding:12px 14px;
+    margin-bottom:14px;
+  }
+  .eyebrow{
+    font-family:var(--font-mono);
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.16em;
+    color:var(--muted);
+    margin:0 0 8px;
+  }
+
+  /* ---- header ---- */
+  header.panel{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
+  h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:26px;
+    letter-spacing:0.01em;
+    margin:0;
+    line-height:1.15;
+  }
+  .telemetry{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  .gauge{
+    font-family:var(--font-mono);
+    background:#0B1322;
+    border:1px solid var(--bezel);
+    border-radius:5px;
+    box-shadow:inset 0 1px 3px rgba(0,0,0,0.5);
+    padding:5px 9px;
+    min-width:74px;
+    text-align:right;
+  }
+  .gauge .lbl{display:block;font-size:9px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;text-align:left;}
+  .gauge .val{display:block;font-size:15px;color:var(--cyan);text-shadow:0 0 6px rgba(86,196,222,0.45);}
+  .gauge .sub{display:block;font-size:9px;color:var(--muted);}
+  .lamp{
+    display:inline-flex;align-items:center;gap:7px;
+    font-family:var(--font-mono);font-size:12px;letter-spacing:0.08em;
+    padding:6px 11px;border-radius:5px;border:1px solid var(--bezel);background:#0B1322;
+  }
+  .lamp .dot{width:12px;height:12px;border-radius:50%;background:#444;box-shadow:0 0 0 1px rgba(0,0,0,0.4);}
+  .lamp.nominal .dot{background:var(--hl-bright);box-shadow:0 0 8px var(--hl-bright);}
+  .lamp.derated .dot{background:var(--sh-stroke);box-shadow:0 0 8px var(--sh-stroke);}
+  .lamp.fault   .dot{background:var(--rail-pos);box-shadow:0 0 8px var(--rail-pos);}
+
+  /* ---- controls ---- */
+  fieldset.controls{border:1px solid var(--bezel);border-radius:6px;padding:10px 14px 12px;margin:0;}
+  fieldset.controls legend{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.16em;color:var(--muted);padding:0 6px;}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+  button{
+    font-family:var(--font-ui);font-size:13px;
+    color:var(--txt);background:#1A283F;border:1px solid var(--bezel);
+    border-radius:5px;padding:7px 12px;cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);
+    transition:background .12s,border-color .12s;
+  }
+  button:hover{background:#22304A;border-color:#33456A;}
+  button:active{background:#10192b;}
+  button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px;}
+  button.reset{background:#241a1a;border-color:#4a2a2a;}
+  button.reset:hover{background:#341f1f;}
+  .toggle{
+    display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+    font-family:var(--font-mono);font-size:12px;color:var(--txt);
+    background:#0B1322;border:1px solid var(--bezel);border-radius:5px;padding:6px 11px;
+    user-select:none;
+  }
+  .toggle input{width:15px;height:15px;accent-color:var(--cyan);cursor:pointer;}
+  .toggle[aria-pressed="true"]{border-color:var(--cyan);box-shadow:0 0 0 1px rgba(86,196,222,0.3);}
+
+  /* ---- main area ---- */
+  .main{display:flex;flex-wrap:wrap;gap:14px;align-items:stretch;}
+  .schematic{flex:1 1 600px;min-width:340px;}
+  .readout{flex:1 1 290px;min-width:280px;}
+  .schematic svg{width:100%;height:auto;display:block;}
+
+  /* ---- readout panel ---- */
+  .bignums{display:flex;gap:10px;margin-bottom:10px;}
+  .bignum{flex:1;background:#0B1322;border:1px solid var(--bezel);border-radius:5px;padding:8px 6px;text-align:center;}
+  .bignum .lbl{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:0.12em;text-transform:uppercase;}
+  .bignum .val{font-family:var(--font-mono);font-size:20px;color:var(--cyan);text-shadow:0 0 6px rgba(86,196,222,0.4);display:block;margin-top:2px;}
+  .bignum .un{font-size:10px;color:var(--muted);}
+
+  .barwrap{margin:4px 0 12px;}
+  .barwrap .barlbl{font-family:var(--font-mono);font-size:10px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:3px;}
+  .bartrack{height:14px;background:#0B1322;border:1px solid var(--bezel);border-radius:7px;overflow:hidden;position:relative;}
+  .barfill{height:100%;background:linear-gradient(90deg,var(--hl-stroke),var(--hl-bright));transition:width .25s ease;border-radius:7px 0 0 7px;}
+
+  table.blocks{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:11px;margin-bottom:10px;}
+  table.blocks th{color:var(--muted);font-weight:400;text-align:right;padding:3px 5px;font-size:9px;letter-spacing:0.06em;text-transform:uppercase;border-bottom:1px solid var(--bezel);}
+  table.blocks th:first-child{text-align:left;}
+  table.blocks td{padding:4px 5px;text-align:right;border-bottom:1px solid rgba(34,48,74,0.5);}
+  table.blocks td:first-child{text-align:left;color:var(--txt);}
+  .badge{font-family:var(--font-mono);font-size:9px;padding:1px 5px;border-radius:3px;letter-spacing:0.04em;}
+  .badge.off{background:#1a2334;color:var(--muted);border:1px solid var(--bezel);}
+  .badge.on{background:rgba(86,196,222,0.15);color:var(--cyan);border:1px solid var(--cyan);}
+  .badge.open{background:rgba(229,72,77,0.15);color:var(--rail-pos);border:1px solid var(--rail-pos);}
+
+  details.strings{margin-bottom:10px;}
+  details.strings summary{font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;cursor:pointer;padding:4px 0;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+  .chip{font-family:var(--font-mono);font-size:10px;padding:3px 7px;border-radius:4px;border:1px solid var(--bezel);background:#0B1322;}
+  .chip.live{border-color:var(--hl-stroke);color:var(--hl-bright);}
+  .chip.throttle{border-color:var(--sh-stroke);color:var(--sh-stroke);}
+  .chip.dead{border-color:var(--fa-stroke);color:var(--muted);}
+
+  .caption{
+    font-family:var(--font-ui);font-size:13px;line-height:1.45;
+    background:#0B1322;border:1px solid var(--bezel);border-left:3px solid var(--cyan);
+    border-radius:5px;padding:9px 11px;color:var(--txt);
+  }
+
+  /* ---- legend ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:16px;}
+  .lgroup{flex:1 1 260px;min-width:240px;}
+  .lgroup h3{font-family:var(--font-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--cyan);margin:0 0 7px;}
+  .litem{display:flex;align-items:flex-start;gap:8px;margin-bottom:7px;font-size:12px;line-height:1.35;}
+  .litem .sw{flex:0 0 auto;margin-top:1px;}
+  .swatch{width:26px;height:20px;border-radius:3px;border:1px solid;display:inline-block;}
+  .swatch.healthy{background:var(--hl-fill);border-color:var(--hl-stroke);box-shadow:0 0 6px rgba(47,181,126,0.4);}
+  .swatch.shaded{background:var(--sh-fill);border-color:var(--sh-stroke);}
+  .swatch.failed{background:var(--fa-fill);border-color:var(--fa-stroke);position:relative;}
+  .ltip{font-size:11px;color:var(--muted);font-style:italic;margin-top:4px;}
+  .anatomy-key{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;border-top:1px solid var(--bezel);padding-top:8px;}
+  svg.legicon{vertical-align:middle;}
+
+  /* ---- tooltip ---- */
+  #tooltip{
+    position:fixed;pointer-events:none;z-index:50;
+    font-family:var(--font-mono);font-size:11px;line-height:1.4;
+    background:#0B1322;color:var(--txt);
+    border:1px solid var(--cyan);border-radius:5px;
+    padding:6px 9px;max-width:240px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.5);
+    display:none;
+  }
+  #tooltip .ttreason{color:var(--muted);}
+
+  /* ============================================================
+     SVG element classes (shared between live diagram + legend)
+     ============================================================ */
+  .cell-rect{cursor:pointer;transition:fill .15s,stroke .15s;}
+  .cell-g:focus{outline:none;}
+  .cell-g:focus-visible .cell-rect,
+  .cell-g.focused .cell-rect{
+    outline:2px solid var(--cyan);
+  }
+  .cell-focus-ring{display:none;}
+  .cell-g.focused .cell-focus-ring{display:block;}
+
+  /* current flow overlay */
+  .flow{
+    stroke-dasharray:6 8;
+    animation:flow var(--dur,1s) linear infinite;
+  }
+  @keyframes flow{ to{ stroke-dashoffset:-14; } }
+  .flow.paused{animation-play-state:paused;display:none;}
+
+  /* reduced motion: kill the marching ants, rely on static arrow markers */
+  @media (prefers-reduced-motion: reduce){
+    .flow{animation:none;display:none;}
+    .static-arrow{display:block !important;}
+  }
+  .static-arrow{display:none;}
+
+  /* hot-spot pulse */
+  @keyframes hotpulse{
+    0%{opacity:0.25;} 50%{opacity:0.75;} 100%{opacity:0.25;}
+  }
+  .hotglow{animation:hotpulse 1.1s ease-in-out infinite;}
+  @media (prefers-reduced-motion: reduce){ .hotglow{animation:none;opacity:0.5;} }
+
+  @media (max-width:760px){
+    h1{font-size:21px;}
+    .main{flex-direction:column;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ HEADER ============ -->
+  <header class="panel">
+    <div>
+      <h1>Solar Array Circuit — Power Subsystem</h1>
+    </div>
+    <div class="telemetry" id="telemetry">
+      <div class="gauge"><span class="lbl">Array V</span><span class="val" id="g-v">2.00</span><span class="sub">units</span></div>
+      <div class="gauge"><span class="lbl">Array I</span><span class="val" id="g-i">4.00</span><span class="sub">I_series</span></div>
+      <div class="gauge"><span class="lbl">Array P</span><span class="val" id="g-p">8.00</span><span class="sub" id="g-pct">100% of baseline</span></div>
+      <div class="lamp nominal" id="lamp"><span class="dot"></span><span id="lamp-txt">NOMINAL</span></div>
+    </div>
+  </header>
+
+  <!-- ============ CONTROLS ============ -->
+  <div class="panel">
+    <fieldset class="controls">
+      <legend>Scenarios</legend>
+      <div class="btnrow">
+        <button id="btn-fail">Fail one cell</button>
+        <button id="btn-killblock">Kill a whole block</button>
+        <button id="btn-shade">Shade a string</button>
+        <span class="toggle" id="toggle-bypass" role="checkbox" aria-checked="false" aria-pressed="false" tabindex="0">
+          <input type="checkbox" id="cb-bypass" tabindex="-1"> No-bypass (remove diodes)
+        </span>
+        <button class="reset" id="btn-reset">Reset</button>
+      </div>
+    </fieldset>
+  </div>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <div class="panel schematic">
+      <p class="eyebrow">Schematic — top = ARRAY + · bottom = ARRAY −</p>
+      <svg id="svg" viewBox="0 0 620 900" role="img" aria-label="Solar array schematic: two series blocks, each four parallel strings of six series cells, with one bypass diode per block."></svg>
+    </div>
+
+    <div class="panel readout">
+      <p class="eyebrow">Readout</p>
+      <div class="bignums">
+        <div class="bignum"><span class="lbl">V_array</span><span class="val" id="r-v">2.00</span><span class="un">units</span></div>
+        <div class="bignum"><span class="lbl">I_series</span><span class="val" id="r-i">4.00</span><span class="un">units</span></div>
+        <div class="bignum"><span class="lbl">P_array</span><span class="val" id="r-p">8.00</span><span class="un">units</span></div>
+      </div>
+      <div class="barwrap">
+        <div class="barlbl"><span>Power vs baseline (P=8.0=100%)</span><span id="r-pct">100%</span></div>
+        <div class="bartrack"><div class="barfill" id="r-bar" style="width:100%"></div></div>
+      </div>
+
+      <table class="blocks">
+        <thead><tr><th>Block</th><th>alive</th><th>I_block</th><th>V_block</th><th>Bypass</th></tr></thead>
+        <tbody id="block-tbody"></tbody>
+      </table>
+
+      <details class="strings">
+        <summary>Per-string currents (8)</summary>
+        <div class="chips" id="string-chips"></div>
+      </details>
+
+      <div class="caption" id="caption">All cells healthy — array at full power.</div>
+    </div>
+  </div>
+
+  <!-- ============ LEGEND ============ -->
+  <div class="panel">
+    <p class="eyebrow">Legend</p>
+    <div class="legend">
+      <div class="lgroup">
+        <h3>A · Cell states</h3>
+        <div class="litem"><span class="sw"><span class="swatch healthy"></span></span><span><b>Healthy</b> cell. String current 1.0.</span></div>
+        <div class="litem"><span class="sw"><span class="swatch shaded"></span></span><span><b>Shaded</b> cell. Throttles its whole string to 0.2 (min-Isc / weakest-cell rule).</span></div>
+        <div class="litem"><span class="sw">
+          <svg width="26" height="20" class="legicon"><rect x="0.5" y="0.5" width="25" height="19" rx="3" fill="#1A2334" stroke="#5A6478"/><line x1="6" y1="6" x2="20" y2="14" stroke="#E5484D" stroke-width="1.6"/><line x1="20" y1="6" x2="6" y2="14" stroke="#E5484D" stroke-width="1.6"/></svg>
+        </span><span><b>Failed (open)</b> cell. Breaks its string: string current 0. (Shown red as a hot-spot.)</span></div>
+        <div class="ltip">Click a cell to cycle Healthy → Shaded → Failed. Shift-click (or right-click) to repair.</div>
+      </div>
+
+      <div class="lgroup">
+        <h3>B · Current flow</h3>
+        <div class="litem"><span class="sw">
+          <svg width="40" height="20" class="legicon"><line x1="2" y1="10" x2="38" y2="10" stroke="#3E7BFA" stroke-width="4"/><line x1="2" y1="10" x2="38" y2="10" stroke="#56C4DE" stroke-width="3" stroke-dasharray="6 8" class="flow" style="--dur:1s"/></svg>
+        </span><span><b>Live conductor:</b> current flowing (+ → −). Arrows = conventional direction; thickness ~ current.</span></div>
+        <div class="litem"><span class="sw">
+          <svg width="40" height="20" class="legicon"><line x1="2" y1="10" x2="38" y2="10" stroke="#5A6478" stroke-width="1.5" stroke-dasharray="4 4"/></svg>
+        </span><span><b>No current:</b> dead / open conductor (static, no flow).</span></div>
+        <div class="litem"><span class="sw">
+          <svg width="40" height="20" class="legicon"><line x1="2" y1="10" x2="38" y2="10" stroke="#3E7BFA" stroke-width="2"/><line x1="2" y1="10" x2="38" y2="10" stroke="#56C4DE" stroke-width="1.5" stroke-dasharray="6 8" class="flow" style="--dur:2s"/></svg>
+        </span><span><b>Reduced current</b> (e.g. 0.2) draws thinner and marches slower.</span></div>
+      </div>
+
+      <div class="lgroup">
+        <h3>C · Bypass diode</h3>
+        <div class="litem"><span class="sw">
+          <svg width="34" height="34" class="legicon">
+            <line x1="17" y1="30" x2="17" y2="22" stroke="#56C4DE" stroke-width="2"/>
+            <polygon points="17,10 10,22 24,22" fill="#56C4DE"/>
+            <line x1="9" y1="10" x2="25" y2="10" stroke="#56C4DE" stroke-width="2.4"/>
+            <line x1="17" y1="10" x2="17" y2="3" stroke="#56C4DE" stroke-width="2"/>
+          </svg>
+        </span><span><b>CONDUCTING:</b> its block is fully dead → current routes around the block (block ≈ 0 V). <span class="badge on">BYPASS ON</span></span></div>
+        <div class="litem"><span class="sw">
+          <svg width="34" height="34" class="legicon">
+            <line x1="17" y1="30" x2="17" y2="22" stroke="#7E8DA6" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <polygon points="17,10 10,22 24,22" fill="none" stroke="#7E8DA6" stroke-width="1.5" stroke-dasharray="3 3"/>
+            <line x1="9" y1="10" x2="25" y2="10" stroke="#7E8DA6" stroke-width="1.5"/>
+            <line x1="17" y1="10" x2="17" y2="3" stroke="#7E8DA6" stroke-width="1.5" stroke-dasharray="3 3"/>
+          </svg>
+        </span><span><b>Blocking (normal):</b> block is producing, diode carries no current. <span class="badge off">BYPASS OFF</span></span></div>
+        <div class="ltip">Each block has its OWN bypass diode (anti-parallel: cathode at block +, anode at block −). It conducts only when ALL strings in that block are dead.</div>
+      </div>
+    </div>
+    <div class="anatomy-key">
+      <b>Anatomy:</b> ARRAY + / ARRAY − = array terminals. INTER-BLOCK JUNCTION = Block 1 (−) tied to Block 2 (+), where the two series blocks meet and share one common current. Array voltage = V_block1 + V_block2; array current = the weakest non-bypassed block.
+    </div>
+  </div>
+
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   SECTION 1 — COMPUTATION MODEL
+   ============================================================ */
+const N_BLOCKS  = 2;     // b=0 Block1 (top, +), b=1 Block2 (bottom, -)
+const N_STRINGS = 4;     // s = 0..3 per block
+const N_CELLS   = 6;     // c = 0..5 per string  (48 cells total)
+const I_NOM     = 1.0;   // healthy string current
+const I_SHADE   = 0.2;   // shaded-limited string current
+const VB        = 1.0;   // nominal block voltage
+const V_BYPASS  = -0.05; // block voltage when its bypass diode conducts
+const P_BASELINE= 8.0;   // all-healthy P_array = 100% reference
+
+const NEXT_STATE = { healthy:"shaded", shaded:"failed", failed:"healthy" };
+
+/* ---- the ONLY mutable state: 48-cell array of state strings ---- */
+let model = [];
+function blankModel(){
+  const m = [];
+  for(let b=0;b<N_BLOCKS;b++){
+    m[b]=[];
+    for(let s=0;s<N_STRINGS;s++){
+      m[b][s]=[];
+      for(let c=0;c<N_CELLS;c++) m[b][s][c]="healthy";
+    }
+  }
+  return m;
+}
+model = blankModel();
+let noBypass = false;
+
+/* ---- recompute(): pure, run from scratch on every change ---- */
+function recompute(model, hasBypass){
+  // Step 1 — per-string current (weakest-link rule)
+  const strings = [];
+  for(let b=0;b<N_BLOCKS;b++){
+    strings[b]=[];
+    for(let s=0;s<N_STRINGS;s++){
+      const cells = model[b][s];
+      let openIdx = null, hasFailed=false, hasShaded=false;
+      for(let c=0;c<N_CELLS;c++){
+        if(cells[c]==="failed"){ hasFailed=true; if(openIdx===null) openIdx=c; }
+        else if(cells[c]==="shaded"){ hasShaded=true; }
+      }
+      let I_s;
+      if(hasFailed)      I_s = 0.0;        // open cell breaks series path
+      else if(hasShaded) I_s = I_SHADE;    // limited by weakest (shaded) cell
+      else               I_s = I_NOM;      // all 6 healthy
+      let reason;
+      if(hasFailed)      reason = "open: failed cell";
+      else if(hasShaded) reason = "limited by shaded cell";
+      else               reason = "healthy";
+      strings[b][s] = { I_s, alive: I_s>0, openIdx, reason };
+    }
+  }
+
+  // Step 2 — per-block current, bypass, voltage
+  const blocks = [];
+  for(let b=0;b<N_BLOCKS;b++){
+    let I_block = 0, aliveStrings = 0;
+    for(let s=0;s<N_STRINGS;s++){
+      I_block += strings[b][s].I_s;
+      if(strings[b][s].I_s>0) aliveStrings++;
+    }
+    // tolerant compare (sum of 0.2's etc.)
+    let bypass_conducting=false, is_open=false, V_block;
+    if(I_block > 1e-9){
+      bypass_conducting=false; is_open=false; V_block=VB;
+    } else {
+      if(hasBypass[b]){ bypass_conducting=true; is_open=false; V_block=V_BYPASS; }
+      else            { bypass_conducting=false; is_open=true;  V_block=0.0; }
+    }
+    blocks[b] = { I_block, aliveStrings, bypass_conducting, is_open, V_block, hasBypass:hasBypass[b] };
+  }
+
+  // Step 3 — series operating current (common to both blocks)
+  let I_series;
+  if(blocks.some(bl=>bl.is_open)){
+    I_series = 0.0;                        // truly-open block breaks the series
+  } else {
+    const contributing = blocks.filter(bl=>!bl.bypass_conducting).map(bl=>bl.I_block);
+    if(contributing.length===0) I_series = 0.0;            // both blocks bypassed
+    else I_series = Math.min.apply(null, contributing);    // weakest non-bypassed block
+  }
+
+  // Step 4 — array scalars
+  const V_array = blocks[0].V_block + blocks[1].V_block;
+  const P_array = Math.max(0.0, V_array * I_series);
+  const P_pct   = Math.round(100 * P_array / P_BASELINE);
+
+  return { strings, blocks, I_series, V_array, P_array, P_pct };
+}
+
+/* ============================================================
+   SECTION 3 — SVG GEOMETRY (built programmatically)
+   ============================================================ */
+const SVGNS = "http://www.w3.org/2000/svg";
+const svg = document.getElementById("svg");
+
+// layout constants
+const CELL_W = 34, CELL_H = 46, CELL_GAP = 6;
+const STRING_GAP = 16;             // vertical gap between string rows
+const BLOCK_PAD_TOP = 30;          // room for block title inside box
+const BLOCK_PAD_BOT = 12;
+const BLOCK_GAP = 56;              // gap between the two block boxes (junction lives here)
+const CELLS_X0 = 150;              // left edge of first cell inside a block
+const SIDE_BUS_GAP = 18;           // how far the +/- side buses sit from cells
+const DIODE_X_OFFSET = 30;         // diode branch to the right of cells
+const RAIL_POS_X = 60;             // outer + rail x
+const RAIL_NEG_X = 600;            // outer - rail x (return)
+const ISERIES_ARROW_X = 92;        // I_series annotation arrow
+
+// derived
+const stringRowH = CELL_H + STRING_GAP;
+const blockInnerH = N_STRINGS*CELL_H + (N_STRINGS-1)*STRING_GAP;
+const blockBoxH = BLOCK_PAD_TOP + blockInnerH + BLOCK_PAD_BOT;
+const BLOCK1_Y = 70;                                   // top of block 1 box
+const BLOCK2_Y = BLOCK1_Y + blockBoxH + BLOCK_GAP;     // top of block 2 box
+const cellsRight = CELLS_X0 + N_CELLS*CELL_W + (N_CELLS-1)*CELL_GAP; // right edge of cells
+const BUS_L_X = CELLS_X0 - SIDE_BUS_GAP;               // left (+) side bus inside block
+const BUS_R_X = cellsRight + SIDE_BUS_GAP;             // right (-) side bus inside block
+const DIODE_X = BUS_R_X + DIODE_X_OFFSET;              // diode branch x
+
+function el(tag, attrs, parent){
+  const e = document.createElementNS(SVGNS, tag);
+  if(attrs) for(const k in attrs) e.setAttribute(k, attrs[k]);
+  if(parent) parent.appendChild(e);
+  return e;
+}
+function textEl(x,y,str,cls,extra,parent){
+  const t = el("text", Object.assign({x,y,class:cls||""}, extra||{}), parent);
+  t.textContent = str;
+  return t;
+}
+
+// per-block geometry (filled during build)
+const blockGeom = []; // {topY, botY, topBusY, botBusY}
+// references for live update
+const refs = {
+  cells: {},          // "b-s-c" -> {rect, hot, hotglow, breakG}
+  stringFlow: {},     // "b-s" -> overlay path
+  stringBase: {},     // "b-s" -> base path
+  stringLabel: {},    // "b-s" -> text (I_s value)
+  blockTag: {},       // b -> text (I_block / V_block)
+  blockBadge: {},     // b -> {rect,text}
+  blockBox: {},       // b -> rect (for dimming)
+  diode: {},          // b -> {group, tri, bar, anodeLead, cathodeLead, badge, badgeText, removedLine}
+  diodeFlow: {},      // b -> overlay path along the diode branch
+  blockBusFlow: {},   // b -> overlay vertical bus path (carries series current down through block)
+  blockBusBase: {},   // b -> base
+  seriesPaths: [],    // {base, flow} list for the main series rail segments
+  junctionDot: null,
+  iseriesText: null,
+  arrayPosNode: null,
+  arrayNegNode: null
+};
+
+function defsBuild(){
+  const defs = el("defs", null, svg);
+  // anti-reflective sheen gradient for cells
+  const grad = el("linearGradient", {id:"sheen", x1:"0", y1:"0", x2:"1", y2:"1"}, defs);
+  el("stop", {offset:"0%", "stop-color":"#ffffff", "stop-opacity":"0.10"}, grad);
+  el("stop", {offset:"45%", "stop-color":"#ffffff", "stop-opacity":"0.0"}, grad);
+  // amber 45deg hatch for shaded
+  const pat = el("pattern", {id:"hatch", width:"7", height:"7", patternTransform:"rotate(45)", patternUnits:"userSpaceOnUse"}, defs);
+  el("rect", {width:"7", height:"7", fill:"none"}, pat);
+  el("line", {x1:"0", y1:"0", x2:"0", y2:"7", stroke:"#E0A23C", "stroke-width":"2", "stroke-opacity":"0.55"}, pat);
+  // radial heat glow
+  const rg = el("radialGradient", {id:"heat", cx:"50%", cy:"50%", r:"55%"}, defs);
+  el("stop", {offset:"0%", "stop-color":"#E5484D", "stop-opacity":"0.85"}, rg);
+  el("stop", {offset:"100%", "stop-color":"#E5484D", "stop-opacity":"0"}, rg);
+  // static direction arrowhead (reduced-motion) — polarity colours
+  function marker(id,color){
+    const m = el("marker", {id, viewBox:"0 0 10 10", refX:"6", refY:"5", markerWidth:"6", markerHeight:"6", orient:"auto-start-reverse"}, defs);
+    el("path", {d:"M0,0 L10,5 L0,10 z", fill:color}, m);
+  }
+  marker("arrPos", "#E5484D");
+  marker("arrNeg", "#3E7BFA");
+  marker("arrCyan", "#56C4DE");
+  marker("arrBig", "#E5484D");
+}
+
+/* build one PV cell at (x,y). id = "b-s-c" */
+function buildCell(parent, b, s, c, x, y){
+  const id = b+"-"+s+"-"+c;
+  const g = el("g", {class:"cell-g", id:"cell-"+id, tabindex:"0", role:"button",
+                     "aria-label":ariaForCell(b,s,c)}, parent);
+  // focus ring (under rect for halo)
+  el("rect", {class:"cell-focus-ring", x:x-3, y:y-3, width:CELL_W+6, height:CELL_H+6, rx:6,
+              fill:"none", stroke:"#56C4DE", "stroke-width":"2"}, g);
+  const rect = el("rect", {class:"cell-rect", x, y, width:CELL_W, height:CELL_H, rx:4,
+                           fill:"var(--hl-fill)", stroke:"var(--hl-stroke)", "stroke-width":"1"}, g);
+  // busbars (two thin horizontal lines)
+  el("line", {x1:x+3, y1:y+CELL_H*0.34, x2:x+CELL_W-3, y2:y+CELL_H*0.34, stroke:"rgba(255,255,255,0.18)", "stroke-width":"1", "pointer-events":"none"}, g);
+  el("line", {x1:x+3, y1:y+CELL_H*0.66, x2:x+CELL_W-3, y2:y+CELL_H*0.66, stroke:"rgba(255,255,255,0.18)", "stroke-width":"1", "pointer-events":"none"}, g);
+  // sheen
+  el("rect", {x, y, width:CELL_W, height:CELL_H, rx:4, fill:"url(#sheen)", "pointer-events":"none"}, g);
+  // hot-spot radial glow (hidden unless failed)
+  const hotglow = el("circle", {class:"hotglow", cx:x+CELL_W/2, cy:y+CELL_H/2, r:CELL_W*0.95,
+                                fill:"url(#heat)", "pointer-events":"none", style:"display:none"}, g);
+  // open-break X marker (hidden unless failed)
+  const breakG = el("g", {style:"display:none", "pointer-events":"none"}, g);
+  el("line", {x1:x+6, y1:y+8, x2:x+CELL_W-6, y2:y+CELL_H-8, stroke:"#E5484D", "stroke-width":"2"}, breakG);
+  el("line", {x1:x+CELL_W-6, y1:y+8, x2:x+6, y2:y+CELL_H-8, stroke:"#E5484D", "stroke-width":"2"}, breakG);
+  // id label
+  textEl(x+2, y+CELL_H-3, id, "", {"font-family":"var(--font-mono)","font-size":"8px","fill":"var(--muted)","pointer-events":"none"}, g);
+
+  // hatch overlay for shaded (hidden unless shaded)
+  const hatch = el("rect", {x, y, width:CELL_W, height:CELL_H, rx:4, fill:"url(#hatch)", "pointer-events":"none", style:"display:none"}, g);
+
+  refs.cells[id] = { g, rect, hotglow, breakG, hatch };
+
+  // interactions
+  g.addEventListener("click", (ev)=>{
+    if(ev.shiftKey){ model[b][s][c]="healthy"; }
+    else { model[b][s][c] = NEXT_STATE[model[b][s][c]]; }
+    update();
+  });
+  g.addEventListener("contextmenu", (ev)=>{ ev.preventDefault(); model[b][s][c]="healthy"; update(); });
+  g.addEventListener("keydown", (ev)=>{
+    if(ev.key==="Enter" || ev.key===" "){
+      ev.preventDefault();
+      if(ev.shiftKey) model[b][s][c]="healthy";
+      else model[b][s][c]=NEXT_STATE[model[b][s][c]];
+      update();
+    }
+  });
+  g.addEventListener("focus", ()=>g.classList.add("focused"));
+  g.addEventListener("blur", ()=>g.classList.remove("focused"));
+  // tooltips
+  g.addEventListener("mouseenter", (ev)=>showCellTip(ev,b,s,c));
+  g.addEventListener("mousemove", moveTip);
+  g.addEventListener("mouseleave", hideTip);
+}
+
+function ariaForCell(b,s,c){
+  return "Block "+(b+1)+", String "+(s+1)+", Cell "+(c+1)+": "+model[b][s][c];
+}
+
+/* build one block box with its 4 strings, side buses, and bypass diode */
+function buildBlock(b, topY){
+  const botY = topY + blockBoxH;
+  const topBusY = topY + BLOCK_PAD_TOP - 8;          // + terminal bus of this block
+  const botBusY = botY - BLOCK_PAD_BOT + 8;          // - terminal bus of this block
+  blockGeom[b] = { topY, botY, topBusY, botBusY };
+
+  // block box
+  const box = el("rect", {x:BUS_L_X-22, y:topY, width:(BUS_R_X+18)-(BUS_L_X-22), height:blockBoxH,
+                          rx:7, fill:"rgba(86,196,222,0.02)", stroke:"var(--bezel)", "stroke-width":"1.2"}, svg);
+  refs.blockBox[b] = box;
+  // title
+  textEl(BUS_L_X-16, topY+18, "BLOCK "+(b+1), "",
+         {"font-family":"var(--font-display)","font-size":"15px","font-weight":"600","fill":"var(--txt)"}, svg);
+  textEl(BUS_L_X-16, topY+30, "4 strings ∥, each 6 cells in series", "",
+         {"font-family":"var(--font-ui)","font-size":"9px","fill":"var(--muted)"}, svg);
+
+  // side buses (left + , right -) inside the block
+  el("line", {x1:BUS_L_X, y1:topBusY, x2:BUS_L_X, y2:botBusY, stroke:"var(--rail-pos)", "stroke-width":"2", "stroke-opacity":"0.55"}, svg);
+  el("line", {x1:BUS_R_X, y1:topBusY, x2:BUS_R_X, y2:botBusY, stroke:"var(--rail-neg)", "stroke-width":"2", "stroke-opacity":"0.55"}, svg);
+  // top bus + bottom bus (connect side buses across)
+  el("line", {x1:BUS_L_X, y1:topBusY, x2:BUS_R_X, y2:topBusY, stroke:"var(--rail-pos)", "stroke-width":"2", "stroke-opacity":"0.4"}, svg);
+  el("line", {x1:BUS_L_X, y1:botBusY, x2:BUS_R_X, y2:botBusY, stroke:"var(--rail-neg)", "stroke-width":"2", "stroke-opacity":"0.4"}, svg);
+
+  // strings
+  for(let s=0;s<N_STRINGS;s++){
+    const rowY = topY + BLOCK_PAD_TOP + s*stringRowH;
+    const cy = rowY + CELL_H/2;
+    // string base wire (left bus -> through cells -> right bus)  -- the series busbar
+    const base = el("path", {d:"M"+BUS_L_X+","+cy+" L"+BUS_R_X+","+cy,
+                             fill:"none", stroke:"var(--hl-stroke)", "stroke-width":"3", "stroke-linecap":"round"}, svg);
+    const flow = el("path", {class:"flow", d:"M"+BUS_L_X+","+cy+" L"+BUS_R_X+","+cy,
+                             fill:"none", stroke:"var(--cyan)", "stroke-width":"3", "stroke-linecap":"round",
+                             style:"--dur:1s"}, svg);
+    // static direction arrow for reduced motion (mid wire)
+    const sArrow = el("line", {class:"static-arrow", x1:cy*0+CELLS_X0-4, y1:cy, x2:CELLS_X0+8, y2:cy,
+                               stroke:"var(--cyan)", "stroke-width":"3", "marker-end":"url(#arrCyan)"}, svg);
+    refs.stringBase[b+"-"+s] = base;
+    refs.stringFlow[b+"-"+s] = flow;
+
+    // cells on top of the wire
+    for(let c=0;c<N_CELLS;c++){
+      const x = CELLS_X0 + c*(CELL_W+CELL_GAP);
+      buildCell(svg, b, s, c, x, rowY);
+    }
+
+    // string label callout (S1..S4 + live I_s) at the left bus end
+    const lbl = textEl(BUS_L_X-26, cy+4, "S"+(s+1)+" 1.0", "",
+      {"font-family":"var(--font-mono)","font-size":"10px","fill":"var(--hl-bright)",
+       "text-anchor":"end","paint-order":"stroke","stroke":"#0E1726","stroke-width":"3px"}, svg);
+    refs.stringLabel[b+"-"+s] = lbl;
+    // hover region: invisible wide rect over the wire for string tooltip
+    const hit = el("rect", {x:BUS_L_X, y:cy-7, width:BUS_R_X-BUS_L_X, height:14, fill:"transparent", style:"cursor:help"}, svg);
+    hit.addEventListener("mouseenter",(ev)=>showStringTip(ev,b,s));
+    hit.addEventListener("mousemove",moveTip);
+    hit.addEventListener("mouseleave",hideTip);
+  }
+
+  // ---- vertical series bus inside the block (the - side bus carries the series current downward) ----
+  // We use the right (-) bus as the conductor that the series current flows along inside the block.
+  const busBase = el("path", {d:"M"+BUS_R_X+","+topBusY+" L"+BUS_R_X+","+botBusY,
+                              fill:"none", stroke:"var(--rail-neg)", "stroke-width":"3"}, svg);
+  const busFlow = el("path", {class:"flow", d:"M"+BUS_R_X+","+topBusY+" L"+BUS_R_X+","+botBusY,
+                              fill:"none", stroke:"var(--cyan)", "stroke-width":"3", style:"--dur:1s"}, svg);
+  refs.blockBusBase[b]=busBase; refs.blockBusFlow[b]=busFlow;
+
+  // ---- bypass diode on the block's RIGHT side (anti-parallel, triangle UP) ----
+  buildDiode(b, topBusY, botBusY);
+
+  // ---- per-block right-edge tag ----
+  const tag = textEl(DIODE_X+14, topY+18, "", "",
+    {"font-family":"var(--font-mono)","font-size":"10px","fill":"var(--txt)",
+     "paint-order":"stroke","stroke":"#0E1726","stroke-width":"3px"}, svg);
+  refs.blockTag[b]=tag;
+}
+
+/* diode bridging block-top(+) topBusY to block-bot(-) botBusY at x=DIODE_X, apex UP (cathode at +) */
+function buildDiode(b, y0, y1){
+  const xd = DIODE_X;
+  const lead = 14;
+  const triH = 18, triW = 16;
+  // geometry (apex up toward + / cathode at top)
+  const apexY = (y0+y1)/2 - triH/2;          // triangle apex (top, toward +)
+  const baseY = apexY + triH;                // triangle base (bottom, toward anode/-)
+  const barY  = apexY;                       // cathode bar across apex
+  const g = el("g", {id:"diode-"+b}, svg);
+
+  // connect from block top bus to diode x (top) and bottom bus to diode x (bottom)
+  el("line", {x1:BUS_R_X, y1:y0, x2:xd, y2:y0, stroke:"var(--rail-pos)", "stroke-width":"1.5", "stroke-opacity":"0.5"}, svg);
+  el("line", {x1:BUS_R_X, y1:y1, x2:xd, y2:y1, stroke:"var(--rail-neg)", "stroke-width":"1.5", "stroke-opacity":"0.5"}, svg);
+
+  // anode lead (from bottom bus up to triangle base)
+  const anodeLead = el("line", {x1:xd, y1:y1, x2:xd, y2:baseY}, g);
+  // triangle (filled), apex up
+  const tri = el("polygon", {points:xd+","+apexY+" "+(xd-triW/2)+","+baseY+" "+(xd+triW/2)+","+baseY}, g);
+  // cathode bar across apex
+  const bar = el("line", {x1:xd-9, y1:barY, x2:xd+9, y2:barY}, g);
+  // cathode lead (bar up to top bus)
+  const cathodeLead = el("line", {x1:xd, y1:barY, x2:xd, y2:y0}, g);
+
+  // flow overlay along the diode branch (top -> bottom): cathode lead + through body + anode lead
+  const diodePath = "M"+xd+","+y0+" L"+xd+","+y1;
+  const dflow = el("path", {class:"flow", d:diodePath, fill:"none", stroke:"var(--cyan)",
+                            "stroke-width":"3.4", style:"--dur:1s", "stroke-linecap":"round"}, g);
+  refs.diodeFlow[b]=dflow;
+
+  // "Vf=0.7V" caption + badge
+  const vfCap = textEl(xd+12, baseY+4, "Vf=0.7V", "",
+    {"font-family":"var(--font-mono)","font-size":"8px","fill":"var(--muted)"}, g);
+  const badgeG = el("g", {style:"display:none"}, g);
+  const badgeRect = el("rect", {x:xd+10, y:apexY-6, width:62, height:14, rx:3,
+                                fill:"rgba(86,196,222,0.15)", stroke:"var(--cyan)", "stroke-width":"1"}, badgeG);
+  const badgeText = textEl(xd+14, apexY+4, "BYPASS ON", "",
+    {"font-family":"var(--font-mono)","font-size":"9px","fill":"var(--cyan)"}, badgeG);
+
+  // removed/struck overlay for no-bypass mode
+  const removed = el("g", {style:"display:none"}, g);
+  el("line", {x1:xd-14, y1:y0+4, x2:xd+14, y2:y1-4, stroke:"#5A6478", "stroke-width":"2"}, removed);
+  textEl(xd+12, (y0+y1)/2+24, "REMOVED", "",
+    {"font-family":"var(--font-mono)","font-size":"8px","fill":"#5A6478"}, removed);
+
+  refs.diode[b] = { g, tri, bar, anodeLead, cathodeLead, badgeG, removed, vfCap };
+
+  // hover for block-level tooltip (over the diode/right tag area)
+  g.addEventListener("mouseenter",(ev)=>showBlockTip(ev,b));
+  g.addEventListener("mousemove",moveTip);
+  g.addEventListener("mouseleave",hideTip);
+}
+
+/* outer rails, terminals, junction, I_series arrow */
+function buildFrame(){
+  const g1 = blockGeom[0], g2 = blockGeom[1];
+  const topPos = g1.topBusY;       // ARRAY +
+  const botNeg = g2.botBusY;       // ARRAY -
+
+  // --- (+) outer rail: from ARRAY+ node down to block1 top bus ---
+  // ARRAY + node at top
+  const posNodeY = topPos - 40;
+  // outer + rail (left) running down the whole array (decorative conductor + return path concept)
+  el("line", {x1:RAIL_POS_X, y1:posNodeY, x2:RAIL_POS_X, y2:topPos, stroke:"var(--rail-pos)", "stroke-width":"2"}, svg);
+  el("line", {x1:RAIL_POS_X, y1:topPos, x2:BUS_L_X, y2:topPos, stroke:"var(--rail-pos)", "stroke-width":"2"}, svg);
+  // ARRAY + terminal dot + label
+  const posDot = el("circle", {cx:RAIL_POS_X, cy:posNodeY, r:6, fill:"var(--rail-pos)", stroke:"#fff", "stroke-width":"1"}, svg);
+  refs.arrayPosNode = posDot;
+  textEl(RAIL_POS_X+12, posNodeY-2, "ARRAY +", "",
+    {"font-family":"var(--font-mono)","font-size":"12px","fill":"var(--rail-pos)","font-weight":"bold",
+     "paint-order":"stroke","stroke":"#0E1726","stroke-width":"3px"}, svg);
+  textEl(RAIL_POS_X+12, posNodeY+11, "(Block 1 top terminal = most positive point)", "",
+    {"font-family":"var(--font-ui)","font-size":"9px","fill":"var(--muted)"}, svg);
+
+  // --- left (+) feed into block1 top : flow segment ---
+  addSeriesSeg(RAIL_POS_X, posNodeY, RAIL_POS_X, topPos, "pos");
+  addSeriesSeg(RAIL_POS_X, topPos, BUS_L_X, topPos, "pos");
+
+  // --- block1 internal: + side bus down is implicit; series current goes through block1's - bus (built in buildBlock) ---
+
+  // --- INTER-BLOCK JUNCTION: block1 - bottom bus to block2 + top bus ---
+  const jx = BUS_R_X;            // along the - side bus column
+  const j_y0 = g1.botBusY;
+  const j_y1 = g2.topBusY;
+  // connect block1 right(-) bus bottom to block2 right bus top (series link)
+  addSeriesSeg(jx, j_y0, jx, j_y1, "neg");
+  // also connect across to left side for block2 + (visual series): bottom of block1 left to top of block2 left
+  el("line", {x1:BUS_L_X, y1:j_y0, x2:BUS_L_X, y2:j_y1, stroke:"var(--bezel)", "stroke-width":"1.2", "stroke-dasharray":"3 3"}, svg);
+  // junction dot at midpoint on the - column
+  const jcy = (j_y0+j_y1)/2;
+  const jdot = el("circle", {cx:jx, cy:jcy, r:6, fill:"var(--cyan)", stroke:"#fff", "stroke-width":"1"}, svg);
+  refs.junctionDot = jdot;
+  textEl(jx+14, jcy-3, "INTER-BLOCK JUNCTION (B1− = B2+)", "",
+    {"font-family":"var(--font-mono)","font-size":"10px","fill":"var(--cyan)",
+     "paint-order":"stroke","stroke":"#0E1726","stroke-width":"3px"}, svg);
+  textEl(jx+14, jcy+9, "Two blocks in SERIES → same current; V_array = V_b1 + V_b2", "",
+    {"font-family":"var(--font-ui)","font-size":"9px","fill":"var(--muted)"}, svg);
+
+  // --- ARRAY - : block2 - bottom bus out to return rail ---
+  const negNodeY = botNeg + 40;
+  addSeriesSeg(BUS_R_X, botNeg, RAIL_NEG_X, botNeg, "neg");
+  addSeriesSeg(RAIL_NEG_X, botNeg, RAIL_NEG_X, negNodeY, "neg");
+  const negDot = el("circle", {cx:RAIL_NEG_X, cy:negNodeY, r:6, fill:"var(--rail-neg)", stroke:"#fff", "stroke-width":"1"}, svg);
+  refs.arrayNegNode = negDot;
+  textEl(RAIL_NEG_X-12, negNodeY+4, "ARRAY −", "",
+    {"font-family":"var(--font-mono)","font-size":"12px","fill":"var(--rail-neg)","font-weight":"bold","text-anchor":"end",
+     "paint-order":"stroke","stroke":"#0E1726","stroke-width":"3px"}, svg);
+  textEl(RAIL_NEG_X-12, negNodeY+16, "(Block 2 bottom terminal)", "",
+    {"font-family":"var(--font-ui)","font-size":"9px","fill":"var(--muted)","text-anchor":"end"}, svg);
+
+  // --- I_series directional arrow annotation (parallel to main rail) ---
+  const iaTop = posNodeY+6, iaBot = negNodeY-6;
+  el("line", {id:"iseries-line", x1:ISERIES_ARROW_X, y1:iaTop, x2:ISERIES_ARROW_X, y2:iaBot,
+              stroke:"#9aa7bd", "stroke-width":"1.4", "stroke-dasharray":"2 4",
+              "marker-end":"url(#arrBig)"}, svg);
+  refs.iseriesText = textEl(ISERIES_ARROW_X+6, (iaTop+iaBot)/2, "", "",
+    {"font-family":"var(--font-mono)","font-size":"10px","fill":"#9aa7bd",
+     "paint-order":"stroke","stroke":"#0E1726","stroke-width":"4px"}, svg);
+  textEl(ISERIES_ARROW_X+6, (iaTop+iaBot)/2-13, "I_series (+ → −)", "",
+    {"font-family":"var(--font-mono)","font-size":"9px","fill":"#9aa7bd",
+     "paint-order":"stroke","stroke":"#0E1726","stroke-width":"4px"}, svg);
+}
+
+/* a main-series conductor segment with base + flow overlay */
+function addSeriesSeg(x1,y1,x2,y2,polarity){
+  const col = polarity==="pos" ? "var(--rail-pos)" : "var(--rail-neg)";
+  const d = "M"+x1+","+y1+" L"+x2+","+y2;
+  const base = el("path", {d, fill:"none", stroke:col, "stroke-width":"2.5"}, svg);
+  const flow = el("path", {class:"flow", d, fill:"none", stroke:col, "stroke-width":"3",
+                           "stroke-opacity":"0.9", style:"--dur:1s"}, svg);
+  refs.seriesPaths.push({base, flow, polarity});
+}
+
+/* ============================================================
+   BUILD ORDER
+   ============================================================ */
+defsBuild();
+buildBlock(0, BLOCK1_Y);
+buildBlock(1, BLOCK2_Y);
+buildFrame();
+
+/* ============================================================
+   RENDER — pure function of recompute() output
+   ============================================================ */
+function flowDur(amps){
+  // clamp(0.4s, k/amps, 2s), heavier current marches faster
+  if(amps<=0) return 2;
+  const k = 1.2;
+  let d = k/amps;
+  if(d<0.4) d=0.4;
+  if(d>2) d=2;
+  return d;
+}
+function setFlow(path, active, amps, color, width){
+  if(!path) return;
+  if(active && amps>0){
+    path.classList.remove("paused");
+    path.style.display = "";
+    path.style.setProperty("--dur", flowDur(amps)+"s");
+    if(color) path.setAttribute("stroke", color);
+    if(width) path.setAttribute("stroke-width", width);
+  } else {
+    path.classList.add("paused");
+    path.style.display = "none";
+  }
+}
+
+function render(d){
+  // ---- cells ----
+  for(let b=0;b<N_BLOCKS;b++){
+    for(let s=0;s<N_STRINGS;s++){
+      const st = d.strings[b][s];
+      for(let c=0;c<N_CELLS;c++){
+        const id=b+"-"+s+"-"+c;
+        const cr = refs.cells[id];
+        const state = model[b][s][c];
+        // reset overlays
+        cr.hotglow.style.display="none";
+        cr.breakG.style.display="none";
+        cr.hatch.style.display="none";
+        cr.rect.style.filter="";
+        if(state==="failed"){
+          // hot-spot derived treatment
+          cr.rect.setAttribute("fill","var(--hot-fill)");
+          cr.rect.setAttribute("stroke","var(--hot-stroke)");
+          cr.hotglow.style.display="";
+          cr.breakG.style.display="";
+        } else if(state==="shaded"){
+          cr.rect.setAttribute("fill","var(--sh-fill)");
+          cr.rect.setAttribute("stroke","var(--sh-stroke)");
+          cr.hatch.style.display="";
+        } else {
+          // healthy: green; glow only if its string is actually live
+          cr.rect.setAttribute("fill","var(--hl-fill)");
+          cr.rect.setAttribute("stroke","var(--hl-stroke)");
+          if(st.alive){
+            cr.rect.style.filter="drop-shadow(0 0 6px rgba(47,181,126,0.35))";
+          } else {
+            // healthy cell in a dead string -> desaturate
+            cr.rect.setAttribute("fill","#16332d");
+            cr.rect.setAttribute("stroke","#2a5a4c");
+          }
+        }
+        // keep aria in sync
+        cr.g.setAttribute("aria-label", ariaForCell(b,s,c));
+      }
+    }
+  }
+
+  // does the array carry any series current at all?
+  const arrayLive = d.I_series > 0;
+
+  // ---- per-string wires & labels ----
+  for(let b=0;b<N_BLOCKS;b++){
+    for(let s=0;s<N_STRINGS;s++){
+      const st = d.strings[b][s];
+      const base = refs.stringBase[b+"-"+s];
+      const flow = refs.stringFlow[b+"-"+s];
+      const lbl  = refs.stringLabel[b+"-"+s];
+      const isThrottle = st.I_s>0 && st.I_s<I_NOM;
+      // base wire styling
+      if(st.alive){
+        base.setAttribute("stroke", isThrottle ? "var(--sh-stroke)" : "var(--hl-stroke)");
+        base.setAttribute("stroke-width", isThrottle ? "1.8" : "3");
+        base.setAttribute("stroke-dasharray","");
+      } else {
+        base.setAttribute("stroke", "var(--fa-stroke)");
+        base.setAttribute("stroke-width","1.2");
+        base.setAttribute("stroke-dasharray","4 4");
+      }
+      // a string only actually carries current if string alive AND its block is contributing to series (not bypassed/open) AND array live
+      const blkContributing = !d.blocks[b].bypass_conducting && !d.blocks[b].is_open && arrayLive;
+      const conducts = st.alive && blkContributing;
+      setFlow(flow, conducts, st.I_s, isThrottle ? "var(--sh-stroke)" : "var(--cyan)", isThrottle ? "1.8":"3");
+      // label
+      lbl.textContent = "S"+(s+1)+" "+fmt(st.I_s);
+      lbl.setAttribute("fill", st.alive ? (isThrottle?"var(--sh-stroke)":"var(--hl-bright)") : "var(--muted)");
+    }
+  }
+
+  // ---- per-block: bus flow, box dim, diode, tag, badge ----
+  for(let b=0;b<N_BLOCKS;b++){
+    const blk = d.blocks[b];
+    const box = refs.blockBox[b];
+    const dd  = refs.diode[b];
+
+    // block body dim when bypassed (≈0 V) or fully open
+    if(blk.bypass_conducting || blk.is_open){
+      box.setAttribute("fill","rgba(126,141,166,0.03)");
+      box.setAttribute("stroke-opacity","0.4");
+    } else {
+      box.setAttribute("fill","rgba(86,196,222,0.02)");
+      box.setAttribute("stroke-opacity","1");
+    }
+
+    // ---- diode rendering ----
+    if(noBypass){
+      // removed / struck
+      dd.tri.setAttribute("fill","none");
+      dd.tri.setAttribute("stroke","#5A6478");
+      dd.tri.setAttribute("stroke-width","1.2");
+      dd.tri.setAttribute("stroke-dasharray","3 3");
+      dd.bar.setAttribute("stroke","#5A6478");
+      dd.bar.setAttribute("stroke-dasharray","3 3");
+      dd.anodeLead.setAttribute("stroke","#5A6478"); dd.anodeLead.setAttribute("stroke-dasharray","3 3");
+      dd.cathodeLead.setAttribute("stroke","#5A6478"); dd.cathodeLead.setAttribute("stroke-dasharray","3 3");
+      dd.g.style.opacity="0.45";
+      dd.removed.style.display="";
+      dd.badgeG.style.display="none";
+      dd.vfCap.style.display="none";
+      setFlow(refs.diodeFlow[b], false, 0);
+    } else {
+      dd.removed.style.display="none";
+      dd.vfCap.style.display="";
+      dd.g.style.opacity="1";
+      if(blk.bypass_conducting){
+        // CONDUCTING — cyan, glow, badge, flow rerouted through diode
+        dd.tri.setAttribute("fill","var(--cyan)");
+        dd.tri.setAttribute("stroke","var(--cyan)");
+        dd.tri.setAttribute("stroke-width","1.5");
+        dd.tri.setAttribute("stroke-dasharray","");
+        dd.tri.style.filter="drop-shadow(0 0 5px rgba(86,196,222,0.8))";
+        dd.bar.setAttribute("stroke","var(--cyan)"); dd.bar.setAttribute("stroke-width","2.4"); dd.bar.setAttribute("stroke-dasharray","");
+        dd.anodeLead.setAttribute("stroke","var(--cyan)"); dd.anodeLead.setAttribute("stroke-width","2"); dd.anodeLead.setAttribute("stroke-dasharray","");
+        dd.cathodeLead.setAttribute("stroke","var(--cyan)"); dd.cathodeLead.setAttribute("stroke-width","2"); dd.cathodeLead.setAttribute("stroke-dasharray","");
+        dd.badgeG.style.display="";
+        // diode carries the series current
+        setFlow(refs.diodeFlow[b], arrayLive, d.I_series, "var(--cyan)", "3.4");
+      } else {
+        // BLOCKING (normal) — faint grey, dashed
+        dd.tri.setAttribute("fill","none");
+        dd.tri.setAttribute("stroke","#7E8DA6");
+        dd.tri.setAttribute("stroke-width","1.5");
+        dd.tri.setAttribute("stroke-dasharray","3 3");
+        dd.tri.style.filter="";
+        dd.bar.setAttribute("stroke","#7E8DA6"); dd.bar.setAttribute("stroke-width","1.5"); dd.bar.setAttribute("stroke-dasharray","");
+        dd.anodeLead.setAttribute("stroke","#7E8DA6"); dd.anodeLead.setAttribute("stroke-width","1.5"); dd.anodeLead.setAttribute("stroke-dasharray","3 3");
+        dd.cathodeLead.setAttribute("stroke","#7E8DA6"); dd.cathodeLead.setAttribute("stroke-width","1.5"); dd.cathodeLead.setAttribute("stroke-dasharray","3 3");
+        dd.badgeG.style.display="none";
+        setFlow(refs.diodeFlow[b], false, 0);
+      }
+    }
+
+    // ---- block bus (the - side vertical bus carries series current down through the block,
+    //      UNLESS the block is bypassed (current detours through diode) or array dead) ----
+    const busCarries = arrayLive && !blk.bypass_conducting && !blk.is_open;
+    setFlow(refs.blockBusFlow[b], busCarries, d.I_series, "var(--cyan)", "3");
+
+    // ---- right-edge tag ----
+    let badge;
+    if(noBypass && blk.is_open) badge = "BLOCK OPEN";
+    else if(blk.bypass_conducting) badge = "BYPASS CONDUCTING";
+    else badge = "BYPASS OFF";
+    refs.blockTag[b].textContent = "I_blk="+fmt(blk.I_block)+"  V_blk="+fmtV(blk.V_block)+"  ["+badge+"]";
+    refs.blockTag[b].setAttribute("fill", blk.bypass_conducting ? "var(--cyan)" : (blk.is_open ? "var(--rail-pos)" : "var(--txt)"));
+  }
+
+  // ---- main series rail segments ----
+  for(const seg of refs.seriesPaths){
+    setFlow(seg.flow, arrayLive, d.I_series, null, null);
+    if(arrayLive){
+      seg.base.setAttribute("stroke-dasharray","");
+      seg.base.setAttribute("stroke-opacity","1");
+    } else {
+      seg.base.setAttribute("stroke","#5A6478");
+      seg.base.setAttribute("stroke-dasharray","4 4");
+      seg.base.setAttribute("stroke-opacity","0.6");
+    }
+    // restore colour when live
+    if(arrayLive){
+      seg.base.setAttribute("stroke", seg.polarity==="pos" ? "var(--rail-pos)" : "var(--rail-neg)");
+    }
+  }
+
+  // ---- junction dot ----
+  refs.junctionDot.setAttribute("fill", arrayLive ? "var(--cyan)" : "#5A6478");
+  refs.arrayPosNode.setAttribute("fill", arrayLive ? "var(--rail-pos)" : "#5A6478");
+  refs.arrayNegNode.setAttribute("fill", arrayLive ? "var(--rail-neg)" : "#5A6478");
+
+  // ---- I_series arrow text ----
+  refs.iseriesText.textContent = fmt(d.I_series);
+
+  // ---- readouts ----
+  renderReadout(d);
+}
+
+function fmt(v){ return (Math.round(v*100)/100).toFixed(2); }
+function fmtV(v){ return (Math.round(v*100)/100).toFixed(2); }
+
+function renderReadout(d){
+  // gauges
+  document.getElementById("g-v").textContent = fmt(d.V_array);
+  document.getElementById("g-i").textContent = fmt(d.I_series);
+  document.getElementById("g-p").textContent = fmt(d.P_array);
+  document.getElementById("g-pct").textContent = d.P_pct+"% of baseline";
+  // big nums
+  document.getElementById("r-v").textContent = fmt(d.V_array);
+  document.getElementById("r-i").textContent = fmt(d.I_series);
+  document.getElementById("r-p").textContent = fmt(d.P_array);
+  // bar
+  document.getElementById("r-pct").textContent = d.P_pct+"%";
+  const bar = document.getElementById("r-bar");
+  bar.style.width = Math.max(0,Math.min(100,d.P_pct))+"%";
+  if(d.P_pct>=100) bar.style.background="linear-gradient(90deg,var(--hl-stroke),var(--hl-bright))";
+  else if(d.P_pct>0) bar.style.background="linear-gradient(90deg,var(--sh-stroke),var(--hl-stroke))";
+  else bar.style.background="var(--fa-stroke)";
+
+  // status lamp
+  const lamp = document.getElementById("lamp");
+  const lampTxt = document.getElementById("lamp-txt");
+  lamp.classList.remove("nominal","derated","fault");
+  if(d.P_pct===100){ lamp.classList.add("nominal"); lampTxt.textContent="NOMINAL"; }
+  else if(d.P_pct>0){ lamp.classList.add("derated"); lampTxt.textContent="DERATED"; }
+  else { lamp.classList.add("fault"); lampTxt.textContent="FAULT"; }
+
+  // block table
+  const tb = document.getElementById("block-tbody");
+  tb.innerHTML="";
+  for(let b=0;b<N_BLOCKS;b++){
+    const blk = d.blocks[b];
+    const tr = document.createElement("tr");
+    let badgeHtml;
+    if(noBypass && blk.is_open) badgeHtml='<span class="badge open">OPEN</span>';
+    else if(blk.bypass_conducting) badgeHtml='<span class="badge on">ON</span>';
+    else badgeHtml='<span class="badge off">OFF</span>';
+    tr.innerHTML =
+      "<td>Block "+(b+1)+"</td>"+
+      "<td>"+blk.aliveStrings+"/4</td>"+
+      "<td>"+fmt(blk.I_block)+"</td>"+
+      "<td>"+fmtV(blk.V_block)+"</td>"+
+      "<td>"+badgeHtml+"</td>";
+    tb.appendChild(tr);
+  }
+
+  // string chips
+  const chips = document.getElementById("string-chips");
+  chips.innerHTML="";
+  for(let b=0;b<N_BLOCKS;b++){
+    for(let s=0;s<N_STRINGS;s++){
+      const st = d.strings[b][s];
+      const chip = document.createElement("span");
+      let cls="dead";
+      if(st.I_s>=I_NOM) cls="live";
+      else if(st.I_s>0) cls="throttle";
+      chip.className="chip "+cls;
+      chip.textContent = "B"+(b+1)+"·S"+(s+1)+" "+fmt(st.I_s);
+      chip.title = st.reason;
+      chips.appendChild(chip);
+    }
+  }
+
+  // plain-English caption (pick dominant condition)
+  document.getElementById("caption").textContent = captionFor(d);
+}
+
+function captionFor(d){
+  // detect conditions
+  let anyOpenNoBypass = d.blocks.some(b=>b.is_open);
+  let anyBypass = d.blocks.some(b=>b.bypass_conducting);
+  let anyFailedString=false, anyShadedString=false;
+  for(let b=0;b<N_BLOCKS;b++) for(let s=0;s<N_STRINGS;s++){
+    if(d.strings[b][s].reason==="open: failed cell") anyFailedString=true;
+    if(d.strings[b][s].reason==="limited by shaded cell") anyShadedString=true;
+  }
+  if(anyOpenNoBypass){
+    return "No bypass → the open block breaks the whole series string; the array is dead (P = 0). THIS is why bypass diodes exist.";
+  }
+  if(anyBypass){
+    return "A whole block is dead → its bypass diode conducts and carries the series current AROUND it (block ≈ 0 V). The other block still delivers ~half the array voltage, so the array keeps producing.";
+  }
+  if(anyFailedString){
+    return "Failed cell: only that string is dead → its block drops to a lower current but keeps FULL voltage; both blocks still produce and the bypass is NOT needed.";
+  }
+  if(anyShadedString){
+    return "Shaded cell throttles its whole string to the weakest-cell current (0.2), not zero; block voltage stays full — mild current loss, no bypass.";
+  }
+  return "All cells healthy — array at full power.";
+}
+
+/* ============================================================
+   update() — single pipeline
+   ============================================================ */
+function update(){
+  const hasBypass = [ !noBypass, !noBypass ];
+  const d = recompute(model, hasBypass);
+  render(d);
+  return d;
+}
+
+/* ============================================================
+   SECTION 4 — TOOLTIPS
+   ============================================================ */
+const tooltip = document.getElementById("tooltip");
+function showTipHTML(ev, html){
+  tooltip.innerHTML = html;
+  tooltip.style.display="block";
+  moveTip(ev);
+}
+function moveTip(ev){
+  const pad=14;
+  let x = ev.clientX+pad, y = ev.clientY+pad;
+  const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+  if(x+w > window.innerWidth-8) x = ev.clientX - w - pad;
+  if(y+h > window.innerHeight-8) y = ev.clientY - h - pad;
+  tooltip.style.left=x+"px"; tooltip.style.top=y+"px";
+}
+function hideTip(){ tooltip.style.display="none"; }
+
+function showCellTip(ev,b,s,c){
+  const hasBypass=[!noBypass,!noBypass];
+  const d = recompute(model, hasBypass);
+  const st = d.strings[b][s];
+  showTipHTML(ev,
+    "Cell <b>"+b+"-"+s+"-"+c+"</b> · "+model[b][s][c]+
+    "<br>String B"+(b+1)+"·S"+(s+1)+" I_s = <b>"+fmt(st.I_s)+"</b>"+
+    "<br><span class='ttreason'>"+st.reason+"</span>");
+}
+function showStringTip(ev,b,s){
+  const hasBypass=[!noBypass,!noBypass];
+  const d = recompute(model, hasBypass);
+  const st = d.strings[b][s];
+  showTipHTML(ev,
+    "String <b>B"+(b+1)+"·S"+(s+1)+"</b><br>I_s = <b>"+fmt(st.I_s)+"</b>"+
+    "<br><span class='ttreason'>"+st.reason+"</span>");
+}
+function showBlockTip(ev,b){
+  const hasBypass=[!noBypass,!noBypass];
+  const d = recompute(model, hasBypass);
+  const blk = d.blocks[b];
+  let state = blk.is_open ? "OPEN (no bypass)" : (blk.bypass_conducting ? "BYPASS CONDUCTING" : "bypass OFF");
+  showTipHTML(ev,
+    "<b>Block "+(b+1)+"</b><br>I_block = <b>"+fmt(blk.I_block)+"</b>"+
+    "<br>V_block = <b>"+fmtV(blk.V_block)+"</b>"+
+    "<br>alive strings "+blk.aliveStrings+"/4"+
+    "<br><span class='ttreason'>"+state+"</span>");
+}
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+function resetModel(){ model = blankModel(); }
+
+document.getElementById("btn-reset").addEventListener("click", ()=>{ resetModel(); update(); });
+
+document.getElementById("btn-fail").addEventListener("click", ()=>{
+  resetModel();
+  model[0][1][3] = "failed";   // Block1, String2, Cell4 -> scenario 2
+  update();
+});
+
+document.getElementById("btn-killblock").addEventListener("click", ()=>{
+  resetModel();
+  for(let s=0;s<N_STRINGS;s++) model[0][s][0] = "failed"; // kill all of Block 1
+  update();
+});
+
+document.getElementById("btn-shade").addEventListener("click", ()=>{
+  resetModel();
+  model[1][0][0] = "shaded";   // Block2·String1·Cell1
+  update();
+});
+
+// no-bypass toggle (custom checkbox span carrying aria-pressed)
+const toggle = document.getElementById("toggle-bypass");
+const cb = document.getElementById("cb-bypass");
+function applyToggle(){
+  noBypass = cb.checked;
+  toggle.setAttribute("aria-pressed", noBypass?"true":"false");
+  toggle.setAttribute("aria-checked", noBypass?"true":"false");
+  update();
+}
+cb.addEventListener("change", applyToggle);
+toggle.addEventListener("click", (ev)=>{
+  if(ev.target===cb) return;       // native handles it
+  cb.checked = !cb.checked;
+  applyToggle();
+});
+toggle.addEventListener("keydown",(ev)=>{
+  if(ev.key===" "||ev.key==="Enter"){ ev.preventDefault(); cb.checked=!cb.checked; applyToggle(); }
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+update();
+
+/* ---- lightweight self-test against the 5 regression scenarios (console only) ---- */
+(function selfTest(){
+  function snap(){ return JSON.parse(JSON.stringify(model)); }
+  const save = snap(); const saveNB = noBypass;
+  const results = [];
+  function run(label, setup, nb, exp){
+    model = blankModel(); noBypass = nb;
+    setup();
+    const d = recompute(model, [!noBypass,!noBypass]);
+    const ok =
+      Math.abs(d.blocks[0].I_block-exp.ib0)<1e-6 &&
+      Math.abs(d.blocks[1].I_block-exp.ib1)<1e-6 &&
+      Math.abs(d.V_array-exp.v)<1e-6 &&
+      Math.abs(d.I_series-exp.i)<1e-6 &&
+      Math.abs(d.P_array-exp.p)<1e-6 &&
+      d.P_pct===exp.pct;
+    results.push((ok?"PASS":"FAIL")+" — "+label+
+      " | Ib0="+fmt(d.blocks[0].I_block)+" Ib1="+fmt(d.blocks[1].I_block)+
+      " V="+fmt(d.V_array)+" I="+fmt(d.I_series)+" P="+fmt(d.P_array)+" "+d.P_pct+"%");
+    return ok;
+  }
+  run("1 all healthy", ()=>{}, false,
+      {ib0:4,ib1:4,v:2,i:4,p:8,pct:100});
+  run("2 one failed B1S2C4", ()=>{ model[0][1][3]="failed"; }, false,
+      {ib0:3,ib1:4,v:2,i:3,p:6,pct:75});
+  run("3 kill Block1 (bypass on)", ()=>{ for(let s=0;s<4;s++) model[0][s][0]="failed"; }, false,
+      {ib0:0,ib1:4,v:0.95,i:4,p:3.8,pct:48});
+  run("3b kill Block1 (no bypass)", ()=>{ for(let s=0;s<4;s++) model[0][s][0]="failed"; }, true,
+      {ib0:0,ib1:4,v:1.0,i:0,p:0,pct:0});
+  run("4 shaded B1S1C1", ()=>{ model[0][0][0]="shaded"; }, false,
+      {ib0:3.2,ib1:4,v:2,i:3.2,p:6.4,pct:80});
+  // restore
+  model = save; noBypass = saveNB;
+  if(window.console && console.log){
+    console.log("%cSolar Array — regression self-test","font-weight:bold");
+    results.forEach(r=>console.log(r));
+  }
+})();
+</script>
+</body>
+</html>

@@ -24,6 +24,8 @@ import dataclasses
 import math
 from dataclasses import dataclass
 
+import numpy as np
+
 from powerpy.simulation.environment import Environment
 
 _VALID_STATES = ("healthy", "failed_open")
@@ -79,3 +81,28 @@ def resolve_cell_env(cond: CellCondition, base_env: Environment) -> Environment:
     return dataclasses.replace(
         base_env, season=season,
         current_loss=current_loss, voltage_loss=voltage_loss)
+
+
+def sample_manufacturing_variance(conditions: list[CellCondition], *, seed: int,
+                                  imp_sigma: float = 0.0,
+                                  pmax_sigma: float = 0.0) -> list[CellCondition]:
+    """Seeded per-cell Imp/Pmax manufacturing variance (default sigma = no-op).
+
+    Deterministic for a given ``seed``.  With both sigmas 0 (the default) the
+    returned conditions are identical to the inputs -- the mechanism is wired
+    but changes nothing until real supplier spreads are supplied.  The sampled
+    ``imp_factor``/``pmax_factor`` are consumed by :func:`resolve_cell_env`.
+    """
+    if imp_sigma == 0.0 and pmax_sigma == 0.0:
+        return list(conditions)
+    rng = np.random.default_rng(seed)
+    floor = 1e-9
+    out: list[CellCondition] = []
+    for cond in conditions:
+        imp = cond.imp_factor * (1.0 + rng.normal(0.0, imp_sigma))
+        pmax = cond.pmax_factor * (1.0 + rng.normal(0.0, pmax_sigma))
+        out.append(dataclasses.replace(
+            cond,
+            imp_factor=max(float(imp), floor),
+            pmax_factor=max(float(pmax), floor)))
+    return out

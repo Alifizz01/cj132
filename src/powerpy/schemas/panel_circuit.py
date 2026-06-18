@@ -99,3 +99,28 @@ class ArraySpec:
                 for string in section.strings:
                     out.extend(string.members)
         return out
+
+
+def validate_bijection(spec: ArraySpec, n_tiles: int) -> None:
+    """Assert the spec's tile members are a bijection onto ``range(n_tiles)``.
+
+    Every tile is a cell and must be wired exactly once: the concatenation of
+    all strings' ``members`` must be a permutation of ``0..n_tiles-1``.
+    """
+    members = spec.all_members()
+    seen: set[int] = set()
+    for idx in members:
+        if not isinstance(idx, int):
+            raise ValueError("validate_bijection: non-int tile index %r" % (idx,))
+        if idx < 0 or idx >= n_tiles:
+            raise ValueError(
+                "validate_bijection: tile index %d out of range [0, %d)"
+                % (idx, n_tiles))
+        if idx in seen:
+            raise ValueError("validate_bijection: tile index %d wired twice" % idx)
+        seen.add(idx)
+    missing = set(range(n_tiles)) - seen
+    if missing:
+        raise ValueError(
+            "validate_bijection: tiles not wired to any string: %s"
+            % sorted(missing))

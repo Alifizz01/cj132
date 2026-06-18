@@ -24,6 +24,7 @@ from powerpy.schemas.structure import (
 )
 from powerpy.schemas.report import ReportMetadata
 from powerpy.schemas.circuit import CircuitString, CircuitSection, CircuitLayout
+from powerpy.schemas.panel_circuit import StringSpec, SectionSpec, PanelSpec, ArraySpec
 
 __all__ = [
     "Phase",
@@ -51,4 +52,8 @@ __all__ = [
     "CircuitString",
     "CircuitSection",
     "CircuitLayout",
+    "StringSpec",
+    "SectionSpec",
+    "PanelSpec",
+    "ArraySpec",
 ]

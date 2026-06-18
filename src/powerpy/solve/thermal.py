@@ -102,6 +102,7 @@ def solve_thermal(
     neighbours: Optional[Sequence[Tuple[int, int]]] = None,
     g_lat: float = 0.0,
     tilt: float = 1.0,
+    s_solar=1.0,
     t_init_c: float = 28.0,
     tol: float = 1e-6,
     max_iter: int = 100,
@@ -127,7 +128,12 @@ def solve_thermal(
     eR = _as_array(epsilon_rear, n)
 
     CA = c_cond * A
-    qF = aF * A * p_sun * tilt
+    # s_solar is a per-cell FRONT-solar factor (shade*incidence): it multiplies
+    # only the front solar term qF, never the rear albedo/IR term qR (which
+    # arrives from the planet, not the Sun line).  Scalar 1.0 (the default)
+    # broadcasts and reproduces today's numbers byte-for-byte.
+    sS = _as_array(s_solar, n)
+    qF = aF * A * p_sun * tilt * sS
     qR = (aR * p_albedo + eR * p_ir) * A * tilt
     tsp4 = T_SPACE ** 4
     lateral = (g_lat != 0.0) and bool(neighbours)
@@ -243,6 +249,7 @@ def solve_panel(
     c_cond: float = 1000.0,
     g_lat: float = 0.0,
     tilt: float = 1.0,
+    s_solar=1.0,
     area=None,
     t_init_c: float = 28.0,
     tol: float = 1e-6,
@@ -274,7 +281,7 @@ def solve_panel(
         area=A, alpha_front=props["alpha_front"], alpha_rear=props["alpha_rear"],
         epsilon_front=props["epsilon_front"], epsilon_rear=props["epsilon_rear"],
         c_cond=c_cond, p_sun=p_sun, p_albedo=p_albedo, p_ir=p_ir, p_elec=Pe,
-        neighbours=layout.neighbours(), g_lat=g_lat, tilt=tilt,
+        neighbours=layout.neighbours(), g_lat=g_lat, tilt=tilt, s_solar=s_solar,
         t_init_c=t_init_c, tol=tol, max_iter=max_iter, strict=strict,
     )
     return PanelThermalResult(

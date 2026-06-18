@@ -28,6 +28,9 @@ import numpy as np
 
 from powerpy.schemas.panel_circuit import ArraySpec
 from powerpy.simulation.array_level import ArrayModel
+from powerpy.simulation.cell_condition import CellCondition
+from powerpy.simulation.environment import Environment
+from powerpy.simulation.spec_build import build_array_from_spec
 
 
 def _current_at_voltage(curve, v: float) -> float:
@@ -95,3 +98,68 @@ def _solve_string(string, st_spec, v_node: float, power: dict) -> None:
     for cell, k in zip(string.cells, st_spec.members):
         v_cell = _voltage_at_current(cell.iv_curve(), i_s)
         power[int(k)] = v_cell * i_s
+
+
+# --------------------------------------------------------------------------
+# Opt-in physics-derived per-cell thermal path
+# --------------------------------------------------------------------------
+def percell_power_array(power: dict[int, float], n_tiles: int) -> np.ndarray:
+    """Assemble a length-``n_tiles`` ``p_elec`` array from a tile->power map.
+
+    Tiles absent from ``power`` (none, for a bijective spec) default to 0.
+    """
+    pe = np.zeros(int(n_tiles), dtype=float)
+    for k, val in power.items():
+        pe[int(k)] = float(val)
+    return pe
+
+
+def solve_panel_percell(
+    cell_params,
+    spec: ArraySpec,
+    layout,
+    *,
+    p_sun: float,
+    env: Environment | None = None,
+    conditions: dict[int, CellCondition] | None = None,
+    iv_engine: str = "analytic",
+    string_shunt_vf: float | None = None,
+    v_star: float | None = None,
+    p_albedo: float = 0.0,
+    p_ir: float = 0.0,
+    **solve_kwargs,
+):
+    """OPT-IN physics path: per-cell FORWARD power -> per-cell thermal solve.
+
+    Builds the analytic array from ``spec`` + ``conditions``, back-propagates the
+    per-cell forward power at the array MPP (or ``v_star``), and feeds it to
+    :func:`powerpy.solve.thermal.solve_panel` together with a per-cell FRONT-solar
+    factor ``s_solar = shade * incidence`` (so a shaded/deflected cell both loses
+    photocurrent AND absorbs less front sun).  Lateral conduction stays OFF
+    (``g_lat = 0``) -- cells are independent.
+
+    Returns ``(PanelThermalResult, p_elec_array)``.  This never touches
+    ``make_pe`` (the default fast path); it is a separate, explicit entry point.
+    """
+    from powerpy.solve.thermal import solve_panel
+
+    env = env or Environment()
+    conditions = conditions or {}
+
+    arr = build_array_from_spec(
+        cell_params, spec, iv_engine=iv_engine,
+        string_shunt_vf=string_shunt_vf, conditions=conditions)
+    arr.apply(env)
+
+    power = solve_percell_power(arr, spec, v_star=v_star)
+    pe = percell_power_array(power, layout.n_tiles)
+
+    # per-cell front-solar factor (shade * incidence); default 1.0 for absent k.
+    s_solar = np.ones(layout.n_tiles, dtype=float)
+    for k, cond in conditions.items():
+        s_solar[int(k)] = float(cond.shade) * float(cond.incidence)
+
+    res = solve_panel(
+        layout, p_sun=p_sun, p_albedo=p_albedo, p_ir=p_ir,
+        p_elec=pe, g_lat=0.0, s_solar=s_solar, **solve_kwargs)
+    return res, pe

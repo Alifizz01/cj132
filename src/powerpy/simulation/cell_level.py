@@ -20,6 +20,7 @@ import numpy as np
 from powerpy.schemas import CellParameters
 from powerpy.simulation.base import SimNode
 from powerpy.simulation.environment import Environment
+from powerpy.simulation.cell_condition import CellCondition, resolve_cell_env
 
 
 # --------------------------------------------------------------------------
@@ -128,10 +129,12 @@ class CellModel(SimNode):
     """
 
     def __init__(self, params: CellParameters, name: str | None = None,
-                 iv_engine: str = "analytic") -> None:
+                 iv_engine: str = "analytic",
+                 condition: "CellCondition | None" = None) -> None:
         self.params = params
         self.name = name or params.name
-        self._env = Environment()
+        self.condition = condition or CellCondition()
+        self._env = resolve_cell_env(self.condition, Environment())
         # "analytic" = the self-contained single-diode model (no ngspice).
         # "ngspice"  = the vendored ngspice/PySpice path, used when the vendor
         #              is present; it falls back to analytic if it is not.
@@ -139,9 +142,14 @@ class CellModel(SimNode):
         self._legacy = None   # lazily-built SchemaCellModel for the ngspice path
 
     def apply(self, env: Environment) -> None:
-        """Set the operating point.  Cheap -- the physics is in
-        :meth:`operating_points`, evaluated lazily."""
-        self._env = env
+        """Resolve the per-cell condition onto the supplied base environment.
+
+        Idempotent: ``resolve_cell_env`` always reads the *base* ``env`` handed
+        down by the parent, never the already-resolved ``self._env``.  This
+        relies on parents (String/Section/Panel/Array ``apply``) always passing
+        the same base Environment down each solve, which they do.
+        """
+        self._env = resolve_cell_env(self.condition, env)
 
     def operating_points(self) -> tuple[float, float, float, float]:
         """(Isc, Imp, Vmp, Voc) at the current environment.

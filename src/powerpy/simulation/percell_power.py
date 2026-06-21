@@ -159,7 +159,12 @@ def solve_panel_percell(
     for k, cond in conditions.items():
         s_solar[int(k)] = float(cond.shade) * float(cond.incidence)
 
+    # Pair the per-cell electrical power with the cell's REAL area, not the
+    # grid-pitch area solve_panel would otherwise derive -- otherwise the
+    # absorbed front-solar (p_sun * area) can fall below the extracted p_elec
+    # and the 2-node balance diverges to absurd temperatures.
+    area = solve_kwargs.pop("area", float(cell_params.electrical.area_m2))
     res = solve_panel(
         layout, p_sun=p_sun, p_albedo=p_albedo, p_ir=p_ir,
-        p_elec=pe, g_lat=0.0, s_solar=s_solar, **solve_kwargs)
+        p_elec=pe, g_lat=0.0, s_solar=s_solar, area=area, **solve_kwargs)
     return res, pe

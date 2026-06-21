@@ -183,8 +183,10 @@ def _parse_args(argv=None):
                    help="Path to the grid JSON (PanelLayout).")
     p.add_argument("--substrate", default=None,
                    help="Substrate name or JSON path (optional).")
-    p.add_argument("--wb", default="sim_conditions.xlsx",
-                   help="Path to the sim_conditions workbook (default: sim_conditions.xlsx).")
+    p.add_argument("--wb", default="params.xlsx",
+                   help="Workbook holding BOTH cell config and the condition "
+                        "layers (default: params.xlsx -- one file, layer sheets "
+                        "are added alongside cell_params/mission_orbit/etc.).")
     p.add_argument("--runs", default="runs",
                    help="Parent directory for run snapshots (default: runs/).")
     p.add_argument("--run-id", default="run",

@@ -65,7 +65,8 @@ def environment_for_phase(
     angle_alpha_deg: float = 0.0,
     angle_beta_deg: float = 0.0,
     albedo_w_m2: float = 0.0,
-    loss_levels: Iterable[Level] = (Level.CELL,),
+    loss_levels: Iterable[Level] = (Level.CELL, Level.STRING, Level.SECTION,
+                                    Level.PANEL, Level.ARRAY),
     voltage_loss_prefix: str = _VOLTAGE_LOSS_PREFIX,
 ) -> Environment:
     """Resolve dose, losses and irradiance for one phase into an Environment.
@@ -85,13 +86,15 @@ def environment_for_phase(
             # Default to 25°C if not available
             temperature_c = 25.0
 
-    # collect cell-axis losses for this phase
+    # collect every loss factor for this phase across the requested hierarchy
+    # levels (cell + string + array by default -- the full budget the report
+    # sets up). Array-level factors that are 1.000 are simply neutral.
     losses = report.losses.by_phase(phase)
-    losses_cell_axis = tuple(
+    losses_applied = tuple(
         f for f in losses if f.level in tuple(loss_levels)
     )
     cur_loss, volt_loss = _split_losses_by_axis(
-        losses_cell_axis, voltage_prefix=voltage_loss_prefix)
+        losses_applied, voltage_prefix=voltage_loss_prefix)
 
     # dose lookups; tolerate missing entries gracefully
     def _dose(param: FluxParam) -> float:

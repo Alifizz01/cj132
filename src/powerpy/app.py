@@ -118,13 +118,18 @@ def _find_params(explicit: str | None = None) -> Path:
 
 
 def build_electrical_report(params, out_pdf, *, data_dir=None,
-                            engine: str = "analytic", workdir=None):
+                            engine: str = "analytic", workdir=None,
+                            grid_file=None):
     """Build the whole-array electrical report PDF from a params workbook.
 
     Uses the analytic single-diode engine by default (``engine="analytic"``) so it
     needs neither ngspice nor a legacy cell file. Returns
     ``(pdf_path_or_None, phases, report_metadata)``. ``pdf_path`` is None only if
     pdflatex is unavailable (the LaTeX workspace is still written).
+
+    ``grid_file`` overrides the cell's ``grid_reference_file``: when given, the
+    array is derived from that grid layout (grid-as-single-source) regardless of
+    the workbook, without changing the default report.
     """
     # heavy imports are local so `powerpy run/worst/sweep` don't pay for them
     import dataclasses
@@ -133,9 +138,10 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .loader.requirement import load_requirement
     from .loader.circuit import load_circuit
     from .simulation.pipeline import (
-        AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run)
+        AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
     from .simulation.array_level import build_from_report
     from .simulation.circuit_build import build_array_from_circuit
+    from .simulation.grid_build import build_array_from_grid
     from .render import Report
 
     params = Path(params)
@@ -145,78 +151,83 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
 
     report = load_report_data(params, data_dir)
     scope = load_analysis_scope(params)
-    requirement = load_requirement(params, data_dir)
+    requirement = load_requirement(params, data_dir)   # mission targets (or None)
 
     # string shunt-diode forward drop (if the cell carries one)
     string_shunt_vf = (report.cell.string_diode.v_forward
                        if getattr(report.cell, "string_diode", None) else None)
 
     def _build_array():
-        """Build the array from the free-form circuit if referenced, else the
-        ArrayLayout sections."""
-        ref = getattr(report.cell, "circuit_reference_file", None)
-        if ref:
-            circuit = load_circuit(ref)
+        """Derive the array from a free-form circuit JSON if the cell references
+        one; else from a grid (grid-as-single-source) when referenced; otherwise
+        fall back to the ArrayLayout sections."""
+        circuit_ref = getattr(report.cell, "circuit_reference_file", None)
+        if circuit_ref:
+            circuit = load_circuit(circuit_ref)
             return build_array_from_circuit(
                 report.cell, circuit, iv_engine=engine, string_shunt_vf=string_shunt_vf)
+        grid_ref = grid_file or getattr(report.cell, "grid_reference_file", None)
+        if grid_ref:
+            layout = load_layout(grid_ref)
+            return build_array_from_grid(
+                report.cell, layout, layout.circuit_params,
+                iv_engine=engine, string_shunt_vf=string_shunt_vf)
         return build_from_report(report, iv_engine=engine)
 
-    def _case_result(label, phase, launch, *, temperature_c=None, season=1.0,
-                     sun_angle_deg=0.0, string_loss=1.0, v_operating=None, array=None):
-        env = environment_for_phase(
-            report, phase=phase, launch_config=launch,
-            temperature_c=temperature_c, season=season, angle_alpha_deg=sun_angle_deg)
-        if string_loss != 1.0:
-            env = dataclasses.replace(env, current_loss=env.current_loss * string_loss)
-        res = run(array, env)
-        # bus voltage: explicit v_operating (analysis sheet) wins; else the
-        # mission's per-phase bus_voltage (preserves the legacy no-scope path);
-        # else the requirement's operating voltage.
-        v_bus = v_operating
-        if v_bus is None:
-            try:
-                v_bus = report.mission.lookup(
-                    name="bus_voltage", launch_config=launch, phase=phase)
-            except KeyError:
-                v_bus = None
-        if v_bus is None and requirement is not None:
-            v_bus = requirement.voltage_operating_v
-        bus = None
-        if v_bus is not None:
-            i_bus = array.current_at_voltage(v_bus)
-            bus = CompliancePoint(bus_voltage_v=v_bus, current_a=float(i_bus),
-                                  power_w=float(v_bus * i_bus))
-        case = AnalysisCase(label=label, phase=phase, launch_config=launch,
-                            temperature_c=temperature_c, season=season)
-        return CaseResult(case=case, environment=env, results=res, bus=bus)
-
-    array = _build_array()
-
     if scope:
-        case_results = [
-            _case_result(cfg.label, cfg.phase, cfg.launch,
-                         temperature_c=cfg.temperature_c, season=cfg.season,
-                         sun_angle_deg=cfg.sun_angle_deg, string_loss=cfg.string_loss,
-                         v_operating=cfg.v_operating, array=array)
-            for cfg in scope]
+        # SCOPE-DRIVEN: investigate exactly the configs the `analysis` sheet lists,
+        # in its order, each at its own operating conditions.
+        array = _build_array()
+        case_results = []
+        for cfg in scope:
+            env = environment_for_phase(
+                report, phase=cfg.phase, launch_config=cfg.launch,
+                temperature_c=cfg.temperature_c, season=cfg.season,
+                angle_alpha_deg=cfg.sun_angle_deg)
+            if cfg.string_loss != 1.0:        # extra string-level current loss
+                env = dataclasses.replace(
+                    env, current_loss=env.current_loss * cfg.string_loss)
+            res = run(array, env)
+            # bus voltage: the analysis row's v_operating, else the requirement's
+            v_bus = cfg.v_operating
+            if v_bus is None and requirement is not None:
+                v_bus = requirement.voltage_operating_v
+            bus = None
+            if v_bus is not None:
+                i_bus = array.current_at_voltage(v_bus)
+                bus = CompliancePoint(bus_voltage_v=v_bus,
+                                      current_a=float(i_bus),
+                                      power_w=float(v_bus * i_bus))
+            case = AnalysisCase(label=cfg.label, phase=cfg.phase,
+                                launch_config=cfg.launch,
+                                temperature_c=cfg.temperature_c, season=cfg.season)
+            case_results.append(CaseResult(case=case, environment=env,
+                                          results=res, bus=bus))
         labels = [c.label for c in scope]
-        requirement_w = (min(requirement.power_min_for_phase(c.phase) for c in scope)
-                         if requirement is not None else None)
-    else:
-        present = {f.phase for f in report.losses}
-        if not present:
-            raise SystemExit("ERROR: no phases found and no `analysis` sheet in the workbook.")
-        phases = [p for p in _PHASE_ORDER if p in present]
-        phases += sorted(p for p in present if p not in _PHASE_ORDER)
-        case_results = [_case_result(ph, ph, "single", array=array) for ph in phases]
-        labels = phases
-        requirement_w = (min(requirement.power_min_for_phase(ph) for ph in phases)
-                         if requirement is not None else None)
+        # requirement line on the P-V plot: the binding minimum power for the
+        # scoped phases (EOL phases -> eol_power_min, else eor_power_min).
+        requirement_w = None
+        if requirement is not None:
+            requirement_w = min(requirement.power_min_for_phase(c.phase) for c in scope)
+        rpt = Report.from_results(report, case_results, array=array,
+                                  requirement_w=requirement_w, iv_engine=engine)
+        rpt.render(workdir)
+        return rpt.compile_pdf(out_pdf), labels, report
 
-    rpt = Report.from_results(report, case_results, array=array,
-                              requirement_w=requirement_w, iv_engine=engine)
+    # FALLBACK (no analysis sheet): one case per phase found in the loss table.
+    # NOTE: this legacy path always uses the ArrayLayout sections; a grid
+    # reference (grid-as-single-source) is honoured only in the scope-driven
+    # path above. Add an `analysis` sheet to drive the report from a grid.
+    present = {f.phase for f in report.losses}
+    if not present:
+        raise SystemExit("ERROR: no phases found and no `analysis` sheet in the workbook.")
+    phases = [p for p in _PHASE_ORDER if p in present]
+    phases += sorted(p for p in present if p not in _PHASE_ORDER)
+    cases = [AnalysisCase(label=ph, phase=ph) for ph in phases]
+    case_results = evaluate(report, cases, build_kwargs={"iv_engine": engine})
+    rpt = Report.from_results(report, case_results, build_array=True, iv_engine=engine)
     rpt.render(workdir)
-    return rpt.compile_pdf(out_pdf), labels, report
+    return rpt.compile_pdf(out_pdf), phases, report
 
 
 def _cmd_report(args) -> int:

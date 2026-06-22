@@ -215,21 +215,24 @@ def hotspot_case(md: ReportMetadata, sub: Substrate, case: ThermalCase,
 def run_thermal_report(md: ReportMetadata, cases: list[ThermalCase], *,
                        substrate: Substrate | str = "FSP-SFLA",
                        layout_file: str | None = None,
+                       layout=None,
                        t_limit_c: float = 150.0,
                        efficiency: float = 0.30) -> ThermalReportData:
     """Compute every thermal-report quantity for the given cases.
 
     ``layout_file`` (a layout JSON with a 'C'/'.' grid) declares where SCAs and
     bare/no-SCA sections are; the hot-spot/heat-map run on that panel.  Without
-    it a uniform cell panel is used.
+    it a uniform cell panel is used.  ``layout`` lets a caller pass an
+    already-built :class:`PanelLayout` directly (e.g. a grid-as-single-source
+    panel that also drives the electrical report) -- it takes precedence over
+    ``layout_file``.
     """
     sub = (substrate if isinstance(substrate, Substrate)
            else load_substrate(substrate))
     orbit = md.mission_orbit if md.mission_orbit is not None else DEFAULT_ORBIT
     alpha_f, eps_f, area = _cell_optics(md)
 
-    layout = None
-    if layout_file is not None:
+    if layout is None and layout_file is not None:
         layout, area = panel_from_grid(md, sub, load_layout_grid(layout_file))
 
     points = [equilibrium_point(md, sub, c, orbit=orbit, efficiency=efficiency)

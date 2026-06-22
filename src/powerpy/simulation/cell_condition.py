@@ -4,19 +4,22 @@ A :class:`CellCondition` is a frozen, fully-defaulted description of one cell's
 state.  :func:`resolve_cell_env` folds EVERY field onto a base
 :class:`Environment` (no field is wired-but-inert):
 
-  * shade x incidence x life x imp_factor x sqrt(pmax_factor) ride the CURRENT
-    axis -- the only current knob the analytic ``operating_points`` reads is
-    ``current_loss`` (which never reads ``season``).
+  The analytic ``operating_points`` scales the photocurrent by
+  ``current_loss * season`` (BOTH ride the CURRENT axis), so every current-axis
+  knob is placed on EXACTLY ONE of the two to avoid double-counting:
+
+  * life x imp_factor x sqrt(pmax_factor) ride ``current_loss``.
+  * shade x incidence ride ``season`` (read there by both the analytic and the
+    ngspice path) -- they are NOT also written to ``current_loss``.
   * sqrt(pmax_factor) also rides the VOLTAGE axis (``voltage_loss``) so a Pmax
     multiplier ``m`` scales the cell's peak power by ~m (sqrt(m)*sqrt(m)).
-  * shade x incidence is ALSO written to ``season`` for the ngspice path.
   * ``failed_open`` is realised as a near-dead but WELL-FORMED cell.  The
-    LOAD-BEARING analytic effect is ``current_loss *= failed_open_epsilon``
-    (tiny Isc); ``season *= failed_open_epsilon`` is set only for the ngspice
-    path; ``voltage_loss`` is untouched so full Voc keeps the parallel
-    ``combine_parallel`` (caps at smallest child Voc) from collapsing.  This is
-    why it isolates only the affected series string in ``combine_series`` (caps
-    at smallest child Isc) instead of killing the section.
+    LOAD-BEARING analytic effect is ``season *= failed_open_epsilon`` (tiny Isc,
+    a single current-axis knob); ``current_loss`` and ``voltage_loss`` are left
+    untouched so full Voc keeps the parallel ``combine_parallel`` (caps at
+    smallest child Voc) from collapsing.  This is why it isolates only the
+    affected series string in ``combine_series`` (caps at smallest child Isc)
+    instead of killing the section.
 """
 from __future__ import annotations
 
@@ -63,19 +66,22 @@ def resolve_cell_env(cond: CellCondition, base_env: Environment) -> Environment:
     Consumes EVERY CellCondition field so none is produced-but-unread.
     """
     if cond.state == "failed_open":
-        # LOAD-BEARING for the analytic engine: tiny Isc comes from current_loss
-        # (operating_points ignores season).  season mirrors it for ngspice.
+        # LOAD-BEARING for the analytic engine: tiny Isc comes from season alone
+        # (operating_points scales the photocurrent by current_loss * season, so
+        # a single current-axis knob is enough -- and avoids squaring epsilon).
         season = base_env.season * cond.failed_open_epsilon
-        current_loss = base_env.current_loss * cond.failed_open_epsilon
+        current_loss = base_env.current_loss
         voltage_loss = base_env.voltage_loss     # keep full Voc -> isolates string
         return dataclasses.replace(
             base_env, season=season,
             current_loss=current_loss, voltage_loss=voltage_loss)
 
     pmax_axis = math.sqrt(cond.pmax_factor)
+    # current axis: life / imp_factor / sqrt(pmax) ride current_loss; shade and
+    # incidence ride season (the analytic path multiplies by current_loss*season,
+    # so each knob is applied on exactly one of the two to avoid double-counting).
     current_loss = (base_env.current_loss
-                    * cond.life * cond.shade * cond.incidence
-                    * cond.imp_factor * pmax_axis)
+                    * cond.life * cond.imp_factor * pmax_axis)
     voltage_loss = base_env.voltage_loss * pmax_axis
     season = base_env.season * cond.shade * cond.incidence
     return dataclasses.replace(

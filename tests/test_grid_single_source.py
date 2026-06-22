@@ -96,7 +96,7 @@ def test_cellparameters_has_optional_substrate_reference():
 def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
     import json
     import dataclasses
-    import powerpy.simulation.grid_build as gb
+    import powerpy.simulation.report_build as rb
     import powerpy.loader.report as report_mod
     from powerpy.app import build_electrical_report
 
@@ -104,13 +104,15 @@ def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
     grid_path.write_text(json.dumps(_demo_dict()), encoding="utf-8")
 
     called = {"n": 0}
-    real = gb.build_array_from_grid
+    captured = {}
+    real_build = rb.build_array_from_spec
 
-    def spy(cell_params, layout, circuit_params=None, **kw):
+    def spy(cell_params, spec, **kw):
         called["n"] += 1
-        return real(cell_params, layout, circuit_params, **kw)
+        captured["spec"] = spec
+        return real_build(cell_params, spec, **kw)
 
-    monkeypatch.setattr(gb, "build_array_from_grid", spy)
+    monkeypatch.setattr(rb, "build_array_from_spec", spy)
 
     real_load = report_mod.load_report_data
 
@@ -123,29 +125,36 @@ def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
 
     pdf, labels, rep = build_electrical_report(
         _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
-    assert called["n"] == 1     # grid path used exactly once (one panel built)
+    assert called["n"] == 1     # array built once, through the spec builder
+    # the demo grid (one block bA, two parallel strings of 3 cells) flows through
+    # as the spec handed to the builder.
+    secs = [s for p in captured["spec"].panels for s in p.sections]
+    assert len(secs) == 1
+    assert len(secs[0].strings) == 2
+    assert sorted(len(s.members) for s in secs[0].strings) == [3, 3]
     assert labels
 
 
-def test_report_without_grid_does_not_use_grid_builder(tmp_path, monkeypatch):
-    """Negative: the default workbook has no grid_reference_file, so the grid
-    builder must NOT be invoked (the report falls back to the ArrayLayout)."""
-    import powerpy.simulation.grid_build as gb
+def test_report_without_grid_uses_sections(tmp_path, monkeypatch):
+    """The default workbook has no grid/circuit ref, so the report assembles from
+    the ArrayLayout sections: the spec handed to the builder must cover every SCA
+    in the section layout (a sections topology, not a grid)."""
+    import powerpy.simulation.report_build as rb
     from powerpy.app import build_electrical_report
 
-    called = {"n": 0}
-    real = gb.build_array_from_grid
+    captured = {}
+    real_build = rb.build_array_from_spec
 
-    def spy(*a, **kw):
-        called["n"] += 1
-        return real(*a, **kw)
+    def spy(cell_params, spec, **kw):
+        captured["spec"] = spec
+        return real_build(cell_params, spec, **kw)
 
-    monkeypatch.setattr(gb, "build_array_from_grid", spy)
+    monkeypatch.setattr(rb, "build_array_from_spec", spy)
 
     pdf, labels, rep = build_electrical_report(
         _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
     assert rep.cell.grid_reference_file is None   # default workbook: no grid
-    assert called["n"] == 0                       # grid builder NOT used
+    assert len(captured["spec"].all_members()) == rep.array_layout.n_sca_total
     assert labels
 
 

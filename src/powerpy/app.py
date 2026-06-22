@@ -136,12 +136,9 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .loader.report import load_report_data
     from .loader.analysis import load_analysis_scope
     from .loader.requirement import load_requirement
-    from .loader.circuit import load_circuit
     from .simulation.pipeline import (
         AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
-    from .simulation.array_level import build_from_report
-    from .simulation.circuit_build import build_array_from_circuit
-    from .simulation.grid_build import build_array_from_grid
+    from .simulation.report_build import build_array_for_report
     from .render import Report
 
     params = Path(params)
@@ -153,31 +150,10 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     scope = load_analysis_scope(params)
     requirement = load_requirement(params, data_dir)   # mission targets (or None)
 
-    # string shunt-diode forward drop (if the cell carries one)
-    string_shunt_vf = (report.cell.string_diode.v_forward
-                       if getattr(report.cell, "string_diode", None) else None)
-
-    def _build_array():
-        """Derive the array from a free-form circuit JSON if the cell references
-        one; else from a grid (grid-as-single-source) when referenced; otherwise
-        fall back to the ArrayLayout sections."""
-        circuit_ref = getattr(report.cell, "circuit_reference_file", None)
-        if circuit_ref:
-            circuit = load_circuit(circuit_ref)
-            return build_array_from_circuit(
-                report.cell, circuit, iv_engine=engine, string_shunt_vf=string_shunt_vf)
-        grid_ref = grid_file or getattr(report.cell, "grid_reference_file", None)
-        if grid_ref:
-            layout = load_layout(grid_ref)
-            return build_array_from_grid(
-                report.cell, layout, layout.circuit_params,
-                iv_engine=engine, string_shunt_vf=string_shunt_vf)
-        return build_from_report(report, iv_engine=engine)
-
     if scope:
         # SCOPE-DRIVEN: investigate exactly the configs the `analysis` sheet lists,
         # in its order, each at its own operating conditions.
-        array = _build_array()
+        array = build_array_for_report(report, grid_file=grid_file, iv_engine=engine)
         case_results = []
         for cfg in scope:
             env = environment_for_phase(
@@ -224,8 +200,9 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     phases = [p for p in _PHASE_ORDER if p in present]
     phases += sorted(p for p in present if p not in _PHASE_ORDER)
     cases = [AnalysisCase(label=ph, phase=ph) for ph in phases]
-    case_results = evaluate(report, cases, build_kwargs={"iv_engine": engine})
-    rpt = Report.from_results(report, case_results, build_array=True, iv_engine=engine)
+    array = build_array_for_report(report, iv_engine=engine, sections_only=True)
+    case_results = evaluate(report, cases, array=array)
+    rpt = Report.from_results(report, case_results, array=array, iv_engine=engine)
     rpt.render(workdir)
     return rpt.compile_pdf(out_pdf), phases, report
 

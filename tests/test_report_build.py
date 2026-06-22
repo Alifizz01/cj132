@@ -70,3 +70,42 @@ def test_evaluate_with_prebuilt_array_matches_internal_build():
     r0, p0 = ref[0].results.array, pre[0].results.array
     for attr in ("p_mp", "v_mp", "i_mp", "isc", "voc"):
         assert np.isclose(getattr(r0, attr), getattr(p0, attr), rtol=0, atol=1e-9), attr
+
+
+def test_report_build_sections_only_matches_build_from_report():
+    """The no-analysis-sheet fallback uses sections_only -> must equal the legacy
+    build_from_report regardless of any grid/circuit ref on the cell."""
+    report = _report()
+    env = Environment(temperature_c=28.0)
+    v_new, i_new = _iv(build_array_for_report(report, sections_only=True), env)
+    v_ref, i_ref = _iv(build_from_report(report, iv_engine="analytic"), env)
+    assert np.allclose(v_new, v_ref, rtol=0, atol=1e-9)
+    assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9)
+
+
+def test_whole_report_numbers_unchanged_scope_path():
+    """Every scoped case's array MPP is identical legacy-vs-spec builder.
+    This is the P1 gate: it must stay green after app.py is rewired."""
+    import dataclasses
+    from powerpy.loader.analysis import load_analysis_scope
+    from powerpy.simulation.pipeline import environment_for_phase, run
+    report = _report()
+    scope = load_analysis_scope(PARAMS)
+    if not scope:
+        pytest.skip("no analysis sheet -> scope path not exercised")
+
+    legacy = build_from_report(report, iv_engine="analytic")
+    spec = build_array_for_report(report)
+
+    for cfg in scope:
+        env = environment_for_phase(
+            report, phase=cfg.phase, launch_config=cfg.launch,
+            temperature_c=cfg.temperature_c, season=cfg.season,
+            angle_alpha_deg=cfg.sun_angle_deg)
+        if cfg.string_loss != 1.0:
+            env = dataclasses.replace(env, current_loss=env.current_loss * cfg.string_loss)
+        r_leg = run(legacy, env).array
+        r_new = run(spec, env).array
+        for attr in ("isc", "voc", "v_mp", "i_mp", "p_mp"):
+            assert np.isclose(getattr(r_leg, attr), getattr(r_new, attr),
+                              rtol=0, atol=1e-9), (cfg.label, attr)

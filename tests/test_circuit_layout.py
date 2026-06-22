@@ -119,19 +119,19 @@ from powerpy.app import build_electrical_report
 
 def test_build_electrical_report_uses_circuit(tmp_path, monkeypatch):
     import dataclasses
-    import powerpy.simulation.circuit_build as cb
+    import powerpy.simulation.report_build as rb
     import powerpy.loader.report as report_mod
 
     captured = {}
-    real_build = cb.build_array_from_circuit
+    real_build = rb.build_array_from_spec
 
-    def spy(cell_params, circuit, **kw):
-        arr = real_build(cell_params, circuit, **kw)
-        captured["sections"] = [len(s.strings) for s in arr.iter_sections()]
-        return arr
+    # the report path now assembles every topology through build_array_from_spec;
+    # a circuit ref must reach it as a circuit-shaped spec ([2, 1] strings/section).
+    def spy(cell_params, spec, **kw):
+        captured["sections"] = [len(s.strings) for p in spec.panels for s in p.sections]
+        return real_build(cell_params, spec, **kw)
 
-    # patch at the SOURCE module (local imports resolve the attribute at call time)
-    monkeypatch.setattr(cb, "build_array_from_circuit", spy)
+    monkeypatch.setattr(rb, "build_array_from_spec", spy)
 
     real_load = report_mod.load_report_data
 
@@ -144,7 +144,7 @@ def test_build_electrical_report_uses_circuit(tmp_path, monkeypatch):
 
     pdf, labels, rep = build_electrical_report(
         _PARAMS, tmp_path / "out.pdf", data_dir=_DATA_DIR, engine="analytic")
-    assert captured.get("sections") == [2, 1]   # circuit path was used
+    assert captured.get("sections") == [2, 1]   # circuit topology flowed through the spec builder
     assert labels                                # at least one scoped case
 
 

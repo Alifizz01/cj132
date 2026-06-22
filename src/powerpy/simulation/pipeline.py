@@ -167,6 +167,7 @@ def evaluate(
     bus_voltage_v: float | None = None,
     launch_config: LaunchConfig = LaunchConfig.SINGLE,
     build_kwargs: dict | None = None,
+    array: ArrayModel | None = None,
 ) -> list[CaseResult]:
     """Evaluate the array under every case.
 
@@ -174,8 +175,13 @@ def evaluate(
     the array terminals, per case. Default tries to get it from
     ``report.mission.lookup("bus_voltage", launch_config, phase)``.
     If not available, no bus compliance check is performed.
+
+    ``array`` -- if given, this pre-built array is evaluated as-is and
+    ``build_kwargs`` is ignored; otherwise the array is built from the report
+    sections via ``build_from_report``.
     """
-    array = build_from_report(report, **(build_kwargs or {}))
+    if array is None:
+        array = build_from_report(report, **(build_kwargs or {}))
     out: list[CaseResult] = []
     for case in cases:
         env = environment_for_phase(

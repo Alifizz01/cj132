@@ -52,3 +52,21 @@ def test_report_build_grid_matches_legacy():
     v_ref, i_ref = _iv(ref, env)
     assert np.allclose(v_new, v_ref, rtol=0, atol=1e-9)
     assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9)
+
+
+def _first_phase(report):
+    return sorted({f.phase for f in report.losses}, key=str)[0]
+
+
+def test_evaluate_with_prebuilt_array_matches_internal_build():
+    from powerpy.simulation.pipeline import evaluate, AnalysisCase
+    report = _report()
+    phase = _first_phase(report)
+    cases = [AnalysisCase(label=str(phase), phase=phase)]
+
+    ref = evaluate(report, cases, build_kwargs={"iv_engine": "analytic"})
+    pre = evaluate(report, cases, array=build_array_for_report(report))
+
+    r0, p0 = ref[0].results.array, pre[0].results.array
+    for attr in ("p_mp", "v_mp", "i_mp", "isc", "voc"):
+        assert np.isclose(getattr(r0, attr), getattr(p0, attr), rtol=0, atol=1e-9), attr

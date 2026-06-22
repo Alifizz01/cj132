@@ -70,7 +70,7 @@ from pathlib import Path
 from powerpy.loader.report import load_report_data
 
 ROOT = Path(__file__).resolve().parents[1]
-PARAMS = ROOT / "params.xlsx"
+PARAMS = ROOT / "src" / "powerpy" / "param" / "params.xlsx"
 DATA = ROOT / "src" / "powerpy" / "data"
 
 needs_params = pytest.mark.skipif(

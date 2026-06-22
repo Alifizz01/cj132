@@ -231,7 +231,7 @@ SHEETS = [
 
 def main() -> int:
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else \
-        Path(__file__).resolve().parent.parent / 'params.xlsx'
+        Path(__file__).resolve().parent.parent / 'src' / 'powerpy' / 'param' / 'params.xlsx'
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
     for name, rows in SHEETS:

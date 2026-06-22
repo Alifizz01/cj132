@@ -13,7 +13,7 @@ from powerpy.simulation.circuit_build import build_array_from_circuit
 from powerpy.simulation.environment import Environment
 
 ROOT = Path(__file__).resolve().parents[1]
-PARAMS = ROOT / "params.xlsx"
+PARAMS = ROOT / "src" / "powerpy" / "param" / "params.xlsx"
 DATA = ROOT / "src" / "powerpy" / "data"
 SAMPLE = DATA / "circuits" / "msro_nominal.json"
 pytestmark = pytest.mark.skipif(not PARAMS.exists(), reason="params.xlsx not present")

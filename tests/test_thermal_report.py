@@ -14,7 +14,7 @@ from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import LaunchConfig
 
 ROOT = Path(__file__).resolve().parents[1]
-PARAMS = ROOT / "params.xlsx"
+PARAMS = ROOT / "src" / "powerpy" / "param" / "params.xlsx"
 DATA = ROOT / "src" / "powerpy" / "data"
 
 pytestmark = pytest.mark.skipif(

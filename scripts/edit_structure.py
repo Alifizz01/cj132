@@ -40,7 +40,7 @@ def _find_params(argpath):
             sys.exit("ERROR: params file not found: %s" % p)
         return p
     root = Path(__file__).resolve().parent.parent
-    for cand in (root / "params.xlsx", root / "examples" / "params.xlsx"):
+    for cand in (root / "src" / "powerpy" / "param" / "params.xlsx", root / "params.xlsx", root / "examples" / "params.xlsx"):
         if cand.is_file():
             return cand
     sys.exit("ERROR: params.xlsx not found; pass --file.")

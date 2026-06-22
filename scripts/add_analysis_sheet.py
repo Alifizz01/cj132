@@ -83,7 +83,7 @@ def main() -> int:
     path = Path(sys.argv[1]) if len(sys.argv) > 1 else None
     if path is None:
         root = Path(__file__).resolve().parent.parent
-        for cand in (root / "params.xlsx", root / "examples" / "params.xlsx"):
+        for cand in (root / "src" / "powerpy" / "param" / "params.xlsx", root / "params.xlsx", root / "examples" / "params.xlsx"):
             if cand.is_file():
                 path = cand
                 break

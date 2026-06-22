@@ -207,10 +207,13 @@ def generate_condition_workbook(path: Union[Path, str], *, n_rows: int, n_cols: 
 
 
 def normalize_condition_workbook(path: Union[Path, str], *, n_rows: int, n_cols: int) -> None:
-    """Add any missing layer sheets to an existing workbook (in place).
+    """Make every layer sheet exist at the right (n_rows x n_cols) shape (in place).
 
-    Existing sheets and their user values are preserved.  New sheets are
-    added with a descriptive header; existing sheets are not resized.
+    A layer sheet that is MISSING is created blank.  A layer sheet that exists at
+    the CORRECT shape is left untouched (user values preserved).  A layer sheet at
+    the WRONG shape (the panel topology changed) is dropped and recreated blank --
+    its old values cannot be carried to a different grid, so it resets to default.
+    Non-layer sheets (cell_params, panel, ...) are always preserved.
     """
     path = Path(path)
     wb = openpyxl.load_workbook(str(path))
@@ -218,7 +221,10 @@ def normalize_condition_workbook(path: Union[Path, str], *, n_rows: int, n_cols:
 
     for layer in LAYER_NAMES:
         if layer in wb.sheetnames:
-            continue
+            ws = wb[layer]
+            if ws.max_row - 1 == n_rows and ws.max_column - 1 == n_cols:
+                continue                       # right shape -> keep values
+            del wb[layer]                      # wrong shape -> reset to the new grid
         ws = wb.create_sheet(layer)
         desc = _LAYER_DESCRIPTIONS.get(layer, "")
         ws.cell(row=1, column=1, value=desc)

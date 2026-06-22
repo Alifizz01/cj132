@@ -80,7 +80,7 @@ from powerpy.simulation.circuit_build import build_array_from_circuit
 from powerpy.simulation.environment import Environment
 
 _DATA_DIR = Path("src/powerpy/data")
-_PARAMS = Path("params.xlsx")
+_PARAMS = Path("src/powerpy/param/params.xlsx")
 
 
 def test_build_array_from_circuit_structure_and_curve():

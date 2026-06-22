@@ -80,7 +80,7 @@ def demo_orbit() -> None:
 
 
 def main() -> None:
-    md = load_report_data(ROOT / "params.xlsx", ROOT / "src" / "powerpy" / "data")
+    md = load_report_data(ROOT / "src" / "powerpy" / "param" / "params.xlsx", ROOT / "src" / "powerpy" / "data")
 
     # The panel layout is an INPUT. Two forms are accepted:
     #   panel_layout_file = a fully-tagged layout (palette + grid, load_layout

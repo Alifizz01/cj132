@@ -106,7 +106,8 @@ def _find_params(explicit: str | None = None) -> Path:
             raise SystemExit("ERROR: params file not found: %s" % p)
         return p
     root = _repo_root()
-    for cand in (Path.cwd() / "params.xlsx",
+    for cand in (root / "src" / "powerpy" / "param" / "params.xlsx",
+                 Path.cwd() / "params.xlsx",
                  root / "examples" / "params.xlsx",
                  root / "params.xlsx"):
         if cand.is_file():

@@ -30,7 +30,8 @@ _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
 sys.path.insert(0, str(_ROOT / "src"))
 
-from powerpy.config.layout import PanelLayout, load_layout
+from powerpy.config.layout import PanelLayout, load_layout, panel_from_topology
+from powerpy.loader.sim_config import read_panel_config
 from powerpy.loader.condition_layers import (
     generate_condition_workbook,
     load_condition_layers,
@@ -179,11 +180,12 @@ def _build_snapshot(spec: ArraySpec, conditions: dict[int, CellCondition]) -> di
 
 def _parse_args(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--layout", required=True,
-                   help="Path to the grid JSON (PanelLayout).")
+    p.add_argument("--layout", default=None,
+                   help="Path to a grid JSON (PanelLayout). If omitted, the panel "
+                        "topology is read from the 'panel' sheet of --wb (params.xlsx).")
     p.add_argument("--substrate", default=None,
                    help="Substrate name or JSON path (optional).")
-    p.add_argument("--wb", default="params.xlsx",
+    p.add_argument("--wb", default=str(_ROOT / "src" / "powerpy" / "param" / "params.xlsx"),
                    help="Workbook holding BOTH cell config and the condition "
                         "layers (default: params.xlsx -- one file, layer sheets "
                         "are added alongside cell_params/mission_orbit/etc.).")
@@ -202,16 +204,27 @@ def _parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
-    layout = load_layout(args.layout, substrate=args.substrate)
+    if args.layout:
+        layout = load_layout(args.layout, substrate=args.substrate)
+        imp_sigma, pmax_sigma, seed = args.imp_sigma, args.pmax_sigma, args.variance_seed
+    else:
+        cfg = read_panel_config(args.wb)
+        layout = panel_from_topology(n_blocks=cfg["n_blocks"],
+                                     n_parallel=cfg["n_parallel"],
+                                     n_series=cfg["n_series"])
+        imp_sigma = args.imp_sigma or cfg["imp_sigma"]
+        pmax_sigma = args.pmax_sigma or cfg["pmax_sigma"]
+        seed = cfg["variance_seed"]
     snap = run_setup_sim(
         layout=layout,
         wb_path=Path(args.wb),
         runs_dir=Path(args.runs),
         run_id=args.run_id,
-        imp_sigma=args.imp_sigma,
-        pmax_sigma=args.pmax_sigma,
-        variance_seed=args.variance_seed,
+        imp_sigma=imp_sigma,
+        pmax_sigma=pmax_sigma,
+        variance_seed=seed,
     )
+    print("layout : %s  (%d x %d)" % (layout.name, layout.n_rows, layout.n_cols))
     print("snapshot -> %s" % snap)
     return 0
 

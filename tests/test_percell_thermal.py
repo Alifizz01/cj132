@@ -14,7 +14,7 @@ from powerpy.simulation.percell_power import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-PARAMS = ROOT / "params.xlsx"
+PARAMS = ROOT / "src" / "powerpy" / "param" / "params.xlsx"
 DATA = ROOT / "src" / "powerpy" / "data"
 pytestmark = pytest.mark.skipif(not PARAMS.exists(), reason="params.xlsx not present")
 

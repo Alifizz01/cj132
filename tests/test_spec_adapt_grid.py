@@ -4,7 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from powerpy.config.layout import panel_from_topology
+from powerpy.config.layout import panel_from_topology, load_layout
 from powerpy.loader.report import load_report_data
 from powerpy.schemas.panel_circuit import validate_bijection
 from powerpy.simulation.spec_adapt import adapt_grid
@@ -90,13 +90,48 @@ def test_adapt_grid_carries_circuit_params_and_blocks():
     assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9)
 
 
-def test_adapt_grid_raises_on_untagged_tile():
+_LAYOUTS = ROOT / "src" / "powerpy" / "data" / "layouts"
+
+
+def test_adapt_grid_skips_bare_tiles_like_legacy():
+    """A grid with bare/diode (non-cell) tiles must reproduce the legacy
+    build_array_from_grid -- which skips non-cell tiles via cell_strings -- not
+    raise. Regression: adapt_grid used to reject any untagged tile, crashing the
+    report for shipped grids that contain '.'/diode filler tiles."""
+    cell = _cell()
+    env = Environment(temperature_c=28.0)
+    for name in ("grid_circuit_demo.json", "example_panel.json"):
+        lay = load_layout(str(_LAYOUTS / name), substrate=None)
+        spec = adapt_grid(lay)               # must NOT raise on the bare tiles
+        a_new = build_array_from_spec(cell, spec, iv_engine="analytic", string_shunt_vf=0.6)
+        a_new.apply(env)
+        v_new, i_new = a_new.iv_curve()
+        a_ref = build_array_from_grid(cell, lay, lay.circuit_params,
+                                      iv_engine="analytic", string_shunt_vf=0.6)
+        a_ref.apply(env)
+        v_ref, i_ref = a_ref.iv_curve()
+        assert np.allclose(v_new, v_ref, rtol=0, atol=1e-9), name
+        assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9), name
+
+
+def test_adapt_grid_untagged_cell_falls_back_to_key_like_legacy():
+    """An is_cell tile with string=None is wired under its palette key (matching
+    cell_strings' `sid = t.string or t.key`), not rejected."""
+    import dataclasses
+    cell = _cell()
+    env = Environment(temperature_c=28.0)
     lay = panel_from_topology(n_blocks=1, n_parallel=2, n_series=3)
     key = lay.flat_keys()[0]
-    import dataclasses
-    bad_tile = dataclasses.replace(lay.palette[key], string=None)
     bad_palette = dict(lay.palette)
-    bad_palette[key] = bad_tile
+    bad_palette[key] = dataclasses.replace(lay.palette[key], string=None)
     bad_lay = dataclasses.replace(lay, palette=bad_palette)
-    with pytest.raises(ValueError):
-        adapt_grid(bad_lay)
+
+    spec = adapt_grid(bad_lay)               # must NOT raise
+    a_new = build_array_from_spec(cell, spec, iv_engine="analytic")
+    a_new.apply(env)
+    v_new, i_new = a_new.iv_curve()
+    a_ref = build_array_from_grid(cell, bad_lay, bad_lay.circuit_params, iv_engine="analytic")
+    a_ref.apply(env)
+    v_ref, i_ref = a_ref.iv_curve()
+    assert np.allclose(v_new, v_ref, rtol=0, atol=1e-9)
+    assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9)

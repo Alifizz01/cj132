@@ -15,56 +15,35 @@ from powerpy.schemas.panel_circuit import (
 
 
 def adapt_grid(layout: PanelLayout, *, panel_id: str = "panel_1") -> ArraySpec:
-    """Express a fully-tagged :class:`PanelLayout` grid as an :class:`ArraySpec`.
+    """Express a :class:`PanelLayout` grid as an :class:`ArraySpec`.
 
-    Tiles sharing a ``string`` tag are wired in series in row-major
-    (``flat_keys``) order; strings sharing a ``block`` tag are the parallel
-    strings of one section -- mirroring
-    :func:`powerpy.simulation.grid_build.build_array_from_grid`. Per-string and
+    Faithful mirror of :func:`powerpy.simulation.grid_build.build_array_from_grid`:
+    grouping is delegated to :meth:`PanelLayout.cell_strings`, which **skips
+    non-cell (bare / diode) tiles** and falls back to a tile's palette key when its
+    ``string`` tag is absent. Strings sharing a ``block`` tag are the parallel
+    strings of one section, in row-major first-appearance order. Per-string and
     per-block electrical options (``series_resistance_ohm``, ``block_diode_v_drop``,
     ``n_block_diodes``, ``string_shunt_diode``, section ``resistance_ohm``) come
     from ``layout.circuit_params``, defaulting to the schema defaults when absent.
 
-    Every tile is a cell that MUST belong to a string: an untagged tile
-    (``TileType.string is None``) raises ``ValueError`` rather than being
-    auto-grouped into a singleton (which could silently invent an unintended
-    parallel-of-singletons topology).
+    Note: the resulting spec covers only the grid's CELL tiles (bare tiles carry
+    no electrical power). A caller that needs a total tile bijection -- e.g.
+    per-cell thermal -- must run ``validate_bijection`` against an all-cell grid.
     """
-    keys = layout.flat_keys()
-    palette = layout.palette
     circuit_params = getattr(layout, "circuit_params", {}) or {}
-
-    groups: dict[str, list[int]] = {}
-    order: list[str] = []
-    string_block: dict[str, str] = {}
-    for idx, key in enumerate(keys):
-        tile = palette[key]
-        tag = tile.string
-        if tag is None:
-            raise ValueError(
-                "adapt_grid: tile %d (key %r) has no string tag; every tile "
-                "must be wired into a string" % (idx, key))
-        blk = tile.block or "block_default"
-        if tag not in groups:
-            groups[tag] = []
-            order.append(tag)
-            string_block[tag] = blk
-        elif string_block[tag] != blk:
-            raise ValueError(
-                "adapt_grid: string %r spans conflicting blocks %r and %r -- a "
-                "series string must belong to exactly one parallel block"
-                % (tag, string_block[tag], blk))
-        groups[tag].append(idx)
+    strings_idx, string_block = layout.cell_strings()
+    if not strings_idx:
+        raise ValueError("adapt_grid: grid has no cell tiles to wire into strings")
 
     # one StringSpec per string (carrying its circuit params), grouped into
     # sections by block, in row-major first-appearance order.
     section_strings: dict[str, list[StringSpec]] = {}
     section_order: list[str] = []
-    for sid in order:
+    for sid, idxs in strings_idx.items():
         p = circuit_params.get(sid, {})
         string = StringSpec(
             id=str(sid),
-            members=tuple(groups[sid]),
+            members=tuple(idxs),
             series_resistance_ohm=float(p.get("series_resistance_ohm", 0.0)),
             block_diode_v_drop=float(p.get("block_diode_v_drop", 0.6)),
             n_block_diodes=int(p.get("n_block_diodes", 1)),

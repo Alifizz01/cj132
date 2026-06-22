@@ -54,6 +54,23 @@ def test_report_build_grid_matches_legacy():
     assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9)
 
 
+def test_report_build_grid_with_bare_tiles_matches_legacy():
+    """The grid-as-single-source report path must handle shipped grids that
+    contain bare/diode tiles (example_panel.json, grid_circuit_demo.json) exactly
+    like the legacy build_array_from_grid -- not crash. Regression guard."""
+    report = _report()
+    env = Environment(temperature_c=28.0)
+    for name in ("example_panel.json", "grid_circuit_demo.json"):
+        path = str(DATA / "layouts" / name)
+        layout = load_layout(path, substrate=None)
+        v_new, i_new = _iv(build_array_for_report(report, grid_file=path), env)
+        ref = build_array_from_grid(report.cell, layout, layout.circuit_params,
+                                    iv_engine="analytic", string_shunt_vf=_shunt_vf(report))
+        v_ref, i_ref = _iv(ref, env)
+        assert np.allclose(v_new, v_ref, rtol=0, atol=1e-9), name
+        assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9), name
+
+
 def _first_phase(report):
     return sorted({f.phase for f in report.losses}, key=str)[0]
 

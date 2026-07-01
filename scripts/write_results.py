@@ -23,7 +23,7 @@ import openpyxl
 from powerpy.config.layout import load_layout, panel_from_topology
 from powerpy.loader.cell import load_cell_parameters
 from powerpy.loader.condition_layers import load_condition_layers
-from powerpy.loader.sim_config import read_panel_config
+from powerpy.loader.sim_config import read_topology, resolve_layout
 from powerpy.loader.workbooks import find_workbooks
 from powerpy.simulation.spec_adapt import adapt_grid
 from powerpy.simulation.spec_build import build_array_from_spec
@@ -130,9 +130,8 @@ def main(argv=None) -> int:
         layout = panel_from_topology(n_blocks=a.blocks, n_parallel=a.parallel, n_series=a.series)
         irradiance = a.irradiance if a.irradiance is not None else 1.0
     else:
-        cfg = read_panel_config(wbs.design)    # the 'panel'/'topology' sheet
-        layout = panel_from_topology(n_blocks=cfg["n_blocks"], n_parallel=cfg["n_parallel"],
-                                     n_series=cfg["n_series"])
+        cfg = read_topology(wbs.design)        # 'topology' sheet ('panel' fallback)
+        layout = resolve_layout(cfg, base_dir=wbs.design.parent)
         irradiance = a.irradiance if a.irradiance is not None else cfg["irradiance"]
         imp_sigma, pmax_sigma, seed = cfg["imp_sigma"], cfg["pmax_sigma"], cfg["variance_seed"]
 

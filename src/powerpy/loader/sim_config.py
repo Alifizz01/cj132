@@ -60,6 +60,64 @@ def read_panel_config(params_path: Union[Path, str]) -> dict:
     return out
 
 
+SHEET_TOPOLOGY = "topology"
+
+
+def read_topology(design_path: Union[Path, str]) -> dict:
+    """Read the 'topology' sheet (falling back to legacy 'panel') -> typed dict.
+
+    Same key-value format and keys as :func:`read_panel_config`, plus one
+    optional ``grid_file`` key: a grid layout JSON path (absolute, or relative
+    to the workbook's folder) for spatial arrays. Returns the 7 panel keys plus
+    ``"grid_file"`` (``str | None``). Raises ``ValueError`` when neither sheet
+    exists.
+    """
+    wb = openpyxl.load_workbook(str(design_path), data_only=True, read_only=True)
+    if SHEET_TOPOLOGY in wb.sheetnames:
+        sheet = SHEET_TOPOLOGY
+    elif SHEET in wb.sheetnames:
+        sheet = SHEET
+    else:
+        raise ValueError(
+            "workbook has no '%s' or legacy '%s' sheet; create one first "
+            "(split_params.py copies 'panel' as 'topology')" % (SHEET_TOPOLOGY, SHEET))
+    raw = {}
+    for row in wb[sheet].iter_rows(values_only=True):
+        if not row or row[0] is None:
+            continue
+        key = str(row[0]).strip()
+        if key in _FIELDS or key == "grid_file":
+            raw[key] = row[1]
+    out = {}
+    for k, (typ, default) in _FIELDS.items():
+        v = raw.get(k, default)
+        if v is None:
+            v = default
+        out[k] = int(v) if typ == "int" else float(v)
+    gf = raw.get("grid_file")
+    out["grid_file"] = str(gf).strip() if gf not in (None, "") else None
+    return out
+
+
+def resolve_layout(cfg: dict, *, base_dir: Union[Path, str]):
+    """Turn a :func:`read_topology` dict into a PanelLayout.
+
+    ``grid_file`` set -> load that grid layout JSON (relative paths resolve
+    against ``base_dir``, the workbook's folder); otherwise build the uniform
+    ``n_blocks x n_parallel x n_series`` panel.
+    """
+    from powerpy.config.layout import load_layout, panel_from_topology
+    gf = cfg.get("grid_file")
+    if gf:
+        p = Path(gf)
+        if not p.is_absolute():
+            p = Path(base_dir) / p
+        return load_layout(str(p))
+    return panel_from_topology(n_blocks=cfg["n_blocks"],
+                               n_parallel=cfg["n_parallel"],
+                               n_series=cfg["n_series"])
+
+
 def ensure_panel_sheet(params_path: Union[Path, str], **overrides) -> bool:
     """Add a 'panel' sheet (with defaults / overrides) if missing. Returns True if created.
 

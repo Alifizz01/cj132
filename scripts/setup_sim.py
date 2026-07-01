@@ -30,8 +30,8 @@ _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
 sys.path.insert(0, str(_ROOT / "src"))
 
-from powerpy.config.layout import PanelLayout, load_layout, panel_from_topology
-from powerpy.loader.sim_config import read_panel_config
+from powerpy.config.layout import PanelLayout, load_layout
+from powerpy.loader.sim_config import read_topology, resolve_layout
 from powerpy.loader.workbooks import find_workbooks
 from powerpy.loader.condition_layers import (
     generate_condition_workbook,
@@ -217,10 +217,8 @@ def main(argv=None) -> int:
         layout = load_layout(args.layout, substrate=args.substrate)
         imp_sigma, pmax_sigma, seed = args.imp_sigma, args.pmax_sigma, args.variance_seed
     else:
-        cfg = read_panel_config(wbs.design)
-        layout = panel_from_topology(n_blocks=cfg["n_blocks"],
-                                     n_parallel=cfg["n_parallel"],
-                                     n_series=cfg["n_series"])
+        cfg = read_topology(wbs.design)        # 'topology' sheet ('panel' fallback)
+        layout = resolve_layout(cfg, base_dir=wbs.design.parent)
         imp_sigma = args.imp_sigma or cfg["imp_sigma"]
         pmax_sigma = args.pmax_sigma or cfg["pmax_sigma"]
         seed = cfg["variance_seed"]

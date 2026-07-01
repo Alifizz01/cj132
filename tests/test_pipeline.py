@@ -28,7 +28,6 @@ bd = _load("analysis/breakdown.py")
 et = _load("solve/coupling.py")
 mc = _load("analysis/montecarlo.py")
 env = _load("model/environment.py")
-res = _load("reporting/store.py")
 
 S = sub.load_substrate("msro_case2")
 
@@ -111,24 +110,8 @@ def test_tilt_and_albedo():
     assert abs(env.albedo_flux(0.25, 591.0, 0.3) - 44.325) < 1e-6
 
 
-# ----------------------------------------------------------------- results
-def test_results_long_and_summary():
-    records = [{
-        "run_id": 0, "mode": "position", "failed_ids": "c0",
-        "cells": [
-            {"cell_id": "c0", "V": -20, "I": 0.48, "P_elec": -9.6, "T_front": 187,
-             "T_rear": 185, "reverse_flag": True, "hotspot_flag": True},
-            {"cell_id": "c1", "V": 2.3, "I": 0.48, "P_elec": 1.1, "T_front": 39,
-             "T_rear": 38, "reverse_flag": False, "hotspot_flag": False},
-        ],
-    }]
-    df = res.to_dataframe(records)
-    assert list(df.columns) == res.LONG_COLUMNS
-    assert len(df) == 2
-    s = res.summarise(df)
-    row = s.iloc[0]
-    assert row["n_cells"] == 2 and row["n_hotspots"] == 1
-    assert abs(row["max_temp_c"] - 187) < 1e-9
+# (the reporting/store.py long-table test was removed with the module in P3 --
+#  the store had no production caller; sweep output is an Excel summary.)
 
 
 if __name__ == "__main__":

@@ -34,7 +34,9 @@ def _load(relpath, name=None):
 
 tp = _load("solve/thermal.py")        # unified solver (solve_panel lives here now)
 lay = _load("config/layout.py")
-rep = _load("reporting/report.py")
+# explicit name: the basename "html" would shadow the stdlib html module the
+# file itself imports (sys.modules["html"] = itself -> no .escape).
+rep = _load("output/html.py", name="powerpy_output_html")
 
 A_TILE = {"is_cell": True, "string": "S1",
           "alpha_front": 0.97, "alpha_rear": 0.93, "epsilon_front": 0.90, "epsilon_rear": 0.89}

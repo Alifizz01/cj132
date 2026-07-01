@@ -21,7 +21,7 @@ from pathlib import Path
 from .config.layout import load_layout
 from .config.substrate import load_substrate
 from .solve.thermal import solve_panel
-from .reporting.report import panel_report
+from .output.html import panel_report
 from .analysis.study import (make_pe, worst_case_search, auto_monte_carlo, cell_indices)
 
 

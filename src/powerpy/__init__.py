@@ -8,13 +8,14 @@ this import never fails on the OCR-damaged legacy modules):
     powerpy.model      physics       -> Circuit, solar_irradiance, albedo_flux, ...
     powerpy.solve      solvers       -> solve_thermal, solve_panel, lateral_conductance, couple
     powerpy.analysis   analysis      -> evaluate_breakdown, montecarlo, failure_sweep, rank
-    powerpy.reporting  outputs       -> panel_report (HTML heat-map), store (Parquet/HDF5/Excel)
+    powerpy.output     outputs       -> Report (LaTeX PDF), panel_report (HTML heat-map),
+                                        write_results_xlsx (Excel results)
 
 Quick start::
 
     from powerpy.config import load_layout
     from powerpy.solve import solve_panel, lateral_conductance
-    from powerpy.reporting import panel_report
+    from powerpy.output.html import panel_report
 
     L = load_layout("data/layouts/example_panel.json")
     g = lateral_conductance(150.0, 0.0003, 0.055, 0.055)        # ~0.045 W/K
@@ -39,4 +40,4 @@ power_path = os.path.abspath(os.path.dirname(__file__))
 # Note: subpackages are imported on demand (``from powerpy.solve import ...``)
 # rather than eagerly here, so that importing the package stays lightweight and
 # does not force scipy/pandas to load unless the relevant layer is used.
-__all__ = ["config", "model", "solve", "analysis", "reporting", "power_path", "__version__"]
+__all__ = ["config", "model", "solve", "analysis", "output", "power_path", "__version__"]

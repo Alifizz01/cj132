@@ -2,7 +2,7 @@
 
 Typical use::
 
-    from powerpy.render.thermal_report import ThermalReport
+    from powerpy.output.thermal_report import ThermalReport
     from powerpy.analysis.thermal_report import ThermalCase
     pdf = (ThermalReport.from_metadata(report_meta, cases)
                         .render("build_thermal")
@@ -24,14 +24,14 @@ from powerpy.analysis.thermal_report import (
     run_thermal_report,
 )
 from powerpy.config.substrate import Substrate
-from powerpy.render import thermal_figures as _figs
-from powerpy.render.compile import compile_pdf, have_pdflatex
-from powerpy.render.templating import make_environment
+from powerpy.output import thermal_figures as _figs
+from powerpy.output.compile import compile_pdf, have_pdflatex
+from powerpy.output.templating import make_environment
 from powerpy.schemas import ReportMetadata
 
 
 def _templates_dir() -> Path:
-    with ir.as_file(ir.files("powerpy.render").joinpath("templates")) as p:
+    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
         return Path(p)
 
 
@@ -71,7 +71,7 @@ class ThermalReport:
         # layout map (cell vs bare/no-SCA) when a layout was supplied
         layout_figure = ""
         if self.data.layout is not None:
-            from powerpy.render import layout_figures as _lfigs
+            from powerpy.output import layout_figures as _lfigs
             lp = figs_dir / "panel_layout.png"
             _lfigs.layout_map_figure(
                 self.data.layout, lp, label_tiles=False,

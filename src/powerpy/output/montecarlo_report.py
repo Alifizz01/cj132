@@ -13,14 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from powerpy.analysis.montecarlo_report import MCReportData, run_mc_study
-from powerpy.render import montecarlo_figures as _figs
-from powerpy.render.compile import compile_pdf, have_pdflatex
-from powerpy.render.templating import make_environment
+from powerpy.output import montecarlo_figures as _figs
+from powerpy.output.compile import compile_pdf, have_pdflatex
+from powerpy.output.templating import make_environment
 from powerpy.schemas import ReportMetadata
 
 
 def _templates_dir() -> Path:
-    with ir.as_file(ir.files("powerpy.render").joinpath("templates")) as p:
+    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
         return Path(p)
 
 
@@ -54,7 +54,7 @@ class MonteCarloReport:
         # worst-case temperature map
         worst_figure = ""
         if self.data.worst_grid is not None:
-            from powerpy.render.thermal_figures import panel_heatmap_figure
+            from powerpy.output.thermal_figures import panel_heatmap_figure
             wp = figs_dir / "mc_worst.png"
             panel_heatmap_figure(
                 self.data.worst_grid, wp,

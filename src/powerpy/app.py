@@ -143,7 +143,7 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .simulation.pipeline import (
         AnalysisCase, CaseResult, CompliancePoint, environment_for_phase, run, evaluate)
     from .simulation.report_build import build_array_for_report
-    from .render import Report
+    from .output import Report
 
     params = Path(params)
     scenario = Path(scenario) if scenario else params   # legacy: one file

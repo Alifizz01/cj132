@@ -2,7 +2,7 @@
 
 Typical use::
 
-    from powerpy.render import Report
+    from powerpy.output import Report
     pdf = (Report.from_results(report_meta, case_results,
                                 requirement_w=7550.0)
                  .render(workdir="./build")
@@ -33,15 +33,15 @@ from powerpy.schemas import (
 # annotations`, the ArrayModel/CaseResult type hints are strings, so a CONFIG-ONLY
 # report (build_array=False) renders without importing the simulation engine.
 
-from powerpy.render import figures as _figs
-from powerpy.render.compile import compile_pdf, have_pdflatex
-from powerpy.render.templating import make_environment
+from powerpy.output import figures as _figs
+from powerpy.output.compile import compile_pdf, have_pdflatex
+from powerpy.output.templating import make_environment
 
 
 # ---------------------------------------------------------------- helpers
 def _templates_dir() -> Path:
     """Resolve the packaged templates/ folder on disk."""
-    with ir.as_file(ir.files("powerpy.render").joinpath("templates")) as p:
+    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
         return Path(p)
 
 
@@ -108,7 +108,7 @@ def _figure_builders(array: ArrayModel, cases: list[CaseResult],
             title="Bus power vs. requirement (all cases)")
 
     def _panel_layout(out):
-        from powerpy.render import layout_figures as _lfigs
+        from powerpy.output import layout_figures as _lfigs
         secs = array_layout.section_types if array_layout is not None else None
         if not secs:
             raise RuntimeError("panel_layout: no section types in array_layout")

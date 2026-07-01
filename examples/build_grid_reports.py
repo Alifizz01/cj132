@@ -34,7 +34,7 @@ from powerpy.config.substrate import from_dict as substrate_from_dict  # noqa: E
 from powerpy.loader.report import load_report_data              # noqa: E402
 from powerpy.loader.analysis import load_analysis_scope         # noqa: E402
 from powerpy.analysis.thermal_report import ThermalCase         # noqa: E402
-from powerpy.render.thermal_report import ThermalReport         # noqa: E402
+from powerpy.output.thermal_report import ThermalReport         # noqa: E402
 
 DATA_DIR = _ROOT / "src" / "powerpy" / "data"
 PARAMS = _ROOT / "params.xlsx"

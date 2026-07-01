@@ -32,7 +32,7 @@ from powerpy.schemas.fluxes import LaunchConfig
 from powerpy.analysis.montecarlo_report import run_mc_study
 
 # --- high-level API: study + PDF in one go ---------------------------------
-from powerpy.render.montecarlo_report import MonteCarloReport
+from powerpy.output.montecarlo_report import MonteCarloReport
 
 
 def demo_iv_engine(md) -> None:

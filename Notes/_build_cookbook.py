@@ -126,7 +126,7 @@ cell_n = CellModel(md.cell, iv_engine="ngspice")    # real SPICE if vendored,
 add("Cell-level IV", "Plot a cell I-V / P-V to PNG",
     "Drop a single-cell curve into a slide or a report.",
     """
-from powerpy.render.figures import iv_pv_figure
+from powerpy.output.figures import iv_pv_figure
 # iv_pv_figure expects an array-like with .iv_curve(); wrap one cell as needed,
 # or use it on a section/array (below). For a quick cell plot:
 import matplotlib.pyplot as plt
@@ -190,7 +190,7 @@ print("at 101.5 V:", i_bus, "A  ->", 101.5 * i_bus, "W")
 add("Array & electrical", "Whole-array I-V / P-V figure",
     "The headline plot: array curve with MPP, bus point and requirement line.",
     """
-from powerpy.render.figures import iv_pv_figure
+from powerpy.output.figures import iv_pv_figure
 array.apply(env)
 iv_pv_figure(array, "array.png", bus_voltage_v=101.5, requirement_w=7550.0,
              title="Whole-array I-V / P-V")
@@ -200,7 +200,7 @@ iv_pv_figure(array, "array.png", bus_voltage_v=101.5, requirement_w=7550.0,
 add("Array & electrical", "Per-section I-V grid figure",
     "One small I-V per section on a grid -- a quick visual audit of the array.",
     """
-from powerpy.render.figures import sections_grid_figure
+from powerpy.output.figures import sections_grid_figure
 array.apply(env)
 sections_grid_figure(array, "sections.png", bus_voltage_v=101.5)
 """,
@@ -209,7 +209,7 @@ sections_grid_figure(array, "sections.png", bus_voltage_v=101.5)
 add("Array & electrical", "Generate the full electrical PDF report",
     "The deliverable: AIRBUS-style PDF straight from the workbook + cases.",
     """
-from powerpy.render import Report
+from powerpy.output import Report
 pdf = (Report.from_results(md, results, build_array=True, requirement_w=7550.0)
              .render("build_report", audience="engineer")
              .compile_pdf("reports/Solar_Array_Report.pdf"))
@@ -253,7 +253,7 @@ layout = from_dict({"name": "with cut-out", "pitch_mm": 84,
 add("Layout & placement", "Draw the layout map (cells vs bare vs diode)",
     "A picture of where cells sit, coloured by block, with the harness bus-bars.",
     """
-from powerpy.render.layout_figures import layout_map_figure
+from powerpy.output.layout_figures import layout_map_figure
 layout_map_figure(layout, "layout.png", label_tiles=True,
                   title="Panel layout")
 """,
@@ -262,7 +262,7 @@ layout_map_figure(layout, "layout.png", label_tiles=True,
 add("Layout & placement", "Schematic of a panel's sections",
     "A legible block diagram when the real grid is too wide to draw cell-by-cell.",
     """
-from powerpy.render.layout_figures import panel_schematic_figure
+from powerpy.output.layout_figures import panel_schematic_figure
 panel_schematic_figure(md.array_layout.section_types, "schematic.png")
 """,
     "Each section becomes a block sized by its parallel-string count; a shorter section shows a hatched no-SCA gap.")
@@ -339,7 +339,7 @@ print("hot-spot peak:", cold.t_front_c.max(), "->", warm.t_front_c.max())
 add("Thermal", "Panel temperature heat-map figure",
     "Turn a solved grid into a coloured map for a report.",
     """
-from powerpy.render.thermal_figures import panel_heatmap_figure
+from powerpy.output.thermal_figures import panel_heatmap_figure
 panel_heatmap_figure(res.t_front_c, "heatmap.png",
                      title="Panel temperature map")
 """,
@@ -348,7 +348,7 @@ panel_heatmap_figure(res.t_front_c, "heatmap.png",
 add("Thermal", "Full thermal PDF report",
     "AIRBUS-style thermal report: inputs, layout, equilibrium temps, hot-spot.",
     """
-from powerpy.render.thermal_report import ThermalReport
+from powerpy.output.thermal_report import ThermalReport
 from powerpy.analysis.thermal_report import ThermalCase
 cases = [ThermalCase("EOL dual", Phase.END_OF_LIFE, LaunchConfig.DUAL, season=0.967)]
 ThermalReport.from_metadata(md, cases,
@@ -429,7 +429,7 @@ print(a["stopped"], a["n_runs"], "runs, mean peak", a["mean_peak_c"], "C")
 add("Failure & Monte-Carlo", "Full Monte-Carlo failure PDF report",
     "The deliverable: setup, distribution histogram, worst-case cluster + heat-map.",
     """
-from powerpy.render.montecarlo_report import MonteCarloReport
+from powerpy.output.montecarlo_report import MonteCarloReport
 MonteCarloReport.from_metadata(md,
         panel_layout_file="src/powerpy/data/layouts/simple_3block.json",
         phase=Phase.END_OF_LIFE, launch_config=LaunchConfig.DUAL, season=0.967,

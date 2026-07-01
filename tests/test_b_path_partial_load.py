@@ -46,3 +46,29 @@ def test_write_results_runs_without_report_sheets(tmp_path):
 def test_write_results_no_longer_imports_mega_loader():
     src = (ROOT / "scripts" / "write_results.py").read_text(encoding="utf-8")
     assert "load_report_data" not in src
+
+
+def test_setup_sim_creates_missing_conditions_workbook(tmp_path):
+    """Legacy contract (setup_sim Responsibility #1): a not-yet-existing --wb is
+    GENERATED, not rejected. P2's find_workbooks regression-guarded here."""
+    import setup_sim
+    fresh = tmp_path / "fresh_conditions.xlsx"
+    rc = setup_sim.main(["--layout", str(ROOT / "src/powerpy/data/layouts/simple_3block.json"),
+                         "--wb", str(fresh),
+                         "--runs", str(tmp_path / "runs"), "--run-id", "t"])
+    assert rc == 0
+    assert fresh.exists()
+    assert (tmp_path / "runs" / "t" / "snapshot.json").exists()
+
+
+def test_setup_sim_creates_missing_scenario_workbook(tmp_path):
+    """Split-mode equivalent: --scenario may not exist yet (it is the conditions
+    file setup_sim itself generates); --design must exist."""
+    import setup_sim
+    design = _copy_sheets(PARAMS, tmp_path / "design.xlsx", ["cell_params", "panel"])
+    fresh = tmp_path / "scenario.xlsx"
+    rc = setup_sim.main(["--design", str(design), "--scenario", str(fresh),
+                         "--runs", str(tmp_path / "runs"), "--run-id", "t"])
+    assert rc == 0
+    assert fresh.exists()
+    assert (tmp_path / "runs" / "t" / "snapshot.json").exists()

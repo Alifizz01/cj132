@@ -68,9 +68,11 @@ def read_topology(design_path: Union[Path, str]) -> dict:
 
     Same key-value format and keys as :func:`read_panel_config`, plus one
     optional ``grid_file`` key: a grid layout JSON path (absolute, or relative
-    to the workbook's folder) for spatial arrays. Returns the 7 panel keys plus
-    ``"grid_file"`` (``str | None``). Raises ``ValueError`` when neither sheet
-    exists.
+    to the workbook's folder) for spatial arrays. ``grid_file`` is honoured
+    ONLY on the new 'topology' sheet -- on a legacy 'panel' sheet unknown keys
+    stay inert, exactly as :func:`read_panel_config` treated them. Returns the
+    7 panel keys plus ``"grid_file"`` (``str | None``). Raises ``ValueError``
+    when neither sheet exists.
     """
     wb = openpyxl.load_workbook(str(design_path), data_only=True, read_only=True)
     if SHEET_TOPOLOGY in wb.sheetnames:
@@ -81,12 +83,13 @@ def read_topology(design_path: Union[Path, str]) -> dict:
         raise ValueError(
             "workbook has no '%s' or legacy '%s' sheet; create one first "
             "(split_params.py copies 'panel' as 'topology')" % (SHEET_TOPOLOGY, SHEET))
+    grid_file_allowed = sheet == SHEET_TOPOLOGY
     raw = {}
     for row in wb[sheet].iter_rows(values_only=True):
         if not row or row[0] is None:
             continue
         key = str(row[0]).strip()
-        if key in _FIELDS or key == "grid_file":
+        if key in _FIELDS or (key == "grid_file" and grid_file_allowed):
             raw[key] = row[1]
     out = {}
     for k, (typ, default) in _FIELDS.items():
@@ -95,7 +98,8 @@ def read_topology(design_path: Union[Path, str]) -> dict:
             v = default
         out[k] = int(v) if typ == "int" else float(v)
     gf = raw.get("grid_file")
-    out["grid_file"] = str(gf).strip() if gf not in (None, "") else None
+    gf = str(gf).strip() if gf is not None else ""
+    out["grid_file"] = gf or None
     return out
 
 

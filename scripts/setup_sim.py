@@ -32,7 +32,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 from powerpy.config.layout import PanelLayout, load_layout
 from powerpy.loader.sim_config import read_topology, resolve_layout
-from powerpy.loader.workbooks import find_workbooks
+from powerpy.loader.workbooks import Workbooks
 from powerpy.loader.condition_layers import (
     generate_condition_workbook,
     load_condition_layers,
@@ -209,10 +209,15 @@ def _parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
+    # Unlike report/write_results, the conditions workbook here is an OUTPUT as
+    # much as an input -- run_setup_sim CREATES it when missing (Responsibility
+    # #1). So the pair is assembled without an existence check; a missing design
+    # file still fails naturally in read_topology when the topology is needed.
     if args.design or args.scenario:
-        wbs = find_workbooks(design=args.design, scenario=args.scenario)
+        wbs = Workbooks(design=Path(args.design or args.scenario).expanduser().resolve(),
+                        scenario=Path(args.scenario or args.design).expanduser().resolve())
     else:
-        wbs = find_workbooks(legacy_params=args.wb)
+        wbs = Workbooks.legacy(Path(args.wb).expanduser().resolve())
     if args.layout:
         layout = load_layout(args.layout, substrate=args.substrate)
         imp_sigma, pmax_sigma, seed = args.imp_sigma, args.pmax_sigma, args.variance_seed

@@ -66,6 +66,25 @@ def test_topology_grid_file_form(tmp_path):
     assert lay.n_tiles == 72          # grid_3x2x12: 3 blocks x 2 parallel x 12 series
 
 
+def test_grid_file_ignored_on_legacy_panel_sheet(tmp_path):
+    """Pre-P2, read_panel_config ignored unknown keys -- so a stray grid_file
+    row on a legacy 'panel' sheet must stay inert. grid_file is only honoured
+    on the new 'topology' sheet."""
+    p = _make_wb(tmp_path / "d.xlsx", "panel",
+                 [("n_parallel", 4), ("n_series", 10),
+                  ("grid_file", "leftover_experiment.json")])
+    cfg = read_topology(p)
+    assert cfg["grid_file"] is None
+    lay = resolve_layout(cfg, base_dir=tmp_path)   # must NOT try to load the JSON
+    assert lay.n_tiles == 40
+
+
+def test_whitespace_grid_file_is_none(tmp_path):
+    p = _make_wb(tmp_path / "d.xlsx", "topology",
+                 [("n_parallel", 2), ("n_series", 3), ("grid_file", "   ")])
+    assert read_topology(p)["grid_file"] is None
+
+
 def test_grid_file_relative_to_workbook(tmp_path):
     import shutil
     shutil.copy(GRID, tmp_path / "mygrid.json")

@@ -16,11 +16,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from powerpy.analysis import study
-from powerpy.analysis.thermal_report import (
+from powerpy.analysis.thermal_data import (
     AM0,
-    _cell_optics,
-    _cell_palette,
-    _p_elec_per_cell,
+    cell_optics,
+    cell_palette,
+    p_elec_per_cell,
     load_layout_grid,
     panel_from_grid,
 )
@@ -46,12 +46,12 @@ class MCReportData:
 
 
 def _build_panel(md, sub, n_rows, n_cols):
-    _, _, area = _cell_optics(md)
+    _, _, area = cell_optics(md)
     pitch_mm = float(np.sqrt(area) * 1000.0)
     layout = _layout_from_dict({
         "name": "mc_panel",
         "pitch_mm": pitch_mm,
-        "palette": _cell_palette(md, sub),
+        "palette": cell_palette(md, sub),
         "layout": [" ".join(["C"] * n_cols) for _ in range(n_rows)],
     })
     return layout, area
@@ -80,7 +80,7 @@ def run_mc_study(md: ReportMetadata, *,
         from powerpy.config.layout import load_layout
         layout = load_layout(panel_layout_file)
     if layout is not None:                      # prebuilt PanelLayout
-        _, _, area = _cell_optics(md)
+        _, _, area = cell_optics(md)
         n_rows, n_cols = layout.n_rows, layout.n_cols
     elif layout_file is not None:               # 'C'/'.' grid
         layout, area = panel_from_grid(md, sub, load_layout_grid(layout_file))
@@ -90,7 +90,7 @@ def run_mc_study(md: ReportMetadata, *,
 
     env = environment_for_phase(md, phase=phase, launch_config=launch_config,
                                 season=season)
-    p_cell = _p_elec_per_cell(md, env)
+    p_cell = p_elec_per_cell(md, env)
     healthy_w = p_cell
     reverse_w = -dissipation_multiple * p_cell
 

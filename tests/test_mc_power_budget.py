@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from powerpy.loader.report import load_report_data
-from powerpy.analysis.montecarlo_report import run_mc_study
+from powerpy.analysis.montecarlo_data import run_mc_study
 
 ROOT = Path(__file__).resolve().parents[1]
 PARAMS = ROOT / "src" / "powerpy" / "param" / "params.xlsx"

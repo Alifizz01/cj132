@@ -77,13 +77,13 @@ class ThermalReportData:
 
 
 # ---------------------------------------------------------------- helpers
-def _cell_optics(md: ReportMetadata):
+def cell_optics(md: ReportMetadata):
     """(alpha_front, epsilon_front, area_m2) taken from the cell JSON."""
     e = md.cell.electrical
     return float(e.alpha), float(e.epsilon), float(e.area_m2)
 
 
-def _p_elec_per_cell(md: ReportMetadata, env: Environment) -> float:
+def p_elec_per_cell(md: ReportMetadata, env: Environment) -> float:
     """Extracted MPP electrical power of one cell at this environment [W].
 
     This is the power leaving the cell as electricity (a cooling term in the
@@ -103,9 +103,9 @@ def equilibrium_point(md: ReportMetadata, sub: Substrate,
     env = environment_for_phase(
         md, phase=case.phase, launch_config=case.launch_config,
         season=case.season)
-    alpha_f, eps_f, area = _cell_optics(md)
+    alpha_f, eps_f, area = cell_optics(md)
     p_sun = AM0 * case.season
-    p_elec = _p_elec_per_cell(md, env)
+    p_elec = p_elec_per_cell(md, env)
     budget = compute_power_budget(orbit, season=case.season,
                                   efficiency=efficiency)
 
@@ -124,13 +124,13 @@ def equilibrium_point(md: ReportMetadata, sub: Substrate,
     )
 
 
-def _cell_palette(md: ReportMetadata, sub: Substrate) -> dict:
+def cell_palette(md: ReportMetadata, sub: Substrate) -> dict:
     """Palette with a cell key ``C`` and a bare/no-SCA key ``.``.
 
     Cell tiles take the cell-JSON optics; bare tiles take the substrate optics
     and generate no power (so they run hotter -- and warm their neighbours).
     """
-    alpha_f, eps_f, _ = _cell_optics(md)
+    alpha_f, eps_f, _ = cell_optics(md)
     return {
         "C": {"is_cell": True,
               "alpha_front": alpha_f, "alpha_rear": sub.alpha_rear,
@@ -150,11 +150,11 @@ def load_layout_grid(path) -> list:
 
 def panel_from_grid(md: ReportMetadata, sub: Substrate, rows):
     """Build a PanelLayout from a grid of 'C' (cell) / '.' (bare) rows."""
-    _, _, area = _cell_optics(md)
+    _, _, area = cell_optics(md)
     pitch_mm = float(np.sqrt(area) * 1000.0)
     layout = _layout_from_dict({
         "name": "panel", "pitch_mm": pitch_mm,
-        "palette": _cell_palette(md, sub), "layout": rows})
+        "palette": cell_palette(md, sub), "layout": rows})
     return layout, area
 
 
@@ -185,7 +185,7 @@ def hotspot_case(md: ReportMetadata, sub: Substrate, case: ThermalCase,
     env = environment_for_phase(
         md, phase=case.phase, launch_config=case.launch_config,
         season=case.season)
-    p_cell = _p_elec_per_cell(md, env)
+    p_cell = p_elec_per_cell(md, env)
 
     cells = np.nonzero(layout.prop_arrays()["generates_power"])[0]
     centre = int(cells[len(cells) // 2])   # a representative central cell
@@ -230,7 +230,7 @@ def run_thermal_report(md: ReportMetadata, cases: list[ThermalCase], *,
     sub = (substrate if isinstance(substrate, Substrate)
            else load_substrate(substrate))
     orbit = md.mission_orbit if md.mission_orbit is not None else DEFAULT_ORBIT
-    alpha_f, eps_f, area = _cell_optics(md)
+    alpha_f, eps_f, area = cell_optics(md)
 
     if layout is None and layout_file is not None:
         layout, area = panel_from_grid(md, sub, load_layout_grid(layout_file))

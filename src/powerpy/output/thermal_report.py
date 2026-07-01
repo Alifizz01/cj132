@@ -3,7 +3,7 @@
 Typical use::
 
     from powerpy.output.thermal_report import ThermalReport
-    from powerpy.analysis.thermal_report import ThermalCase
+    from powerpy.analysis.thermal_data import ThermalCase
     pdf = (ThermalReport.from_metadata(report_meta, cases)
                         .render("build_thermal")
                         .compile_pdf("thermal.pdf"))
@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from powerpy.analysis.thermal_report import (
+from powerpy.analysis.thermal_data import (
     ThermalCase,
     ThermalReportData,
     run_thermal_report,

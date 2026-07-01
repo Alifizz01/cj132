@@ -109,7 +109,7 @@ def test_power_budget_lines_show_calculation():
     assert "0.30" in elec.substitution and "1322" in elec.substitution
 
 
-from powerpy.analysis.thermal_report import run_thermal_report, ThermalCase
+from powerpy.analysis.thermal_data import run_thermal_report, ThermalCase
 from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import LaunchConfig
 

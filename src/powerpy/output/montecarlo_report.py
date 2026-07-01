@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from powerpy.analysis.montecarlo_report import MCReportData, run_mc_study
+from powerpy.analysis.montecarlo_data import MCReportData, run_mc_study
 from powerpy.output import montecarlo_figures as _figs
 from powerpy.output.compile import compile_workspace_pdf
 from powerpy.output.templating import make_environment, templates_dir

@@ -29,7 +29,7 @@ from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import LaunchConfig
 
 # --- low-level API: run the study yourself ---------------------------------
-from powerpy.analysis.montecarlo_report import run_mc_study
+from powerpy.analysis.montecarlo_data import run_mc_study
 
 # --- high-level API: study + PDF in one go ---------------------------------
 from powerpy.output.montecarlo_report import MonteCarloReport

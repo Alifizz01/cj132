@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from powerpy.loader.report import load_report_data
-from powerpy.analysis.thermal_report import run_thermal_report, ThermalCase
+from powerpy.analysis.thermal_data import run_thermal_report, ThermalCase
 from powerpy.schemas._common import Phase
 from powerpy.schemas.fluxes import LaunchConfig
 

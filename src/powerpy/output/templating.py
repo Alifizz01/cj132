@@ -13,9 +13,16 @@ registered globally.
 """
 from __future__ import annotations
 
+import importlib.resources as ir
 from pathlib import Path
 
 import jinja2
+
+
+def templates_dir() -> Path:
+    """Resolve the packaged templates/ folder on disk (shared by every report)."""
+    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
+        return Path(p)
 
 
 def escape_tex(s) -> str:

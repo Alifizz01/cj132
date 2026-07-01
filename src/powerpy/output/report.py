@@ -18,8 +18,6 @@ dispatcher.
 """
 from __future__ import annotations
 
-import importlib.resources as ir
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
@@ -34,15 +32,8 @@ from powerpy.schemas import (
 # report (build_array=False) renders without importing the simulation engine.
 
 from powerpy.output import figures as _figs
-from powerpy.output.compile import compile_pdf, have_pdflatex
-from powerpy.output.templating import make_environment
-
-
-# ---------------------------------------------------------------- helpers
-def _templates_dir() -> Path:
-    """Resolve the packaged templates/ folder on disk."""
-    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
-        return Path(p)
+from powerpy.output.compile import compile_workspace_pdf
+from powerpy.output.templating import make_environment, templates_dir
 
 
 # ---------------------------------------------------------------- figure dispatch
@@ -206,7 +197,7 @@ class Report:
                 print(f"[render] WARNING: figure '{ref}' not built: {e}")
 
         # render the master template
-        env = make_environment([_templates_dir()])
+        env = make_environment([templates_dir()])
         tmpl = env.get_template(template)
         ctx = dict(
             document=self.metadata.document,
@@ -233,23 +224,6 @@ class Report:
 
     def compile_pdf(self, out_pdf: str | Path | None = None,
                     *, main_tex: str = "report.tex") -> Path | None:
-        """Compile the workspace into a PDF.
-
-        Returns the path to the produced PDF.  If pdflatex is not on
-        PATH, prints a helpful message and returns ``None`` so the
-        rest of the pipeline still completes (the .tex workspace is
-        always valid).
-        """
-        if self.workspace is None:
-            raise RuntimeError("call .render(...) before .compile_pdf(...)")
-        if not have_pdflatex():
-            print("[render] pdflatex not found; skipping PDF compile. "
-                  "The .tex workspace lives at " + str(self.workspace))
-            return None
-        pdf = compile_pdf(self.workspace, main_tex=main_tex)
-        if out_pdf is not None:
-            out_pdf = Path(out_pdf).resolve()
-            out_pdf.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(pdf, out_pdf)
-            return out_pdf
-        return pdf
+        """Compile the workspace into a PDF (None when pdflatex is absent)."""
+        return compile_workspace_pdf(self.workspace, out_pdf,
+                                     main_tex=main_tex, tag="report")

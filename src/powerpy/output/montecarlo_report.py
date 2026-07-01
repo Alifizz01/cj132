@@ -7,21 +7,14 @@ cluster).  Reuses the shared preamble and compile pipeline.
 """
 from __future__ import annotations
 
-import importlib.resources as ir
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
 from powerpy.analysis.montecarlo_report import MCReportData, run_mc_study
 from powerpy.output import montecarlo_figures as _figs
-from powerpy.output.compile import compile_pdf, have_pdflatex
-from powerpy.output.templating import make_environment
+from powerpy.output.compile import compile_workspace_pdf
+from powerpy.output.templating import make_environment, templates_dir
 from powerpy.schemas import ReportMetadata
-
-
-def _templates_dir() -> Path:
-    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
-        return Path(p)
 
 
 @dataclass
@@ -62,7 +55,7 @@ class MonteCarloReport:
                       f"cells -> peak {self.data.worst['peak_t_c']:.0f} °C")
             worst_figure = wp.relative_to(workdir).as_posix()
 
-        env = make_environment([_templates_dir()])
+        env = make_environment([templates_dir()])
         tmpl = env.get_template(template)
         tex_out = tmpl.render(
             document=self.metadata.document,
@@ -79,16 +72,5 @@ class MonteCarloReport:
 
     def compile_pdf(self, out_pdf: str | Path | None = None, *,
                     main_tex: str = "montecarlo_report.tex") -> Path | None:
-        if self.workspace is None:
-            raise RuntimeError("call .render(...) before .compile_pdf(...)")
-        if not have_pdflatex():
-            print("[mc] pdflatex not found; .tex workspace at "
-                  + str(self.workspace))
-            return None
-        pdf = compile_pdf(self.workspace, main_tex=main_tex)
-        if out_pdf is not None:
-            out_pdf = Path(out_pdf).resolve()
-            out_pdf.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(pdf, out_pdf)
-            return out_pdf
-        return pdf
+        return compile_workspace_pdf(self.workspace, out_pdf,
+                                     main_tex=main_tex, tag="mc")

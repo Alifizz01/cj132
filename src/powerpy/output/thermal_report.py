@@ -13,8 +13,6 @@ compile pipeline as the electrical report.
 """
 from __future__ import annotations
 
-import importlib.resources as ir
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,14 +23,9 @@ from powerpy.analysis.thermal_report import (
 )
 from powerpy.config.substrate import Substrate
 from powerpy.output import thermal_figures as _figs
-from powerpy.output.compile import compile_pdf, have_pdflatex
-from powerpy.output.templating import make_environment
+from powerpy.output.compile import compile_workspace_pdf
+from powerpy.output.templating import make_environment, templates_dir
 from powerpy.schemas import ReportMetadata
-
-
-def _templates_dir() -> Path:
-    with ir.as_file(ir.files("powerpy.output").joinpath("templates")) as p:
-        return Path(p)
 
 
 @dataclass
@@ -78,7 +71,7 @@ class ThermalReport:
                 title="Panel layout -- SCA (cell) vs bare (no SCA)")
             layout_figure = lp.relative_to(workdir).as_posix()
 
-        env = make_environment([_templates_dir()])
+        env = make_environment([templates_dir()])
         tmpl = env.get_template(template)
         tex_out = tmpl.render(
             document=self.metadata.document,
@@ -94,16 +87,5 @@ class ThermalReport:
 
     def compile_pdf(self, out_pdf: str | Path | None = None, *,
                     main_tex: str = "thermal_report.tex") -> Path | None:
-        if self.workspace is None:
-            raise RuntimeError("call .render(...) before .compile_pdf(...)")
-        if not have_pdflatex():
-            print("[thermal] pdflatex not found; .tex workspace at "
-                  + str(self.workspace))
-            return None
-        pdf = compile_pdf(self.workspace, main_tex=main_tex)
-        if out_pdf is not None:
-            out_pdf = Path(out_pdf).resolve()
-            out_pdf.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(pdf, out_pdf)
-            return out_pdf
-        return pdf
+        return compile_workspace_pdf(self.workspace, out_pdf,
+                                     main_tex=main_tex, tag="thermal")

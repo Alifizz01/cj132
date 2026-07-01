@@ -63,3 +63,25 @@ def compile_pdf(workspace_dir: Path, main_tex: str = "report.tex",
             f"last 1500 chars of stdout:\n{log_tail}"
         )
     return pdf_path
+
+
+def compile_workspace_pdf(workspace: Path | None, out_pdf=None, *,
+                          main_tex: str = "report.tex",
+                          tag: str = "output") -> Path | None:
+    """The shared compile-and-copy tail every PDF report class delegates to.
+
+    Returns the produced PDF path (copied to ``out_pdf`` when given), or
+    ``None`` when pdflatex is unavailable -- the .tex workspace stays valid.
+    """
+    if workspace is None:
+        raise RuntimeError("call .render(...) before .compile_pdf(...)")
+    if not have_pdflatex():
+        print("[%s] pdflatex not found; .tex workspace at %s" % (tag, workspace))
+        return None
+    pdf = compile_pdf(workspace, main_tex=main_tex)
+    if out_pdf is not None:
+        out_pdf = Path(out_pdf).resolve()
+        out_pdf.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(pdf, out_pdf)
+        return out_pdf
+    return pdf

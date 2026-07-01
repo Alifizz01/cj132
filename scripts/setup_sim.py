@@ -32,6 +32,7 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 from powerpy.config.layout import PanelLayout, load_layout, panel_from_topology
 from powerpy.loader.sim_config import read_panel_config
+from powerpy.loader.workbooks import find_workbooks
 from powerpy.loader.condition_layers import (
     generate_condition_workbook,
     load_condition_layers,
@@ -186,9 +187,13 @@ def _parse_args(argv=None):
     p.add_argument("--substrate", default=None,
                    help="Substrate name or JSON path (optional).")
     p.add_argument("--wb", default=str(_ROOT / "src" / "powerpy" / "param" / "params.xlsx"),
-                   help="Workbook holding BOTH cell config and the condition "
-                        "layers (default: params.xlsx -- one file, layer sheets "
-                        "are added alongside cell_params/mission_orbit/etc.).")
+                   help="LEGACY single workbook holding BOTH cell config and the "
+                        "condition layers (default: params.xlsx). Ignored when "
+                        "--design/--scenario are given.")
+    p.add_argument("--design", default=None,
+                   help="design workbook ('topology'/'panel' sheet).")
+    p.add_argument("--scenario", default=None,
+                   help="scenario workbook (layer_* condition sheets live here).")
     p.add_argument("--runs", default="runs",
                    help="Parent directory for run snapshots (default: runs/).")
     p.add_argument("--run-id", default="run",
@@ -204,11 +209,15 @@ def _parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
+    if args.design or args.scenario:
+        wbs = find_workbooks(design=args.design, scenario=args.scenario)
+    else:
+        wbs = find_workbooks(legacy_params=args.wb)
     if args.layout:
         layout = load_layout(args.layout, substrate=args.substrate)
         imp_sigma, pmax_sigma, seed = args.imp_sigma, args.pmax_sigma, args.variance_seed
     else:
-        cfg = read_panel_config(args.wb)
+        cfg = read_panel_config(wbs.design)
         layout = panel_from_topology(n_blocks=cfg["n_blocks"],
                                      n_parallel=cfg["n_parallel"],
                                      n_series=cfg["n_series"])
@@ -217,7 +226,7 @@ def main(argv=None) -> int:
         seed = cfg["variance_seed"]
     snap = run_setup_sim(
         layout=layout,
-        wb_path=Path(args.wb),
+        wb_path=Path(wbs.scenario),   # condition layers live in the scenario file
         runs_dir=Path(args.runs),
         run_id=args.run_id,
         imp_sigma=imp_sigma,

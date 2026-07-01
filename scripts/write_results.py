@@ -21,9 +21,10 @@ sys.path.insert(0, str(_ROOT / "src"))
 import numpy as np
 import openpyxl
 from powerpy.config.layout import load_layout, panel_from_topology
-from powerpy.loader.report import load_report_data
+from powerpy.loader.cell import load_cell_parameters
 from powerpy.loader.condition_layers import load_condition_layers
 from powerpy.loader.sim_config import read_panel_config
+from powerpy.loader.workbooks import find_workbooks
 from powerpy.simulation.spec_adapt import adapt_grid
 from powerpy.simulation.spec_build import build_array_from_spec
 from powerpy.simulation.environment import Environment
@@ -99,8 +100,13 @@ def _parse_args(argv=None):
     p.add_argument("--irradiance", type=float, default=None,
                    help="global sun level (1.0 = full); overrides the 'panel' sheet.")
     p.add_argument("--params", default=str(_ROOT / "src" / "powerpy" / "param" / "params.xlsx"),
-                   help="workbook: cell config + 'panel' sheet + condition layers "
-                        "(default src/powerpy/param/params.xlsx).")
+                   help="LEGACY single workbook: cell config + 'panel' sheet + "
+                        "condition layers (default src/powerpy/param/params.xlsx). "
+                        "Ignored when --design/--scenario are given.")
+    p.add_argument("--design", default=None,
+                   help="design workbook (cell_params + topology/panel sheet).")
+    p.add_argument("--scenario", default=None,
+                   help="scenario workbook (layer_* condition sheets).")
     p.add_argument("--out", default="results.xlsx", help="output workbook (default results.xlsx).")
     p.add_argument("--no-report", action="store_true",
                    help="skip the PDF report; write only the Excel results.")
@@ -109,7 +115,10 @@ def _parse_args(argv=None):
 
 def main(argv=None) -> int:
     a = _parse_args(argv)
-    params = Path(a.params)
+    if a.design or a.scenario:
+        wbs = find_workbooks(design=a.design, scenario=a.scenario)
+    else:
+        wbs = find_workbooks(legacy_params=a.params)
     imp_sigma = pmax_sigma = 0.0
     seed = 0
     if a.layout:
@@ -121,18 +130,19 @@ def main(argv=None) -> int:
         layout = panel_from_topology(n_blocks=a.blocks, n_parallel=a.parallel, n_series=a.series)
         irradiance = a.irradiance if a.irradiance is not None else 1.0
     else:
-        cfg = read_panel_config(params)        # the 'panel' sheet of params.xlsx
+        cfg = read_panel_config(wbs.design)    # the 'panel'/'topology' sheet
         layout = panel_from_topology(n_blocks=cfg["n_blocks"], n_parallel=cfg["n_parallel"],
                                      n_series=cfg["n_series"])
         irradiance = a.irradiance if a.irradiance is not None else cfg["irradiance"]
         imp_sigma, pmax_sigma, seed = cfg["imp_sigma"], cfg["pmax_sigma"], cfg["variance_seed"]
 
     NR, NC = layout.n_rows, layout.n_cols
-    cell = load_report_data(params, _ROOT / "src" / "powerpy" / "data").cell
+    # cell config straight from the design workbook -- no report metadata needed
+    cell = load_cell_parameters(wbs.design, _ROOT / "src" / "powerpy" / "data")
 
-    # per-cell conditions from the params workbook's layer sheets (if they fit)
+    # per-cell conditions from the scenario workbook's layer sheets (if they fit)
     try:
-        conditions = load_condition_layers(params, n_rows=NR, n_cols=NC)
+        conditions = load_condition_layers(wbs.scenario, n_rows=NR, n_cols=NC)
         n_cond = sum(1 for v in conditions.values()
                      if v.state != "healthy" or v.shade != 1.0 or v.life != 1.0)
         cond_msg = "%d non-default cell(s)" % n_cond

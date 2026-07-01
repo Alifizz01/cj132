@@ -221,12 +221,25 @@ Phases are ordered so each leaves a working tree: P1 makes the new engine the
 single path *without* changing behaviour (safest first), P5 (deletion) is last
 so nothing is removed until its replacement is proven.
 
-## 9. Open items to confirm before P2/P4
+## 9. Open items — RESOLVED (user confirmed 2026-07-01: "do all your recommendations")
 
-1. `topology` sheet: support **both** a uniform `n_blocks/n_parallel/n_series`
-   form (simple arrays) and a grid-map form (spatial), or grid-map only?
-2. `sweep` output: Parquet/HDF5 long-table (the `store.py` design, needs optional
-   pyarrow) vs an Excel summary only (works offline, no extra deps)?
-3. Do any real workflows depend on the ngspice path enough to **repair** rather
-   than prune the legacy cell stack? (Default: prune; ngspice analytic-fallback
-   stays.)
+1. `topology` sheet: **both forms.** Uniform `n_blocks/n_parallel/n_series`
+   keys for simple arrays, plus an optional `grid_file` key referencing a grid
+   layout JSON for spatial arrays. (A native in-Excel grid map can be added
+   later if needed; the JSON layout schema already carries string/block tags and
+   harness params.)
+2. `sweep` output: **Excel summary only** (works in the locked-down offline
+   environment, no pyarrow). The Parquet long-table stays deleted with
+   `store.py`.
+3. Legacy ngspice cell stack: **prune in P5** (cell.py / electric.py /
+   cell_schema.py / cell_static.py and the unwired solve/ electro-thermal loop).
+   The vendored `powerpy.ngspice` package and the analytic fallback stay.
+
+P2 implementation note (conscious simplification vs §3.1): the `topology` sheet
+absorbs the old `panel` sheet wholesale (same key-value format, extended with
+`grid_file`), including the variance keys — no separate `variance` sheet. One
+sheet, one loader, fewer moving parts. Also, P2 keeps today's sheet NAMES
+(`cell_params`, `sections`, `mission_param`, ...) — the split is by FILE;
+cosmetic renames are deferred so no loader schema changes are needed.
+
+**STATUS: P1 merged to main 2026-06-22 (081f7fb), verified bit-identical.**

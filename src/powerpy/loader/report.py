@@ -11,30 +11,38 @@ from powerpy.loader.structure import load_report_structure
 from powerpy.schemas.report import ReportMetadata
 
 
-def load_report_data(params_file: Path, data_dir: Path) -> ReportMetadata:
-    """Load everything from params.xlsx into a typed, validated ReportMetadata.
+def load_report_data(params_file: Path, data_dir: Path,
+                     *, scenario_file: Path | None = None) -> ReportMetadata:
+    """Load everything into a typed, validated ReportMetadata.
 
     Args:
-        params_file: Path to the params.xlsx workbook.
+        params_file: The DESIGN workbook (cell + array layout) — or, in legacy
+                     single-file mode, the whole params.xlsx.
         data_dir: Base directory for resolving relative file paths
                   (cell JSONs, logo, etc.) referenced from the workbook.
+        scenario_file: The SCENARIO workbook (losses, mission, document,
+                       structure, fluxes). Defaults to ``params_file`` — the
+                       legacy single-file mode, byte-identical to before.
 
     Returns:
         A fully populated ReportMetadata. All values are validated and
         immutable. Downstream code can trust every field.
     """
+    scenario_file = Path(scenario_file) if scenario_file else params_file
     if not params_file.exists():
-        raise FileNotFoundError(f"params file not found: {params_file}")
+        raise FileNotFoundError(f"design/params file not found: {params_file}")
+    if not scenario_file.exists():
+        raise FileNotFoundError(f"scenario file not found: {scenario_file}")
     if not data_dir.exists():
         raise FileNotFoundError(f"data directory not found: {data_dir}")
 
     return ReportMetadata(
-        document=load_document_metadata(params_file, data_dir),
+        document=load_document_metadata(scenario_file, data_dir),
         cell=load_cell_parameters(params_file, data_dir),
-        mission=load_mission_parameters(params_file),
-        mission_orbit=load_mission_orbit(params_file, data_dir),
+        mission=load_mission_parameters(scenario_file),
+        mission_orbit=load_mission_orbit(scenario_file, data_dir),
         array_layout=load_array_layout(params_file),
-        losses=load_losses(params_file),
-        radiation_fluxes=load_radiation_fluxes(params_file),
-        structure=load_report_structure(params_file),
+        losses=load_losses(scenario_file),
+        radiation_fluxes=load_radiation_fluxes(scenario_file),
+        structure=load_report_structure(scenario_file),
     )

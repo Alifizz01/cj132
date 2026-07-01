@@ -71,6 +71,30 @@ def test_report_build_grid_with_bare_tiles_matches_legacy():
         assert np.allclose(i_new, i_ref, rtol=0, atol=1e-9), name
 
 
+def test_split_pair_reproduces_single_file_report(tmp_path):
+    """P2 gate: loading the design+scenario pair must equal the legacy single
+    workbook — same metadata, same IV to atol 1e-9."""
+    import sys
+    sys.path.insert(0, str(ROOT / "scripts"))
+    from split_params import split_params
+
+    d_path, s_path = split_params(PARAMS, tmp_path / "design.xlsx",
+                                  tmp_path / "scenario.xlsx")
+    legacy = load_report_data(PARAMS, DATA)
+    pair = load_report_data(d_path, DATA, scenario_file=s_path)
+
+    assert pair.document.doc_number == legacy.document.doc_number
+    assert pair.array_layout.n_sca_total == legacy.array_layout.n_sca_total
+    assert len(tuple(pair.losses)) == len(tuple(legacy.losses))
+    assert pair.cell.name == legacy.cell.name
+
+    env = Environment(temperature_c=28.0)
+    v_l, i_l = _iv(build_array_for_report(legacy), env)
+    v_p, i_p = _iv(build_array_for_report(pair), env)
+    assert np.allclose(v_l, v_p, rtol=0, atol=1e-9)
+    assert np.allclose(i_l, i_p, rtol=0, atol=1e-9)
+
+
 def _first_phase(report):
     return sorted({f.phase for f in report.losses}, key=str)[0]
 

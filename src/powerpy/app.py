@@ -119,7 +119,7 @@ def _find_params(explicit: str | None = None) -> Path:
 
 def build_electrical_report(params, out_pdf, *, data_dir=None,
                             engine: str = "analytic", workdir=None,
-                            grid_file=None):
+                            grid_file=None, scenario=None):
     """Build the whole-array electrical report PDF from a params workbook.
 
     Uses the analytic single-diode engine by default (``engine="analytic"``) so it
@@ -130,6 +130,10 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     ``grid_file`` overrides the cell's ``grid_reference_file``: when given, the
     array is derived from that grid layout (grid-as-single-source) regardless of
     the workbook, without changing the default report.
+
+    ``scenario`` -- the scenario workbook (losses / mission / analysis scope /
+    requirement / document / structure) when the two-file database is used;
+    ``None`` = legacy single-file mode (everything read from ``params``).
     """
     # heavy imports are local so `powerpy run/worst/sweep` don't pay for them
     import dataclasses
@@ -142,13 +146,14 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     from .render import Report
 
     params = Path(params)
+    scenario = Path(scenario) if scenario else params   # legacy: one file
     data_dir = Path(data_dir) if data_dir else Path(__file__).parent / "data"
     out_pdf = Path(out_pdf).resolve()
     workdir = Path(workdir) if workdir else out_pdf.parent / ("_build_" + out_pdf.stem)
 
-    report = load_report_data(params, data_dir)
-    scope = load_analysis_scope(params)
-    requirement = load_requirement(params, data_dir)   # mission targets (or None)
+    report = load_report_data(params, data_dir, scenario_file=scenario)
+    scope = load_analysis_scope(scenario)
+    requirement = load_requirement(scenario, data_dir)   # mission targets (or None)
 
     if scope:
         # SCOPE-DRIVEN: investigate exactly the configs the `analysis` sheet lists,
@@ -207,14 +212,34 @@ def build_electrical_report(params, out_pdf, *, data_dir=None,
     return rpt.compile_pdf(out_pdf), phases, report
 
 
+def _resolve_workbooks(args):
+    """The report's workbook pair: --design/--scenario > positional params >
+    auto-discovery (a design.xlsx+scenario.xlsx pair beats a lone params.xlsx)."""
+    from .loader.workbooks import find_workbooks
+    if args.design or args.scenario:
+        return find_workbooks(design=args.design, scenario=args.scenario)
+    if args.params:
+        return find_workbooks(legacy_params=_find_params(args.params))
+    root = _repo_root()
+    try:
+        return find_workbooks(search_dirs=(
+            root / "src" / "powerpy" / "param", Path.cwd(),
+            root / "examples", root))
+    except FileNotFoundError as e:
+        raise SystemExit("ERROR: %s" % e)
+
+
 def _cmd_report(args) -> int:
     import warnings
     warnings.filterwarnings("ignore")        # mute legacy pkg_resources / FP noise
-    params = _find_params(args.params)
+    wbs = _resolve_workbooks(args)
     out = Path(args.out).resolve()
-    print("report: %s  ->  %s   [engine=%s]" % (params, out, args.engine))
+    src = (wbs.design if not wbs.is_split
+           else "%s + %s" % (wbs.design.name, wbs.scenario.name))
+    print("report: %s  ->  %s   [engine=%s]" % (src, out, args.engine))
     pdf, phases, report = build_electrical_report(
-        params, out, data_dir=args.data_dir, engine=args.engine)
+        wbs.design, out, data_dir=args.data_dir, engine=args.engine,
+        scenario=wbs.scenario)
     print("  doc    : %s" % getattr(report.document, "doc_number", "?"))
     print("  phases : %s" % ", ".join(phases))
     if pdf is None:
@@ -266,6 +291,10 @@ def build_parser() -> argparse.ArgumentParser:
     prp = sub.add_parser("report", help="electrical report PDF from params.xlsx (no ngspice)")
     prp.add_argument("params", nargs="?", default=None,
                      help="path to params.xlsx (default: auto-find in CWD/examples/root)")
+    prp.add_argument("--design", default=None,
+                     help="design workbook (cell + topology); pair with --scenario")
+    prp.add_argument("--scenario", default=None,
+                     help="scenario workbook (losses/mission/analysis/report meta)")
     prp.add_argument("--out", default="reports/_noNG_elec.pdf", help="output PDF path")
     prp.add_argument("--engine", choices=["analytic", "ngspice"], default="analytic",
                      help="IV engine (default: analytic = no ngspice)")

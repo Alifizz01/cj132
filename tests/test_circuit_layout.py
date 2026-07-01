@@ -135,8 +135,8 @@ def test_build_electrical_report_uses_circuit(tmp_path, monkeypatch):
 
     real_load = report_mod.load_report_data
 
-    def patched_load(params, data_dir):
-        rep = real_load(params, data_dir)
+    def patched_load(params, data_dir, **kw):
+        rep = real_load(params, data_dir, **kw)
         cell = dataclasses.replace(rep.cell, circuit_reference_file=_SAMPLE.resolve())
         return dataclasses.replace(rep, cell=cell)
 

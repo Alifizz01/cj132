@@ -116,8 +116,8 @@ def test_report_uses_grid_when_referenced(tmp_path, monkeypatch):
 
     real_load = report_mod.load_report_data
 
-    def patched_load(params, data_dir):
-        rep = real_load(params, data_dir)
+    def patched_load(params, data_dir, **kw):
+        rep = real_load(params, data_dir, **kw)
         cell = dataclasses.replace(rep.cell, grid_reference_file=grid_path)
         return dataclasses.replace(rep, cell=cell)
 

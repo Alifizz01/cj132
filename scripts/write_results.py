@@ -19,12 +19,12 @@ _ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_ROOT / "src"))
 
 import numpy as np
-import openpyxl
 from powerpy.config.layout import load_layout, panel_from_topology
 from powerpy.loader.cell import load_cell_parameters
 from powerpy.loader.condition_layers import load_condition_layers
 from powerpy.loader.sim_config import read_topology, resolve_layout
 from powerpy.loader.workbooks import find_workbooks
+from powerpy.output.excel import write_results_xlsx
 from powerpy.simulation.spec_adapt import adapt_grid
 from powerpy.simulation.spec_build import build_array_from_spec
 from powerpy.simulation.environment import Environment
@@ -72,21 +72,8 @@ def analyse(cell, layout, conditions, env):
     return summary, strings, cells
 
 
-def write_xlsx(path, layout_name, summary, strings, cells):
-    wb = openpyxl.Workbook(); wb.remove(wb.active)
-    s = wb.create_sheet("summary")
-    s.append(["layout", layout_name])
-    for kk, vv in summary.items():
-        s.append([kk, vv])
-    st = wb.create_sheet("strings")
-    st.append(["string_id", "current_A", "node_V", "power_W"])
-    for r in strings:
-        st.append(list(r))
-    cs = wb.create_sheet("cells")
-    cs.append(["cell_k", "string_id", "state", "shade", "life", "V_cell", "I_cell", "P_cell_W"])
-    for r in cells:
-        cs.append(list(r))
-    wb.save(path)
+# the writer lives in the output package now; kept name for callers/tests
+write_xlsx = write_results_xlsx
 
 
 def _parse_args(argv=None):

@@ -250,6 +250,8 @@ def _cmd_report(args) -> int:
 
 
 def _cmd_sweep(args) -> int:
+    if args.worst:                       # absorbed `powerpy worst` (P4)
+        return _cmd_worst(args)
     layout = load_layout(args.layout, substrate=args.substrate)
     a = auto_monte_carlo(layout, t_limit_c=args.t_limit, solve_kwargs=_solve_kwargs(args),
                          p_fail=args.p_fail, target_se=args.target_se, batch=args.batch,
@@ -261,31 +263,103 @@ def _cmd_sweep(args) -> int:
     return 0
 
 
+def _cmd_analyse(args) -> int:
+    """Use case B: electrical operating point (+per-cell breakdown) -> results.xlsx."""
+    # heavy imports local, like the report path
+    from .config.layout import panel_from_topology
+    from .loader.cell import load_cell_parameters
+    from .loader.condition_layers import load_condition_layers
+    from .loader.sim_config import read_topology, resolve_layout
+    from .simulation.environment import Environment
+    from .simulation.cell_condition import CellCondition, sample_manufacturing_variance
+    from .analysis.operating import analyse_operating_point
+    from .output.excel import write_results_xlsx
+
+    wbs = _resolve_workbooks(args)
+    data_dir = Path(__file__).parent / "data"
+    imp_sigma = pmax_sigma = 0.0
+    seed = 0
+    if args.layout:
+        layout = load_layout(args.layout)
+        irradiance = args.irradiance if args.irradiance is not None else 1.0
+    elif args.parallel is not None:
+        if args.series is None:
+            raise SystemExit("--parallel requires --series (and optional --blocks)")
+        layout = panel_from_topology(n_blocks=args.blocks, n_parallel=args.parallel,
+                                     n_series=args.series)
+        irradiance = args.irradiance if args.irradiance is not None else 1.0
+    else:
+        cfg = read_topology(wbs.design)        # 'topology' sheet ('panel' fallback)
+        layout = resolve_layout(cfg, base_dir=wbs.design.parent)
+        irradiance = args.irradiance if args.irradiance is not None else cfg["irradiance"]
+        imp_sigma, pmax_sigma, seed = cfg["imp_sigma"], cfg["pmax_sigma"], cfg["variance_seed"]
+
+    NR, NC = layout.n_rows, layout.n_cols
+    cell = load_cell_parameters(wbs.design, data_dir)
+
+    # per-cell conditions from the scenario workbook's layer sheets (if they fit)
+    try:
+        conditions = load_condition_layers(wbs.scenario, n_rows=NR, n_cols=NC)
+        n_cond = sum(1 for v in conditions.values()
+                     if v.state != "healthy" or v.shade != 1.0 or v.life != 1.0)
+        cond_msg = "%d non-default cell(s)" % n_cond
+    except ValueError:
+        conditions = {}
+        cond_msg = ("layers don't match this %dx%d grid -> all-healthy "
+                    "(run setup_sim.py to add matching layers)" % (NR, NC))
+
+    # manufacturing variance (default sigma 0 = no-op)
+    if imp_sigma or pmax_sigma:
+        keys = list(range(NR * NC))
+        clist = sample_manufacturing_variance(
+            [conditions.get(k, CellCondition()) for k in keys],
+            seed=seed, imp_sigma=imp_sigma, pmax_sigma=pmax_sigma)
+        conditions = dict(zip(keys, clist))
+
+    # global irradiance rides the current axis (analytic operating_points reads current_loss)
+    env = Environment(temperature_c=28.0, season=irradiance, current_loss=irradiance)
+
+    summary, strings, cells = analyse_operating_point(cell, layout, conditions, env)
+    write_results_xlsx(Path(args.out), layout.name, summary, strings, cells)
+
+    print("layout     : %s  (%d x %d = %d cells)" % (layout.name, NR, NC, NR * NC))
+    print("irradiance : %.3f (global)   conditions: %s" % (irradiance, cond_msg))
+    if imp_sigma or pmax_sigma:
+        print("variance   : imp_sigma=%.4g  pmax_sigma=%.4g  seed=%d" % (imp_sigma, pmax_sigma, seed))
+    print("ARRAY  Pmpp=%(Pmpp_W)s W  Vmpp=%(Vmpp_V)s V  Impp=%(Impp_A)s A  "
+          "Isc=%(Isc_A)s A  Voc=%(Voc_V)s V" % summary)
+    print("LOSS   %(loss_W)s W  (%(loss_pct)s%% vs nominal %(Pnom_W)s W)" % summary)
+    print("wrote  : %s" % args.out)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="powerpy", description="Solar-array panel thermal analysis")
+    parser = argparse.ArgumentParser(
+        prog="powerpy",
+        description="Solar-array analysis: report (PDF) / analyse (results.xlsx) / "
+                    "sweep (failure Monte-Carlo) / run (quick thermal check)")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    pr = sub.add_parser("run", help="solve one panel + write report")
+    pr = sub.add_parser("run", help="quick thermal check of one layout (HTML heat-map)")
     _add_common(pr)
     pr.add_argument("--fail", nargs="*", default=[], help="flat tile indices to fail (reverse-biased)")
     pr.add_argument("--report", default=None, help="HTML report output path")
     pr.add_argument("--json", default=None, help="JSON results output path")
     pr.set_defaults(func=_cmd_run)
 
-    pw = sub.add_parser("worst", help="greedy worst-case failure search")
-    _add_common(pw)
-    pw.add_argument("--max-failures", type=int, default=3, dest="max_failures")
-    pw.add_argument("--report", default=None)
-    pw.add_argument("--json", default=None)
-    pw.set_defaults(func=_cmd_worst)
-
-    ps = sub.add_parser("sweep", help="auto-stopping Monte-Carlo failure sweep")
+    ps = sub.add_parser("sweep", help="failure study: Monte-Carlo sweep, or --worst greedy search")
     _add_common(ps)
     ps.add_argument("--p-fail", type=float, default=0.05, dest="p_fail")
     ps.add_argument("--target-se", type=float, default=2.0, dest="target_se")
     ps.add_argument("--batch", type=int, default=50)
     ps.add_argument("--max-runs", type=int, default=2000, dest="max_runs")
     ps.add_argument("--seed", type=int, default=0)
+    ps.add_argument("--worst", action="store_true",
+                    help="greedy worst-case failure search instead of the random sweep")
+    ps.add_argument("--max-failures", type=int, default=3, dest="max_failures",
+                    help="(with --worst) failures to accumulate")
+    ps.add_argument("--report", default=None, help="(with --worst) HTML report output path")
+    ps.add_argument("--json", default=None, help="(with --worst) JSON results output path")
     ps.set_defaults(func=_cmd_sweep)
 
     prp = sub.add_parser("report", help="electrical report PDF from params.xlsx (no ngspice)")
@@ -301,6 +375,25 @@ def build_parser() -> argparse.ArgumentParser:
     prp.add_argument("--data-dir", default=None, dest="data_dir",
                      help="reference data dir (default: packaged powerpy/data)")
     prp.set_defaults(func=_cmd_report)
+
+    pa = sub.add_parser("analyse", help="electrical results.xlsx with per-cell conditions "
+                                        "(use case B; was scripts/write_results.py)")
+    pa.add_argument("params", nargs="?", default=None,
+                    help="LEGACY single workbook (default: auto-find)")
+    pa.add_argument("--design", default=None,
+                    help="design workbook (cell_params + topology/panel sheet)")
+    pa.add_argument("--scenario", default=None,
+                    help="scenario workbook (layer_* condition sheets)")
+    pa.add_argument("--layout", default=None, help="layout JSON (overrides the topology sheet)")
+    pa.add_argument("--parallel", type=int, default=None,
+                    help="strings in parallel (with --series/--blocks); overrides the sheet")
+    pa.add_argument("--series", type=int, default=None, help="cells in series per string")
+    pa.add_argument("--blocks", type=int, default=1, help="number of blocks (default 1)")
+    pa.add_argument("--irradiance", type=float, default=None,
+                    help="global sun level (1.0 = full); overrides the sheet")
+    pa.add_argument("--out", default="results.xlsx", help="output workbook (default results.xlsx)")
+    pa.add_argument("--no-report", action="store_true", help=argparse.SUPPRESS)  # legacy no-op
+    pa.set_defaults(func=_cmd_analyse)
     return parser
 
 

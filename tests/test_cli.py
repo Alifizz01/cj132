@@ -22,8 +22,8 @@ def test_run_writes_report_and_returns_zero():
     assert os.path.getsize(h) > 500 and os.path.getsize(j) > 100
 
 
-def test_worst_subcommand():
-    rc = app.main(["worst", LAYOUT, "--max-failures", "2", "--g-lat", "0.04"])
+def test_sweep_worst_absorbs_worst_subcommand():
+    rc = app.main(["sweep", LAYOUT, "--worst", "--max-failures", "2", "--g-lat", "0.04"])
     assert rc == 0
 
 
